@@ -1,0 +1,258 @@
+/* Reliability presentation only: existing API, scope, consent and factor contracts. */
+window.ivReliability = (() => {
+  let bound = false, active = false, generation = 0, timer = null, inflight = null;
+  let snapshot = null, editing = null, busy = false, editorOpen = false, dirty = false;
+  let stale = false, accessStopped = false, confirmPending = false, returnFocus = null;
+  const $ = id => document.getElementById('reliability-' + id);
+  const root = () => document.getElementById('view-reliability');
+  const states = {good:'Passing', bad:'Check failed', unknown:'Unconfirmed', pending:'Waiting for check', paused:'Paused',
+    warming_up:'Collecting initial checks', budget_exhausted:'Budget exhausted', incomplete:'Incomplete coverage', within_budget:'Within budget'};
+  const reasons = {expected_response:'Status and latency met', unexpected_status:'Unexpected HTTP status', response_too_slow:'Headers arrived too slowly',
+    connection_failed:'Connection, TLS or timeout failure', observer_capacity:'Observer capacity unavailable', scheduler_late:'Scheduling slot missed',
+    workspace_or_worker_paused:'Workspace or worker paused', configuration_changed:'Settings changed', destination_or_redirect_refused:'DNS, destination or redirect refused',
+    observer_error:'Observer error', observer_late:'Observer completed after its deadline', monitor_unavailable:'No conclusive check'};
+  const finite = value => typeof value === 'number' && Number.isFinite(value);
+  const number = value => finite(value) ? value.toLocaleString(undefined,{maximumFractionDigits:3}) : '—';
+  const percent = value => finite(value) ? value.toFixed(2) + '%' : '—';
+  const timestamp = value => finite(value) && value > 0 ? new Date(value*1000).toLocaleString() : 'Not yet';
+  const clockTime = value => finite(value) && value > 0 ? new Date(value*1000).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : 'Not yet';
+  const interval = seconds => seconds === 60 ? 'Every minute' : 'Every ' + Math.round(seconds/60) + ' minutes';
+  function text(node,value) { if(node && node.textContent !== String(value)) node.textContent = String(value); }
+  function notice(message='',tone='info') {
+    text($('message'),message); $('message').hidden = !message; $('message').dataset.tone = tone;
+  }
+  function formError(message='') { text($('form-error'),message); $('form-error').hidden = !message; $('form-error').dataset.tone='error'; }
+  function controls() {
+    const readOnly = busy || !snapshot || !!snapshot.demo_read_only || accessStopped;
+    $('form').querySelectorAll('input, select, button').forEach(node => { node.disabled=readOnly; });
+    $('cards').querySelectorAll('button').forEach(node => { node.disabled=readOnly; });
+    $('cancel').disabled=busy;
+    const full = snapshot && snapshot.monitors.length >= snapshot.workspace_limit;
+    $('add').disabled=readOnly || full || editorOpen;
+    $('empty-add').disabled=readOnly || full || editorOpen;
+    for(const id of ['add','empty-add']) $(id).setAttribute('aria-expanded',String(editorOpen));
+    $('empty').hidden = !snapshot || snapshot.monitors.length > 0 || editorOpen;
+  }
+  function activationNote() {
+    text($('activation-note'),$('enabled').checked ? 'The first check runs on the next scheduled slot after saving.' : 'Save paused; no requests will be sent.');
+  }
+  function restoreFocus() {
+    if(!active) return;
+    const target=[returnFocus,$('add'),$('refresh')].find(node=>node?.isConnected && !node.disabled && node.getClientRects().length);
+    target?.focus();
+  }
+  function closeEditor(focus=true) {
+    editorOpen=false;editing=null;dirty=false;$('form').reset();$('editor').hidden=true;
+    formError();controls();
+    if(focus) restoreFocus();
+  }
+  function revealEditor(trigger) {
+    returnFocus=trigger || document.activeElement;editorOpen=true;$('editor').hidden=false;
+    activationNote();controls();$('name').focus({preventScroll:true});$('editor').scrollIntoView({block:'nearest'});
+  }
+  function create(trigger) {
+    if(busy || !snapshot || snapshot.demo_read_only || accessStopped) return;
+    if(editorOpen) { $('name').focus(); return; }
+    editing=null;dirty=false;$('form').reset();formError();
+    text($('form-title'),'New monitor');text($('save'),'Save monitor');
+    text($('edit-note'),'Define a read-only endpoint and what a good response looks like.');
+    revealEditor(trigger);
+  }
+  function confirmAction(title,message,confirmText,danger=false) {
+    if(!active || confirmPending) return Promise.resolve(false);
+    confirmPending=true;
+    const dialog=$('confirm'), trigger=document.activeElement;
+    text($('confirm-title'),title);text($('confirm-message'),message);text($('confirm-accept'),confirmText);
+    $('confirm-accept').classList.toggle('btn-danger',danger);$('confirm-accept').classList.toggle('btn-primary',!danger);
+    dialog.returnValue='cancel';
+    return new Promise(resolve => {
+      dialog.addEventListener('close',()=>{
+        confirmPending=false;
+        if(active && trigger?.isConnected) trigger.focus();
+        resolve(dialog.returnValue==='confirm');
+      },{once:true});
+      dialog.showModal();
+    });
+  }
+  async function edit(monitor,trigger) {
+    if(busy || snapshot?.demo_read_only || accessStopped) return;
+    if(editorOpen && dirty && !(await confirmAction('Replace your unsaved draft?','Your current draft has not been saved. Open this monitor’s saved settings instead?','Open saved settings'))) return;
+    if(!active) return;
+    editing={id:monitor.id,revision:monitor.revision};dirty=false;
+    for(const [id,key] of Object.entries({name:'name',url:'url',interval:'interval_seconds',status:'expected_status',latency:'latency_limit_ms',target:'target_percent'})) $(id).value=monitor[key];
+    $('enabled').checked=monitor.enabled;$('consent').checked=false;formError();
+    text($('form-title'),'Edit monitor');text($('save'),'Save changes');
+    text($('edit-note'),'Saving starts a new measurement series. Existing application processes are untouched.');
+    revealEditor(trigger);
+  }
+  async function cancelEditor() {
+    if(busy) return;
+    if(dirty && !(await confirmAction('Discard your unsaved changes?','No settings have been changed on the server. Your unsaved draft will be cleared.','Discard draft'))) return;
+    closeEditor();
+  }
+  async function write(path,payload,title,onSuccess,successMessage) {
+    if(busy || snapshot?.demo_read_only || accessStopped) return;
+    showTotpPrompt(title,async code => {
+      busy=true;controls();formError();
+      try {
+        const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-TOTP-Auth':code},body:JSON.stringify(payload)});
+        const result=await response.json().catch(()=>({}));
+        if(!response.ok || !result.success) throw new Error(result.error || 'The monitor could not be saved.');
+        onSuccess();generation++;inflight?.abort();inflight=null;
+        await refresh();showToast(successMessage,'success');
+      } catch(error) {
+        const message=error.message || 'The monitor could not be changed.';
+        if(editorOpen) formError(message);else notice(message,'error');
+        showToast(message,'error');
+      } finally { busy=false;controls();if(!editorOpen) restoreFocus(); }
+    });
+  }
+  function save(event) {
+    event.preventDefault();if(!$('form').reportValidity()) return;
+    const payload={name:$('name').value.trim(),url:$('url').value.trim(),enabled:$('enabled').checked,
+      interval_seconds:Number($('interval').value),expected_status:Number($('status').value),latency_limit_ms:Number($('latency').value),
+      target_percent:Number($('target').value),confirm_endpoint_ownership:$('consent').checked};
+    if(editing) payload.revision=editing.revision;
+    write('/client/api/reliability/monitors'+(editing?'/'+encodeURIComponent(editing.id):''),payload,'Save HTTPS monitoring settings',
+      ()=>closeEditor(false),payload.enabled?'Monitor saved. Its first check runs on the next scheduled slot.':'Monitor saved in a paused state.');
+  }
+  async function remove(monitor) {
+    if(!(await confirmAction('Delete this monitor?','“'+monitor.name+'” and its stored check history will be removed. Your application will keep running.','Delete monitor',true)) || !active) return;
+    write('/client/api/reliability/monitors/'+encodeURIComponent(monitor.id)+'/delete',{revision:monitor.revision},'Delete HTTPS monitor',
+      ()=>{if(editing?.id===monitor.id) closeEditor(false);},'Monitor and check history removed. Your application was not changed.');
+  }
+  function card(monitor) {
+    let node=Array.from($('cards').children).find(item=>item.dataset.monitor===monitor.id);
+    if(node) return node;
+    node=document.createElement('article');node.className='iv-rel-card';node.dataset.monitor=monitor.id;
+    node.innerHTML='<div class="iv-rel-card-body"><div class="iv-rel-card-head"><div class="iv-rel-endpoint"><h3 data-field="name"></h3><p data-field="url"></p></div>'+
+      '<span class="iv-rel-pill"><span class="iv-rel-dot" data-field="dot" aria-hidden="true"></span><span data-field="latest"></span></span></div>'+
+      '<div class="iv-rel-metrics"><div class="iv-rel-metric"><span>Good checks</span><strong data-field="observed"></strong></div><div class="iv-rel-metric"><span>Coverage</span><strong data-field="coverage"></strong></div><div class="iv-rel-metric"><span>Last latency</span><strong data-field="latency"></strong></div></div>'+
+      '<div class="iv-rel-history-bar"><div><span>Last 20 scheduled slots</span><span data-field="recent-summary"></span></div><div class="iv-rel-timeline" role="img"></div></div>'+
+      '<div class="iv-rel-budget"><div class="iv-rel-budget-head"><span>Error budget</span><strong data-field="remaining"></strong></div><div class="iv-rel-budget-track"><span class="iv-rel-budget-fill"></span></div><div class="iv-rel-budget-detail"><span data-field="objective"></span><span data-field="target"></span></div></div></div>'+
+      '<div class="iv-rel-card-footer"><div><span class="iv-rel-caption" data-field="cadence"></span><span class="iv-rel-caption" data-field="last-check"></span></div><button type="button" class="btn-secondary iv-rel-action" data-action="edit">Edit monitor</button></div>'+
+      '<details class="iv-rel-history"><summary>Check history &amp; budget details</summary><p class="iv-rel-note iv-rel-caption" data-field="window"></p><p class="iv-rel-note iv-rel-caption" data-field="counts"></p><p class="iv-rel-caption" data-field="burn"></p><div class="iv-rel-table"><table><caption class="iv-rel-sr">Recent HTTPS checks; times use your browser’s timezone</caption><thead><tr><th scope="col">Checked at</th><th scope="col">Result</th><th scope="col">HTTP</th><th scope="col">Latency</th></tr></thead><tbody></tbody></table></div><div class="iv-rel-card-footer"><span class="iv-rel-caption">History retained for 30 days</span><button type="button" class="btn-secondary iv-rel-action" data-action="delete">Delete monitor</button></div></details>';
+    node.querySelector('[data-action=edit]').addEventListener('click',event=>{const current=snapshot?.monitors.find(item=>item.id===monitor.id);if(current) edit(current,event.currentTarget);});
+    node.querySelector('[data-action=delete]').addEventListener('click',()=>{const current=snapshot?.monitors.find(item=>item.id===monitor.id);if(current) remove(current);});
+    for(let i=0;i<20;i++){const tick=document.createElement('span');tick.className='iv-rel-tick';tick.setAttribute('aria-hidden','true');node.querySelector('.iv-rel-timeline').appendChild(tick);}
+    $('cards').appendChild(node);return node;
+  }
+  function timeline(node,monitor,generatedAt) {
+    const last=Math.floor(generatedAt/monitor.interval_seconds)*monitor.interval_seconds;
+    const records=new Map((monitor.recent_checks||[]).map(sample=>[sample.slot,sample]));
+    const counts={good:0,bad:0,unknown:0,pending:0,unscheduled:0};
+    node.querySelectorAll('.iv-rel-tick').forEach((tick,index)=>{
+      const slot=last-(19-index)*monitor.interval_seconds;
+      const sample=records.get(slot);
+      const state=sample && ['good','bad','unknown','pending'].includes(sample.state) ? sample.state : monitor.enabled && finite(monitor.first_slot) && slot>=monitor.first_slot ? 'unknown' : 'unscheduled';
+      counts[state]++;tick.dataset.state=state;tick.title=timestamp(slot)+' · '+(states[state]||'Not scheduled');
+    });
+    const summary=counts.good+' passed, '+counts.bad+' failed, '+(counts.unknown+counts.pending)+' unknown or pending, '+counts.unscheduled+' not scheduled';
+    node.querySelector('.iv-rel-timeline').setAttribute('aria-label',summary);
+    text(node.querySelector('[data-field="recent-summary"]'),counts.bad ? counts.bad+' failed' : (counts.unknown+counts.pending) ? (counts.unknown+counts.pending)+' unknown' : counts.good ? counts.good+' passed' : 'No checks yet');
+  }
+  function render(payload) {
+    if(!payload || !Array.isArray(payload.monitors) || !finite(payload.generated_at) || payload.monitors.some(m=>!m || typeof m.id!=='string' || !m.objective || !Array.isArray(m.recent_checks))) throw new Error('The monitor response was incomplete. Retained readings may be stale.');
+    snapshot=payload;stale=false;root().dataset.freshness='current';
+    const monitors=payload.monitors, enabled=monitors.filter(m=>m.enabled);
+    text($('total'),monitors.length);text($('count'),monitors.length+' / '+(payload.workspace_limit||5));
+    text($('active-note'),enabled.length+' active · '+(monitors.length-enabled.length)+' paused');
+    text($('passing'),enabled.filter(m=>m.latest_state==='good').length);
+    text($('failing'),enabled.filter(m=>m.latest_state==='bad').length);
+    text($('unknown'),enabled.filter(m=>!['good','bad'].includes(m.latest_state)).length);
+    const ids=new Set(monitors.map(m=>m.id));
+    for(const node of Array.from($('cards').children)) if(!ids.has(node.dataset.monitor)){if(node.contains(document.activeElement)) $('refresh').focus();node.remove();}
+    for(const monitor of monitors) {
+      const node=card(monitor), o=monitor.objective, rows=monitor.recent_checks, latest=rows[0];
+      const latestState=monitor.enabled?monitor.latest_state:'paused';
+      const current=['good','bad'].includes(latestState);
+      const knownBudget=finite(o.remaining_budget_checks) && o.expected_checks>=10 && o.unknown_checks===0;
+      const remaining=knownBudget ? number(Math.abs(o.remaining_budget_checks))+' checks '+(o.remaining_budget_checks<0?'over budget':'left') : o.state==='warming_up'?'Collecting checks':'Unknown';
+      const values={name:monitor.name,url:monitor.url,latest:states[latestState]||'Unconfirmed',observed:percent(o.observed_good_percent),coverage:percent(o.coverage_percent),
+        latency:current && finite(latest?.latency_ms)?Math.round(latest.latency_ms)+' ms':'—',remaining,objective:states[o.state]||'Unconfirmed',target:'Target '+number(monitor.target_percent)+'%',
+        cadence:monitor.enabled?interval(monitor.interval_seconds)+' · HTTP '+monitor.expected_status:'Periodic checks paused',
+        'last-check':latest?.checked_at?'Last checked '+clockTime(latest.checked_at):'No completed check yet',
+        window:o.full_window?'Full selected budget window.':'Partial history since these settings were saved.',
+        counts:number(o.expected_checks)+' expected · '+number(o.good_checks)+' good · '+number(o.bad_checks)+' failed · '+number(o.unknown_checks)+' unknown.',
+        burn:'Known budget use: '+(finite(o.known_burn_rate)?number(o.known_burn_rate)+'× allowance.':'Unknown.')+' Check-based and advisory; never a release-blocking rule.'};
+      for(const [key,value] of Object.entries(values)) text(node.querySelector('[data-field="'+key+'"]'),value);
+      node.querySelector('[data-field=url]').title=monitor.url;
+      node.querySelector('[data-field=dot]').dataset.state=current?latestState:monitor.enabled?'unknown':'paused';
+      node.querySelector('[data-field=last-check]').title=latest?.checked_at?timestamp(latest.checked_at):'No completed check yet';
+      const track=node.querySelector('.iv-rel-budget-track');track.dataset.state=o.state;
+      const fraction=knownBudget && o.allowed_bad_checks>0 ? Math.max(0,Math.min(1,o.remaining_budget_checks/o.allowed_bad_checks)) : 0;
+      track.querySelector('span').style.width=(fraction*100)+'%';
+      if(knownBudget){track.setAttribute('role','progressbar');track.setAttribute('aria-label','Remaining error budget');track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');track.setAttribute('aria-valuenow',String(Math.round(fraction*100)));track.setAttribute('aria-valuetext',remaining);}
+      else{for(const attribute of ['role','aria-label','aria-valuemin','aria-valuemax','aria-valuenow','aria-valuetext'])track.removeAttribute(attribute);track.setAttribute('aria-hidden','true');}
+      if(knownBudget)track.removeAttribute('aria-hidden');
+      timeline(node,monitor,payload.generated_at);
+      const tbody=node.querySelector('tbody'),signature=JSON.stringify(rows);
+      if(tbody.dataset.signature!==signature){
+        const fragment=document.createDocumentFragment();
+        for(const sample of rows){
+          const tr=document.createElement('tr');
+          const values=[timestamp(sample.checked_at||sample.slot),reasons[sample.reason]||states[sample.state]||'Unknown',sample.status_code??'—',finite(sample.latency_ms)?Math.round(sample.latency_ms)+' ms':'—'];
+          values.forEach((value,index)=>{const td=document.createElement('td');td.textContent=value;if(index===0)td.className='iv-rel-time';tr.appendChild(td);});fragment.appendChild(tr);
+        }
+        if(!rows.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=4;td.textContent='No check results for these settings yet.';tr.appendChild(td);fragment.appendChild(tr);}
+        tbody.replaceChildren(fragment);tbody.dataset.signature=signature;
+      }
+    }
+    if(editing){const saved=monitors.find(m=>m.id===editing.id);if(!saved || saved.revision!==editing.revision)formError('These settings changed elsewhere. Your draft is intact; cancel and reopen the monitor to use its current revision.');}
+    text($('updated'),'Updated '+clockTime(payload.generated_at));$('updated').title=timestamp(payload.generated_at);
+    notice(payload.demo_read_only?'Demo workspace: monitoring is read-only and no external checks are sent.':payload.worker_enabled?'':'The monitoring worker is paused by the operator. Missing checks remain unknown.');
+    controls();
+  }
+  function markStale(message) {
+    stale=true;root().dataset.freshness='stale';notice(message,'error');
+    for(const id of ['passing','failing','unknown'])text($(id),'—');
+    $('cards').querySelectorAll('[data-field=latest]').forEach(node=>text(node,'Stale view'));
+    $('cards').querySelectorAll('[data-field=dot]').forEach(node=>node.dataset.state='unknown');
+  }
+  async function refresh() {
+    if(!active || inflight || accessStopped || window.ivDashboardAccess?.paused) return;
+    const version=generation, windowValue=$('window').value,controller=new AbortController();inflight=controller;
+    try {
+      const response=await fetch('/client/api/reliability?window='+windowValue,{signal:controller.signal});
+      if([401,403,402,423].includes(response.status)){
+        accessStopped=true;clearTimeout(timer);controls();
+        if(typeof pauseDashboardForAccess==='function')pauseDashboardForAccess(response.status);
+        throw new Error('Workspace access changed. Refresh is paused until access is restored.');
+      }
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(payload.error||'Monitoring is unavailable. Retained readings may be stale.');
+      if(active && version===generation && windowValue===$('window').value)render(payload);
+    } catch(error){if(error.name!=='AbortError' && active && version===generation)markStale(error.message);}
+    finally{if(inflight===controller)inflight=null;}
+  }
+  function schedule() {
+    clearTimeout(timer);if(!active || accessStopped || window.ivDashboardAccess?.paused)return;
+    timer=setTimeout(async()=>{await refresh();schedule();},30000);
+  }
+  function viewChanged(view) {
+    active=view==='reliability';generation++;clearTimeout(timer);inflight?.abort();inflight=null;
+    if(!active){if($('confirm')?.open)$('confirm').close('cancel');return;}
+    if(!bound){
+      bound=true;$('form').addEventListener('submit',save);$('cancel').addEventListener('click',cancelEditor);
+      $('form').addEventListener('input',()=>{dirty=true;});$('form').addEventListener('change',()=>{dirty=true;});
+      $('enabled').addEventListener('change',activationNote);
+      $('confirm').addEventListener('keydown',event=>{
+        if(event.key!=='Tab') return;
+        const buttons=Array.from($('confirm').querySelectorAll('button')).filter(button=>!button.disabled);
+        const first=buttons[0],last=buttons[buttons.length-1];
+        if(event.shiftKey && document.activeElement===first){event.preventDefault();last?.focus();}
+        else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first?.focus();}
+      });
+      $('add').addEventListener('click',event=>create(event.currentTarget));$('empty-add').addEventListener('click',event=>create(event.currentTarget));
+      $('refresh').addEventListener('click',()=>refresh());
+      $('window').addEventListener('change',()=>{generation++;inflight?.abort();inflight=null;refresh();});
+    }
+    refresh();schedule();
+  }
+  window.addEventListener('infraveil:access-paused',()=>{accessStopped=true;clearTimeout(timer);inflight?.abort();controls();});
+  window.addEventListener('infraveil:access-resumed',()=>{accessStopped=false;if(active){refresh();schedule();}});
+  window.addEventListener('infraveil:session-expired',()=>viewChanged(''));
+  window.addEventListener('pagehide',()=>viewChanged(''));
+  queueMicrotask(()=>{if(typeof getCurrentViewId==='function' && getCurrentViewId()==='reliability')viewChanged('reliability');});
+  return {viewChanged,refresh};
+})();

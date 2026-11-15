@@ -395,6 +395,9 @@
             >
               <i data-lucide="radio-tower" class="w-4 h-4"></i> Status Page
             </button>
+            <button onclick="switchView('reliability')" id="nav-reliability" class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left">
+              <i data-lucide="activity" class="w-4 h-4"></i> Reliability
+            </button>
             <button
               onclick="switchView('catalog')"
               id="nav-catalog"
@@ -760,6 +763,7 @@
           {% include "console/views/deployments.html" %}
           {% include "console/views/incidents.html" %}
           {% include "console/views/status-page.html" %}
+          {% include "console/views/reliability.html" %}
           {% include "console/views/catalog.html" %}
           {% include "console/views/editor.html" %}
           {% include "console/views/launcher.html" %}

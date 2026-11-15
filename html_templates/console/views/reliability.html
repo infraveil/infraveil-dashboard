@@ -1,0 +1,80 @@
+<section id="view-reliability" class="view-section hidden iv-reliability" aria-labelledby="reliability-title">
+  <header class="iv-rel-header">
+    <div class="iv-rel-heading">
+      <div class="iv-rel-eyebrow">Monitor / Reliability</div>
+      <h2 id="reliability-title">Endpoint health</h2>
+      <p>See what reaches your application from outside its local agent.</p>
+    </div>
+    <div class="iv-rel-actions">
+      <button type="button" class="btn-secondary iv-rel-action" id="reliability-refresh">Refresh</button>
+      <button type="button" class="btn-primary iv-rel-action" id="reliability-add" aria-controls="reliability-editor" aria-expanded="false" disabled><span aria-hidden="true">+</span> Add monitor</button>
+    </div>
+  </header>
+
+  <div id="reliability-message" class="iv-rel-notice" role="status" aria-live="polite">Loading your monitors…</div>
+
+  <div class="iv-rel-summary" aria-label="Current monitor summary">
+    <div><span class="iv-rel-label">Configured</span><strong id="reliability-total">—</strong><span id="reliability-active-note" class="iv-rel-caption">Waiting for settings</span></div>
+    <div><span class="iv-rel-label"><span class="iv-rel-dot" data-state="good" aria-hidden="true"></span> Passing</span><strong id="reliability-passing">—</strong><span class="iv-rel-caption">Latest conclusive checks</span></div>
+    <div><span class="iv-rel-label"><span class="iv-rel-dot" data-state="bad" aria-hidden="true"></span> Failing</span><strong id="reliability-failing">—</strong><span class="iv-rel-caption">Status or latency outside target</span></div>
+    <div><span class="iv-rel-label"><span class="iv-rel-dot" data-state="unknown" aria-hidden="true"></span> Unconfirmed</span><strong id="reliability-unknown">—</strong><span class="iv-rel-caption">Waiting, missing or stale</span></div>
+  </div>
+
+  <div class="iv-rel-toolbar">
+    <div><h3>Your monitors <span id="reliability-count" class="iv-rel-count">— / 5</span></h3><p class="iv-rel-caption">Workspace-wide · One hosted check location</p></div>
+    <div class="iv-rel-window"><label for="reliability-window">Budget window</label><select id="reliability-window" class="ink-input"><option value="3600">Last hour</option><option value="86400" selected>Last 24 hours</option><option value="604800">Last 7 days</option></select></div>
+  </div>
+
+  <div id="reliability-cards" class="iv-rel-cards"></div>
+  <div id="reliability-empty" class="iv-rel-empty" hidden>
+    <div class="iv-rel-empty-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+    <h3>Add your first health check</h3>
+    <p>Choose a public HTTPS endpoint you control. See its responses, latency and measurement gaps in one place.</p>
+    <button type="button" id="reliability-empty-add" class="btn-primary iv-rel-action" aria-controls="reliability-editor" aria-expanded="false">Set up a monitor</button>
+    <span class="iv-rel-caption">Nothing sends traffic until you explicitly enable checks.</span>
+  </div>
+
+  <section id="reliability-editor" class="iv-rel-editor" aria-labelledby="reliability-form-title" hidden>
+    <header class="iv-rel-editor-header"><div><div class="iv-rel-eyebrow">Monitor settings</div><h3 id="reliability-form-title">New monitor</h3><p id="reliability-edit-note">Define a read-only endpoint and what a good response looks like.</p></div><button type="button" id="reliability-cancel" class="btn-secondary iv-rel-action">Cancel</button></header>
+    <form id="reliability-form">
+      <fieldset class="iv-rel-fieldset">
+        <legend>Endpoint</legend>
+        <div class="iv-rel-fields">
+          <label for="reliability-name">Monitor name<input id="reliability-name" class="ink-input" name="name" maxlength="80" required autocomplete="off" placeholder="Production API"></label>
+          <label for="reliability-url">Health URL<input id="reliability-url" class="ink-input" name="url" type="url" maxlength="1000" required aria-describedby="reliability-url-help" placeholder="https://api.example.com/health"></label>
+        </div>
+        <p id="reliability-url-help" class="iv-rel-caption">Public HTTPS on port 443. No credentials, query parameters or redirects. Response bodies are not stored.</p>
+      </fieldset>
+      <fieldset class="iv-rel-fieldset">
+        <legend>Check conditions</legend>
+        <div class="iv-rel-fields iv-rel-fields-four">
+          <label for="reliability-interval">Check every<select id="reliability-interval" class="ink-input" name="interval"><option value="60">1 minute</option><option value="300" selected>5 minutes</option><option value="900">15 minutes</option></select></label>
+          <label for="reliability-status">Expected HTTP status<input id="reliability-status" class="ink-input" name="status" type="number" min="200" max="299" value="200" required></label>
+          <label for="reliability-latency">Header latency limit (ms)<input id="reliability-latency" class="ink-input" name="latency" type="number" min="100" max="7500" value="2000" required></label>
+          <label for="reliability-target">Good-check target (%)<input id="reliability-target" class="ink-input" name="target" type="number" min="90" max="99.99" step="0.0001" value="99.9" required></label>
+        </div>
+      </fieldset>
+      <fieldset class="iv-rel-fieldset iv-rel-activation">
+        <legend>Activation</legend>
+        <label class="iv-rel-check" for="reliability-enabled"><input id="reliability-enabled" type="checkbox"><span><strong>Enable periodic checks</strong><span id="reliability-activation-note" class="iv-rel-caption">Save paused; no requests will be sent.</span></span></label>
+        <label class="iv-rel-check" for="reliability-consent"><input id="reliability-consent" type="checkbox" required><span>I control this read-only endpoint and authorize Infraveil to make periodic GET requests.</span></label>
+      </fieldset>
+      <div id="reliability-form-error" class="iv-rel-notice" role="alert" hidden></div>
+      <footer class="iv-rel-form-footer"><p>Changing settings or pausing starts a new measurement series. Your application is not changed.</p><button type="submit" id="reliability-save" class="btn-primary iv-rel-action">Save monitor</button></footer>
+    </form>
+  </section>
+
+  <footer class="iv-rel-footer">
+    <span id="reliability-updated" class="iv-rel-caption">No observations loaded</span>
+    <details class="iv-rel-method"><summary>How checks, budgets and notifications work</summary><div>
+      <p>Checks come from one Infraveil-hosted location, not a multi-region monitoring network. Fleet selection does not change this workspace-wide scope. An observer outage produces gaps.</p>
+      <p>A good check meets your expected HTTP status and response-header latency limit. Error budgets use scheduled check slots, not customer traffic or a duration-based uptime SLA. Missing, interrupted and late checks stay unknown. At least ten mature slots are needed for a budget verdict.</p>
+      <p>Budgets are advisory: they never pause a release or stop an application. For deduplicated failure/recovery notifications, subscribe to Runtime signals in an enabled Edge Integration. This is not on-call paging.</p>
+      <p>Samples expire after 30 days. Saving changes starts a new series; deleting a monitor removes its check history, not any application data.</p>
+    </div></details>
+  </footer>
+
+  <dialog id="reliability-confirm" class="iv-rel-dialog" aria-labelledby="reliability-confirm-title" aria-describedby="reliability-confirm-message">
+    <form method="dialog"><h3 id="reliability-confirm-title">Confirm action</h3><p id="reliability-confirm-message"></p><div class="iv-rel-actions"><button value="cancel" class="btn-secondary iv-rel-action" autofocus>Cancel</button><button value="confirm" class="btn-primary iv-rel-action" id="reliability-confirm-accept">Confirm</button></div></form>
+  </dialog>
+</section>
