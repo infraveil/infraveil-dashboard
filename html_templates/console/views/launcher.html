@@ -1,0 +1,360 @@
+<div
+            id="view-launcher"
+            class="view-section hidden max-w-7xl mx-auto space-y-6"
+          >
+            <div class="operator-page-header mb-4">
+              <div>
+                <div class="text-[10px] uppercase tracking-[0.24em] font-bold" style="color: var(--text-subtle)">Runtime Fleet</div>
+                <h2 class="text-2xl font-semibold mt-2" style="color: var(--text-main)">
+                  Servers
+                </h2>
+                <p class="text-sm mt-2 max-w-3xl" style="color: var(--text-muted)">
+                  Install and manage the Infraveil launcher on each server.
+                  Use Placement for API routing, failover, and rollout order.
+                </p>
+              </div>
+              <div class="operator-toolbar">
+                <div
+                  id="launcher-bulk-actions"
+                  class="hidden items-center gap-3 rounded-xl border px-3 py-2"
+                  style="border-color: var(--table-border); background: rgba(0,0,0,0.18)"
+                >
+                  <span id="launcher-selected-count" class="text-[10px] uppercase tracking-widest" style="color: var(--text-subtle)">0 selected</span>
+                  <button onclick="sendSelectedLauncherCommand('restart')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Restart</button>
+                  <button onclick="sendSelectedLauncherCommand('restart-agents')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Restart APIs</button>
+                  <button onclick="sendSelectedLauncherCommand('stop-agents')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Kill APIs</button>
+                  <button onclick="sendSelectedLauncherCommand('capacity-diagnostic')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Diagnose</button>
+                  <button onclick="sendSelectedLauncherCommand('clear-workspace')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Clear</button>
+                  <button onclick="sendSelectedLauncherCommand('stop')" class="btn-danger px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Kill</button>
+                  <button onclick="deleteSelectedLauncherHosts()" class="btn-danger px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Delete</button>
+                </div>
+                <button onclick="clearAllLaunchers()" class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">
+                  Clear All Launchers
+                </button>
+                <div
+                  id="launcher-fleet-count"
+                  class="text-[10px] uppercase tracking-widest px-3 py-1 rounded-full border"
+                  style="
+                    border-color: var(--table-border);
+                    color: var(--text-subtle);
+                  "
+                >
+                  0 Hosts
+                </div>
+                <button
+                  onclick="createLauncherHost()"
+                  class="btn-primary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Add Server
+                </button>
+              </div>
+            </div>
+            <div class="space-y-6">
+              <div class="space-y-6">
+                <div class="acrylic-panel rounded-2xl overflow-hidden">
+                  <div
+                    class="operator-panel-header"
+                  >
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold"
+                      style="color: var(--text-subtle)"
+                    >
+                      Host List
+                    </div>
+                    <div class="text-sm mt-1" style="color: var(--text-muted)">
+                      Each row is one machine running the Infraveil launcher.
+                    </div>
+                  </div>
+                  <div class="p-6">
+                  <div id="launcher-host-grid" class="iv-server-inventory">
+                      <div
+                        class="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm"
+                        style="color: var(--text-muted)"
+                      >
+                        No servers added yet. Click "Add Server" (top right) to
+                        connect your first machine.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  class="acrylic-panel rounded-2xl overflow-hidden"
+                  id="daemon-status-section"
+                >
+                  <div
+                    class="operator-panel-header flex items-center justify-between gap-4"
+                  >
+                    <div>
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: var(--text-subtle)"
+                      >
+                        Selected Server
+                      </div>
+                      <div
+                        id="launcher-selected-host"
+                        class="text-sm font-semibold text-white mt-1"
+                      >
+                        No host selected
+                      </div>
+                      <div
+                        id="launcher-selected-host-detail"
+                        class="text-[11px] mt-1"
+                        style="color: var(--text-muted)"
+                      >
+                        Click a host in the list above to manage it, or add a
+                        server (top right) to connect a new machine.
+                      </div>
+                      <div
+                        id="launcher-selected-host-explainer"
+                        class="text-[11px] mt-2 leading-relaxed"
+                        style="color: var(--text-subtle)"
+                      >
+                        Server actions affect the launcher on this machine.
+                        Workload placement and failover are managed from the
+                        Placement page.
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <div
+                        id="launcher-status-dot"
+                        class="operator-status-dot bg-red-500"
+                      ></div>
+                      <span
+                        id="launcher-status-text"
+                        class="text-sm font-semibold text-red-500"
+                        >OFFLINE</span
+                      >
+                    </div>
+                  </div>
+                  <div class="px-6 py-5 flex flex-wrap gap-3">
+                    <button
+                      onclick="sendLauncherCommand('restart')"
+                      class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                    >
+                      <i data-lucide="rotate-cw" class="w-4 h-4"></i> Restart
+                      Daemon
+                    </button>
+                    <button
+                      onclick="sendLauncherCommand('stop')"
+                      class="btn-danger px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                    >
+                      <i data-lucide="square" class="w-4 h-4"></i> Kill Daemon
+                    </button>
+                    <button
+                      onclick="sendLauncherCommand('restart-agents')"
+                      class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                    >
+                      <i data-lucide="server-cog" class="w-4 h-4"></i> Restart
+                      All APIs
+                    </button>
+                    <button
+                      onclick="sendLauncherCommand('stop-agents')"
+                      class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                    >
+                      <i data-lucide="server-off" class="w-4 h-4"></i> Kill All
+                      APIs
+                    </button>
+                    <button
+                      onclick="sendLauncherCommand('capacity-diagnostic')"
+                      class="btn-primary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                    >
+                      <i data-lucide="gauge" class="w-4 h-4"></i> Run Capacity
+                      Diagnostic
+                    </button>
+                    <button
+                      onclick="sendLauncherCommand('clear-workspace')"
+                      class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                    >
+                      <i data-lucide="eraser" class="w-4 h-4"></i> Clear Local
+                      Workspace
+                    </button>
+                    <button
+                      onclick="deleteSelectedLauncherHost()"
+                      class="btn-danger px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                    >
+                      <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
+                      Server
+                    </button>
+                  </div>
+                  <div
+                    class="px-6 pb-5 text-[10px] leading-relaxed"
+                    style="color: var(--text-subtle)"
+                  >
+                    Daemon actions affect the server itself. API actions apply
+                    only to the services assigned to the selected server host.
+                    Workspace clear wipes local runtime artifacts on that host
+                    and lets the dashboard rehydrate them cleanly. Delete server
+                    removes the host from the fleet and reassigns its APIs to
+                    healthy hosts first.
+                  </div>
+                </div>
+                <div class="acrylic-panel rounded-2xl overflow-hidden" id="launcher-capacity-diagnostic-section">
+                  <div class="operator-panel-header flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                    <div>
+                      <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Capacity Diagnostic</div>
+                      <div class="text-sm mt-1" style="color: var(--text-muted)">Run the test from here. Full CPU, memory, disk, safe API, burst, limiter, and recommendation evidence now lives in Capacity Audit.</div>
+                    </div>
+                    <button onclick="sendLauncherCommand('capacity-diagnostic')" class="btn-primary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+                      <i data-lucide="activity" class="w-4 h-4"></i> Run Diagnostic
+                    </button>
+                  </div>
+                  <div id="launcher-capacity-diagnostic" class="p-6">
+                    <div class="rounded-xl border border-dashed border-white/10 bg-black/20 px-5 py-5 text-sm" style="color: var(--text-muted)">
+                      Select a server and run a diagnostic. The launcher page will stay clean; the detailed report opens in Capacity Audit.
+                    </div>
+                  </div>
+                </div>
+                  <div
+                    id="launcher-command-dialog"
+                    class="acrylic-panel rounded-2xl overflow-hidden launcher-panel-lift iv-launcher-command-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="launcher-command-dialog-title"
+                    aria-hidden="true"
+                  >
+                  <div
+                    class="operator-panel-header flex items-start justify-between gap-4"
+                  >
+                    <div>
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: var(--text-subtle)"
+                      >
+                        Deployment Install
+                      </div>
+                      <div id="launcher-command-dialog-title" class="text-sm mt-1" style="color: var(--text-muted)">
+                        Use the signed one-file Trust Console for the selected host.
+                      </div>
+                    </div>
+                    <button type="button" class="iv-icon-button" onclick="closeLauncherInstallDialog()" title="Close deployment command" aria-label="Close deployment command">
+                      <i data-lucide="x"></i>
+                    </button>
+                  </div>
+                  <div class="p-6 space-y-5">
+                    <div
+                      class="flex flex-col gap-4"
+                    >
+                      <label class="hidden"
+                        ><div
+                          class="text-[10px] uppercase tracking-widest mb-2"
+                          style="color: var(--text-subtle)"
+                        >
+                          Username
+                        </div>
+                        <input
+                          id="launcher-user"
+                          placeholder="admin_user"
+                          class="ink-input w-full rounded-lg px-4 py-3 text-sm font-mono-cli"
+                      /></label>
+                      <button
+                        onclick="generateLauncherCommand()"
+                        class="btn-primary w-full px-6 py-3.5 rounded-lg text-xs font-bold uppercase tracking-widest flex justify-center items-center gap-2 whitespace-nowrap"
+                      >
+                        <i data-lucide="shield-check" class="w-4 h-4"></i>
+                        Authenticate & Download Trust Console
+                      </button>
+                    </div>
+                    <div class="iv-installer-notice">
+                      <span class="iv-installer-notice-icon"><i data-lucide="terminal" class="w-4 h-4"></i></span>
+                      <span>
+                        <strong>One verified path on macOS, Linux, and Windows</strong>
+                        <small>Run <code>infraveil.py</code>. It creates the private control folder, installs the SHA-256-locked dependencies, enrolls your local key, verifies the signed launcher, and optionally starts it.</small>
+                      </span>
+                    </div>
+                    <div id="launcher-output-section" class="iv-installer-shell hidden" data-platform="unix" aria-hidden="true">
+                      <div class="iv-installer-toolbar">
+                        <div class="iv-installer-context">
+                          <span class="iv-installer-context-icon"><i data-lucide="server" class="w-4 h-4"></i></span>
+                          <span>
+                            <small>Installation target</small>
+                            <strong id="launcher-install-target">Selected server</strong>
+                          </span>
+                        </div>
+                        <div class="iv-installer-tabs" role="tablist" aria-label="Installer operating system">
+                          <button
+                            id="launcher-tab-unix"
+                            type="button"
+                            class="iv-installer-tab active"
+                            role="tab"
+                            aria-selected="true"
+                            aria-controls="launcher-panel-unix"
+                            onclick="switchLauncherPlatform('unix')"
+                          >
+                            <i data-lucide="terminal" class="w-4 h-4"></i>
+                            Linux / macOS
+                          </button>
+                          <button
+                            id="launcher-tab-windows"
+                            type="button"
+                            class="iv-installer-tab"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="launcher-panel-windows"
+                            onclick="switchLauncherPlatform('windows')"
+                          >
+                            <i data-lucide="monitor" class="w-4 h-4"></i>
+                            Windows
+                          </button>
+                        </div>
+                      </div>
+
+                      <section
+                        id="launcher-panel-unix"
+                        class="iv-installer-panel"
+                        role="tabpanel"
+                        aria-labelledby="launcher-tab-unix"
+                      >
+                        <div class="iv-installer-panel-header">
+                          <div>
+                            <span class="iv-installer-eyebrow">Shell installer</span>
+                            <h4>Run once in Bash or Zsh</h4>
+                            <p>Downloads the signed launcher into the current directory, or <code>INFRAVEIL_HOME</code> when configured.</p>
+                          </div>
+                          <button type="button" onclick="copyLauncherCmd('launcher-cmd-output')" class="iv-installer-copy">
+                            <i data-lucide="copy" class="w-4 h-4"></i>
+                            Copy command
+                          </button>
+                        </div>
+                        <pre class="iv-installer-code" aria-label="Linux and macOS installer command"><code id="launcher-cmd-output" data-ready="false">Authenticate to generate a single-use installer.</code></pre>
+                      </section>
+
+                      <section
+                        id="launcher-panel-windows"
+                        class="iv-installer-panel"
+                        role="tabpanel"
+                        aria-labelledby="launcher-tab-windows"
+                        hidden
+                      >
+                        <div class="iv-installer-panel-header">
+                          <div>
+                            <span class="iv-installer-eyebrow">PowerShell installer</span>
+                            <h4>Run once in PowerShell</h4>
+                            <p>Downloads the signed launcher and uses the first available Python installation on the host.</p>
+                          </div>
+                          <button type="button" onclick="copyLauncherCmd('launcher-cmd-win-output')" class="iv-installer-copy">
+                            <i data-lucide="copy" class="w-4 h-4"></i>
+                            Copy command
+                          </button>
+                        </div>
+                        <pre class="iv-installer-code" aria-label="Windows PowerShell installer command"><code id="launcher-cmd-win-output" data-ready="false">Authenticate to generate a single-use installer.</code></pre>
+                      </section>
+
+                      <div class="iv-installer-notice">
+                        <span class="iv-installer-notice-icon"><i data-lucide="shield-check" class="w-4 h-4"></i></span>
+                        <span>
+                          <strong>Single-use credential</strong>
+                          <small>This command is scoped to the selected server and becomes invalid after a successful install.</small>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="demo-launcher-guide" class="hidden">
+              <div id="demo-credentials-box" class="hidden"></div>
+              <div id="step-account-creation" class="hidden"></div>
+              <div id="step-systemd" class="hidden"></div>
+            </div>
+          </div>

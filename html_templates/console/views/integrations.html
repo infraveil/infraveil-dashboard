@@ -1,0 +1,28 @@
+<div
+            id="view-integrations"
+            class="view-section hidden max-w-7xl mx-auto space-y-6"
+          >
+            <div class="px-1">
+              <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Edge Integrations</div>
+              <h2 class="text-2xl text-white mt-2">Event delivery</h2>
+              <p class="text-sm mt-2 max-w-4xl" style="color: var(--text-muted)">Send selected incidents, runtime errors, and action results to Slack, Teams, incident.io, GitHub, or a webhook. Delivery must be enabled and configured. OpenTelemetry export is not supported.</p>
+            </div>
+            <div class="acrylic-panel rounded-2xl overflow-hidden">
+              <div class="p-8 space-y-6">
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Delivery settings</div>
+                <h3 class="text-xl text-white">Keep your team informed</h3>
+                <p class="text-sm leading-relaxed" style="color: var(--text-muted)">Choose destinations and event subscriptions. These integrations deliver notifications and create tickets; runtime controls remain in Infraveil.</p>
+                <div id="integrations-status-summary" class="grid grid-cols-2 gap-3 text-xs"></div>
+              </div>
+              <div class="p-8 space-y-6 border-t border-white/10">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Configured Bridges</div>
+                    <h3 class="text-xl text-white mt-1">Where to send events</h3>
+                  </div>
+                  <button onclick="saveIntegrations()" class="btn-primary px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Save</button>
+                </div>
+                <div id="integrations-grid" class="grid md:grid-cols-2 gap-4"></div>
+              </div>
+            </div>
+          </div>

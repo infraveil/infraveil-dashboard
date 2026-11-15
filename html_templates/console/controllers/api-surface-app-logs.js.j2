@@ -1,0 +1,1114 @@
+        const chartContainer = document.getElementById("overview-chart");
+        let chartData = Array(30).fill(3);
+        for (let e = 0; e < 30; e++) {
+          const e = document.createElement("div");
+          ((e.className = "flex-1 rounded-t-sm transition-all duration-300"),
+            (e.style.height = "3%"),
+            (e.style.backgroundColor = "var(--chart-color)"),
+            chartContainer.appendChild(e));
+        }
+        function updateNetworkChart(e, t = 0) {
+          const n = chartContainer.children,
+            o = Array.isArray(e) && e.length ? e : chartData,
+            r = Math.max(...o, 1);
+          chartData = o.slice(-30);
+          for (let e = 0; e < 30; e++) {
+            const t = chartData[e] || 0,
+              o = t > 0 ? Math.max(4, (t / r) * 100) : 3;
+            ((n[e].style.height = o + "%"),
+              (n[e].style.backgroundColor =
+                t >= 0.7 * r && t > 0
+                  ? "var(--chart-active)"
+                  : "var(--chart-color)"),
+              (n[e].style.opacity = t > 0 ? "1" : "0.45"));
+          }
+          document.getElementById("stat-throughput").innerText = t;
+        }
+        function getJohnnyFleetContext() {
+          const e = Array.isArray(window.__launcherHosts)
+              ? window.__launcherHosts
+              : [],
+            t = Array.isArray(window.__launcherAgents)
+              ? window.__launcherAgents
+              : [],
+            n = t[0] || null,
+            proofTargets = t.length
+              ? t.map((e, t) => {
+                  const n =
+                      e?.runtime_status?.manifest?.gateway_listen ||
+                      e?.runtime_status?.gateway_port ||
+                      e?.runtime_status?.gateway?.port ||
+                      e?.starter_ports?.gateway ||
+                      e?.gateway_port ||
+                      e?.port ||
+                      18443,
+                    o = String(
+                      e?.node_ref ||
+                        e?.name ||
+                        e?.agent_id ||
+                        e?.id ||
+                        `stack-${t + 1}`,
+                    ),
+                    label = cleanJohnnyTargetLabel(o, t);
+                  return {
+                    id: label,
+                    label,
+                    port: n,
+                    baseUrl: `http://localhost:${n}`,
+                    statusPath: e?.runtime_profile === "polyglot" ? "/api/status" : "/health",
+                  };
+                })
+              : [
+                  {
+                    id: "starter-api",
+                    label: "starter-api",
+                    port: 18443,
+                    baseUrl: "http://localhost:18443",
+                    statusPath: "/api/status",
+                  },
+                ],
+            dedupedTargets = [
+              ...new Map(
+                proofTargets.map((e) => [`${e.id}:${e.port}`, e]),
+              ).values(),
+            ],
+            o = dedupedTargets[0]?.port || 18443,
+            r = `http://localhost:${o}`,
+            s = !APP_STATE.demo_mode && t.some((e) => {
+              const t = normalizeJohnnyText(e);
+              return t.includes("risk") || t.includes("python");
+            }),
+            a = [
+              ...new Set(
+                t.map(
+                  (e) =>
+                    String(e.runtime_profile || e.type || "").trim() ||
+                    "runtime workload",
+                ),
+              ),
+            ];
+          return {
+            launcherHosts: e,
+            agents: t,
+            primaryAgent: n,
+            gatewayPort: o,
+            baseUrl: r,
+            proofTargets: dedupedTargets,
+            hasRiskEngine: s,
+            runtimeLabels: a,
+          };
+        }
+        function cleanJohnnyTargetLabel(e, t = 0) {
+          let n = String(e || "").trim().replace(/[|\\s]+/g, "-").replace(/[^a-zA-Z0-9_.:-]/g, "-").replace(/-+/g, "-");
+          if (/^-tarter-api/i.test(n)) n = "starter-api";
+          if (/^-tack-(\d+)/i.test(n)) n = n.replace(/^-tack-/i, "stack-");
+          n = n.replace(/^-+/, "").replace(/-+$/, "");
+          if (!n || n.length < 2) n = `stack-${t + 1}`;
+          return n.slice(0, 64);
+        }
+        function getJohnnyBurstCount() {
+          const e = Number(_getEffectiveCfg?.().rate_limit_rpm || document.getElementById("sec-rl-rpm")?.value || 100),
+            t = Number.isFinite(e) && e > 0 ? e : 100;
+          return Math.max(140, Math.min(600, t + 45));
+        }
+        function buildJohnnyAttackScript() {
+          const { agents: e, proofTargets: t } = getJohnnyFleetContext(),
+            n = e.length > 1 ? "/health" : "/api/status",
+            o = getJohnnyBurstCount();
+          return [
+            `echo "Infraveil Johnny proof: normal traffic, honeypot probe, then rate pressure"`,
+            `echo "Burst count: ${o} requests per stack. This is intentionally above the active rate-limit RPM."`,
+            `TARGETS='${t.map((e) => `${e.label}|${e.port}|${e.statusPath || n}`).join(" ")}'`,
+            `for target in $TARGETS; do`,
+            `  IFS='|' read -r name port path <<< "$target"`,
+            `  echo "Testing $name on port $port"`,
+            `  url="http://localhost:$port$path"; sep="?"; case "$url" in *\\?*) sep="&";; esac; proof_url="$url\${sep}johnny_target=$name"`,
+            `  curl -i -H "X-Infraveil-Johnny-Target: $name" "$proof_url"`,
+            `  curl -i -H "X-Infraveil-Johnny-Target: $name" "http://localhost:$port/.env?johnny_target=$name"`,
+            `  curl -i -H "X-Infraveil-Johnny-Target: $name" "http://localhost:$port/wp-login.php?johnny_target=$name"`,
+            `  for i in {1..${o}}; do curl -s -o /dev/null -w "%{http_code}\\n" -H "X-Infraveil-Johnny-Target: $name" "$proof_url" & done; wait`,
+            `done`,
+            `echo "Johnny proof complete. Tested ${t.length} stack${1 === t.length ? "" : "s"}."`,
+          ].join("\n");
+        }
+        function getJohnnyRouteSections() {
+          const {
+              launcherHosts: e,
+              agents: t,
+              baseUrl: n,
+              hasRiskEngine: o,
+              runtimeLabels: r,
+            } = getJohnnyFleetContext(),
+            s = t.length > 1,
+            a = e.length > 1,
+            i = [
+              {
+                method: "GET",
+                path: "/health",
+                note: s
+                  ? "Check gateway health for the selected stack."
+                  : "Check gateway health when the gateway is reachable.",
+                copy: `curl ${n}/health`,
+              },
+              {
+                method: "GET",
+                path: "/api/status",
+                note: "Core API health and runtime status.",
+                copy: `curl ${n}/api/status`,
+              },
+              {
+                method: "GET",
+                path: "/api/data",
+                note: "Good for normal traffic proof and burst testing.",
+                copy: `curl ${n}/api/data`,
+              },
+            ];
+          o &&
+            i.push(
+              {
+                method: "GET",
+                path: "/risk/health",
+                note: "Direct proof that the Python risk service is alive behind the gateway.",
+                copy: `curl ${n}/risk/health`,
+              },
+              {
+                method: "POST",
+                path: "/risk/score",
+                note: "Direct scoring call through the gateway to prove multi-runtime supervision.",
+                copy: `curl -X POST ${n}/risk/score -H "Content-Type: application/json" -d "{\\"path\\":\\"/api/auth/login\\",\\"method\\":\\"POST\\"}"`,
+              },
+            );
+          const l = [
+              {
+                method: "GET",
+                path: "/",
+                note: "Identity and route proof for the starter public surface.",
+                copy: `curl ${n}/`,
+              },
+              {
+                method: "GET",
+                path: "/api/users",
+                note: "Starter dataset route for easy path tracing.",
+                copy: `curl ${n}/api/users`,
+              },
+              {
+                method: "POST",
+                path: "/api/orders",
+                note: "Useful for provoking middleware, scoring, and order-path telemetry.",
+                copy: `curl -X POST ${n}/api/orders -H "Content-Type: application/json" -d "{\\"user_id\\":1,\\"product_id\\":2}"`,
+              },
+              {
+                method: "GET",
+                path: "/api/demo-error",
+                note: "Intentional 500 for testing runtime errors, logs, incidents, status, and remediation.",
+                copy: `curl -i ${n}/api/demo-error`,
+              },
+              {
+                method: "POST",
+                path: "/api/auth/login",
+                note: "Auth-shaped request that usually drives scoring and protection logic.",
+                copy: `curl -X POST ${n}/api/auth/login -H "Content-Type: application/json" -d "{\\"username\\":\\"admin\\"}"`,
+              },
+            ],
+            c = [
+              {
+                method: "GET",
+                path: "/.env",
+                note: "Fake env leak route to trigger a clean security signal.",
+                copy: `curl ${n}/.env`,
+              },
+              {
+                method: "GET",
+                path: "/wp-login.php",
+                note: "Scanner-style probe for fast alert testing.",
+                copy: `curl ${n}/wp-login.php`,
+              },
+              {
+                method: "GET",
+                path: "/phpmyadmin/",
+                note: "Legacy admin probe that should trip detection.",
+                copy: `curl ${n}/phpmyadmin/`,
+              },
+              {
+                method: "GET",
+                path: "/.git/config",
+                note: "Fake repo leak path for another unambiguous signal.",
+                copy: `curl ${n}/.git/config`,
+              },
+            ];
+          return {
+            multiApi: s,
+            multiHost: a,
+            runtimeText: r.length ? r.join(" + ") : "runtime workload",
+            liveRoutes: i,
+            starterRoutes: l,
+            honeypots: c,
+          };
+        }
+        function renderJohnnyRouteList(e, t, n = "No routes available yet.") {
+          const o = document.getElementById(e);
+          o &&
+            (t.length
+              ? ((o.innerHTML = t
+                  .map(
+                    (e) =>
+                      `\n                <div class="flex items-center gap-4 p-5 hover:bg-white/[0.02] transition-colors">\n                    <span class="px-2.5 py-1 rounded text-[9px] font-bold uppercase tracking-widest ${"POST" === e.method ? "bg-blue-500/20 text-blue-400" : "bg-emerald-500/20 text-emerald-400"}">${e.method}</span>\n                    <code class="flex-1 font-mono-cli text-sm text-white">${e.path}</code>\n                    <span class="hidden xl:block text-xs max-w-[280px]" style="color: var(--text-muted)">${e.note}</span>\n                    <button type="button" data-copy-command="${escapeHtml(e.copy)}" data-copy-label="curl command"\n                        class="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors" title="Copy curl">\n                        <i data-lucide="copy" class="w-4 h-4 text-gray-400"></i>\n                    </button>\n                </div>\n            `,
+                  )
+                  .join("")),
+                window.lucide && lucide.createIcons())
+              : (o.innerHTML = `<div class="px-5 py-4 text-sm" style="color: var(--text-muted)">${n}</div>`));
+        }
+        function renderJohnnyApiSurface() {
+          const e = document.getElementById("johnny-surface-stats"),
+            t = document.getElementById("johnny-fleet-shape"),
+            n = document.getElementById("johnny-surface-copy"),
+            o = document.getElementById("johnny-runtime-surface-card"),
+            r = document.getElementById("johnny-proof-routes-copy"),
+            s = document.getElementById("johnny-proof-routes-badge"),
+            a = document.getElementById("johnny-script-subcopy"),
+            i = document.getElementById("johnny-script-badge"),
+            {
+              launcherHosts: l,
+              agents: c,
+              baseUrl: d,
+              runtimeLabels: u,
+              proofTargets: proofTargets,
+            } = getJohnnyFleetContext(),
+            {
+              multiApi: p,
+              multiHost: m,
+              runtimeText: g,
+              liveRoutes: h,
+              starterRoutes: y,
+              honeypots: f,
+            } = getJohnnyRouteSections(),
+            b = h.length + f.length + y.length,
+            v = c.some((e) => normalizeJohnnyText(e).includes("starter"));
+          if (
+            (n &&
+              (n.textContent =
+                m || p
+                  ? "Use these suggested routes and commands to test the registered fleet. Registration does not confirm that a host or workload is reachable."
+                  : "Use these suggested routes and commands to test the configured gateway. Registration does not confirm that a host or workload is reachable."),
+            e)
+          ) {
+            const t = [
+              {
+                label: "Base URL",
+                value: d,
+                note: "Use the proof script below.",
+                tone: "text-emerald-400 font-mono-cli text-base",
+              },
+              {
+                label: "Registered workloads",
+                value: String(c.length),
+                note: "Registration does not establish runtime health.",
+                tone: "text-white text-3xl font-bold",
+              },
+              {
+                label: "Launcher Hosts",
+                value: String(l.length),
+                note: "Registered hosts; connectivity shown below.",
+                tone: "text-white text-3xl font-bold",
+              },
+              {
+                label: "Suggested Proof Targets",
+                value: String(proofTargets.length),
+                note:
+                  proofTargets.length > 1
+                    ? "Run proof against each target when reachable."
+                    : "A suggested target, not a reachability check.",
+                tone: "text-white text-3xl font-bold",
+              },
+              {
+                label: "Route Surface",
+                value: `${b}`,
+                note: g,
+                tone: "text-blue-300 text-lg font-semibold",
+              },
+            ];
+            e.innerHTML = t
+              .map(
+                (e) =>
+                  `\n                    <div class="acrylic-panel p-5 rounded-2xl">\n                        <div class="text-[10px] uppercase tracking-widest mb-2" style="color: var(--text-subtle)">${e.label}</div>\n                        <div class="${e.tone}">${e.value}</div>\n                        <div class="text-[10px] mt-2" style="color: var(--text-muted)">${e.note}</div>\n                    </div>\n                `,
+              )
+              .join("");
+          }
+          if (t) {
+            const e = l.length
+              ? l
+                  .map((e) => {
+                    const t = c.filter(
+                      (t) => (t.launcher_host_id || "") === e.host_id,
+                    );
+                    return `\n                        <div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">\n                            <div class="flex items-center justify-between gap-3">\n                                <div>\n                                    <div class="text-sm font-semibold text-white">${e.name || "Launcher Host"}</div>\n                                    <div class="text-[11px] mt-1" style="color: var(--text-muted)">${e.region || "global"} • ${t.length} assigned API${1 === t.length ? "" : "s"}</div>\n                                </div>\n                                <div class="text-[10px] uppercase tracking-widest ${"online" === e.status ? "text-emerald-400" : "text-red-300"}">${e.status || "offline"}</div>\n                            </div>\n                        </div>\n                    `;
+                  })
+                  .join("")
+              : '<div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm" style="color: var(--text-muted)">No launcher host metadata yet. Suggested proof routes do not confirm a gateway is reachable.</div>';
+            t.innerHTML = `\n                    <div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">\n                        <div class="text-[10px] uppercase tracking-widest font-bold mb-2" style="color: var(--text-subtle)">Runtime Mix</div>\n                        <div class="text-sm text-white">${u.length ? u.join(" + ") : "Runtime workload"}</div>\n                    </div>\n                    ${e}\n                `;
+          }
+          (r &&
+            (r.textContent =
+              p || m
+                ? "These are the fastest proof routes for the current fleet shape: gateway health, core traffic, and runtime-specific checks."
+                : "These suggested routes can check gateway health, core traffic, and runtime-specific behavior when a target is reachable."),
+            s &&
+              (s.textContent = m
+                ? "Fleet Proof"
+                : p
+                  ? "Stack Proof"
+                  : "Suggested Routes"),
+            a &&
+              (a.textContent =
+                m || p
+                  ? "This script is generated from the current host and API shape, so you can prove more than one workload without guessing."
+                  : "This script is generated from the current gateway entrypoint so the proof stays fast and local."),
+            i &&
+              (i.textContent = m
+                ? "Multi-Host"
+                : p
+                  ? "Multi-API"
+                  : "Suggested Target"),
+            o &&
+              (o.textContent = v
+                ? "This surface suggests gateway and starter-backed runtime routes from the current workspace shape. Reachability requires a separate check. Portal auth, billing, deployments, and admin flows are out of scope."
+                : "This surface suggests runtime-facing routes from the current workspace shape. Reachability requires a separate check. Portal auth, billing, deployments, and admin flows are out of scope."),
+            renderJohnnyRouteList(
+              "johnny-live-route-list",
+              v ? [...h, ...y] : h,
+              "No suggested proof routes available.",
+            ),
+            renderJohnnyRouteList(
+              "johnny-honeypot-route-list",
+              f,
+              "Enable honeypots in Security to populate this list.",
+            ));
+        }
+        function copyJohnnyBaseUrl() {
+          const { baseUrl: e } = getJohnnyFleetContext();
+          copyToClipboard(e, "Base URL");
+        }
+        function startJohnnyProofSession() {
+          ((johnnyProofStartedAt = Date.now()),
+            (johnnyProofSessionActive = !0),
+            (johnnyProofSkipped = !1),
+            (johnnyConfidenceScore = 0),
+            updateJohnnyConfidence());
+        }
+        function copyJohnnyAttackScript() {
+          startJohnnyProofSession();
+          copyToClipboard(buildJohnnyAttackScript(), "Johnny attack script");
+        }
+        function renderJohnnyAttackScriptPreview() {
+          const e = document.getElementById("johnny-attack-script-preview");
+          if (!e) return;
+          ((e.textContent = buildJohnnyAttackScript()), renderJohnnyApiSurface());
+        }
+        function normalizeJohnnyText(e) {
+          if (null == e) return "";
+          if ("string" == typeof e) return e.toLowerCase();
+          try {
+            return JSON.stringify(e).toLowerCase();
+          } catch (e) {
+            return "";
+          }
+        }
+        function johnnyEventTime(e) {
+          if (!e || "object" != typeof e) return 0;
+          const t =
+            e.timestamp ??
+            e.time ??
+            e.at ??
+            e.created_at ??
+            e.createdAt ??
+            e.ts ??
+            e.date;
+          if (null == t || "" === t) return 0;
+          if ("number" == typeof t) return t > 1e12 ? t : 1e3 * t;
+          const n = Date.parse(t);
+          return Number.isFinite(n) ? n : 0;
+        }
+        function johnnyFreshEvidence(e) {
+          if (!Array.isArray(e)) return [];
+          if (!johnnyProofSessionActive) return [];
+          const t = johnnyProofStartedAt || Date.now();
+          return e.filter((e) => {
+            const n = johnnyEventTime(e);
+            return n && n >= t - 1500;
+          });
+        }
+        function johnnyTargetEvidence(target, combinedEvidence) {
+          if (!target) return !1;
+          const label = normalizeJohnnyText(target.label || target.id || ""),
+            port = String(target.port || "");
+          return !!(
+            (label && combinedEvidence.includes(label)) ||
+            (port && combinedEvidence.includes(`localhost:${port}`)) ||
+            (port && combinedEvidence.includes(`:${port}`))
+          );
+        }
+        function escapeHtml(e) {
+          return String(null == e ? "" : e)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        }
+        function getSelectValue(e, t = "") {
+          return document.getElementById(e)?.value ?? t;
+        }
+        function getNumericSelectValue(e, t) {
+          const n = parseInt(getSelectValue(e, String(t)), 10);
+          return Number.isFinite(n) ? n : t;
+        }
+        function getLogLimitValue(e, t = 120) {
+          const n = getNumericSelectValue(e, t);
+          return n > 0 ? n : Number.POSITIVE_INFINITY;
+        }
+        function getLogWindowLabel(e, t, n = 120) {
+          const o = getLogLimitValue(e, n);
+          return Number.isFinite(o) ? String(Math.min(t.length, o)) : "all";
+        }
+        function renderOpsStat(e, t, n, o = "") {
+          return `\n                <div class="rounded-xl border px-4 py-3 ${o}" style="border-color: var(--table-border); background: rgba(255,255,255,0.03)">\n                    <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">${escapeHtml(e)}</div>\n                    <div class="text-lg font-semibold mt-1 text-white">${escapeHtml(t)}</div>\n                    <div class="text-[11px] mt-1" style="color: var(--text-muted)">${escapeHtml(n || "")}</div>\n                </div>\n            `;
+        }
+        function getConsoleSeverityMeta(e) {
+          const t = String(e.level || "").toUpperCase(),
+            n = String(e.content || "");
+          if (n.startsWith("[PROCESS_EVENT]")) {
+            try {
+              const e = JSON.parse(n.replace(/^\[PROCESS_EVENT\]\s*/, "")),
+                t = String(e.level || "").toLowerCase(),
+                o = String(e.phase || "");
+              return {
+                rawLevel: "error" === t ? "ERROR" : "warn" === t ? "WARN" : "PROCESS",
+                isError: "error" === t || /exit|crash|port-busy|health-restart/i.test(o),
+                isWarn: "warn" === t || /restart|port-reclaim|health/i.test(o),
+                isSecurity: !1,
+                isDebug: "debug" === t,
+                category: "error" === t ? "error" : "warn" === t ? "warn" : "process",
+              };
+            } catch (e) {
+              if (!APP_STATE.demo_mode) throw e;
+            }
+          }
+          if (t) {
+            const e =
+              {
+                ERROR: "error",
+                FATAL: "error",
+                CRITICAL: "error",
+                WARN: "warn",
+                WARNING: "warn",
+                INFO: "info",
+                DEBUG: "debug",
+                TRACE: "debug",
+              }[t] || "info";
+            return {
+              rawLevel: t,
+              isError: "error" === e,
+              isWarn: "warn" === e,
+              isSecurity: !1,
+              isDebug: "debug" === e,
+              category: e,
+            };
+          }
+          const o =
+              "ERROR" === t ||
+              "TRACEBACK" === t ||
+              "AGENT_ERROR" === t ||
+              n.includes("[ERROR]") ||
+              n.includes("[TRACEBACK]"),
+            r = "WARN" === t || n.includes("[WARN]"),
+            s = "SECURITY" === t || n.includes("[SECURITY]"),
+            a = "DEBUG" === t || n.includes("[DEBUG]");
+          return {
+            rawLevel: t,
+            isError: o,
+            isWarn: r,
+            isSecurity: s,
+            isDebug: a,
+            category: o
+              ? "error"
+              : r
+                ? "warn"
+                : s
+                  ? "security"
+                  : a
+                    ? "debug"
+                    : "info",
+          };
+        }
+        function normalizeConsoleEntries(e) {
+          return (Array.isArray(e?.logs) ? e.logs : e?.errors || [])
+            .filter(
+              (e) =>
+                !String(e.content || "").includes(
+                  "Payload thread exited unexpectedly",
+                ),
+            )
+            .map((e) => {
+              const t = getConsoleSeverityMeta(e),
+                n = String(e.content || "")
+                  .replace(/^\[[A-Z_]+\]\s*/, "")
+                  .replace(/^\[\d{4}-\d{2}-\d{2}T[\d:.]+\]\s*/, "")
+                  .trim(),
+                parsedProcess =
+                  String(e.content || "").startsWith("[PROCESS_EVENT]")
+                    ? (() => {
+                        try {
+                          return JSON.parse(
+                            String(e.content || "").replace(
+                              /^\[PROCESS_EVENT\]\s*/,
+                              "",
+                            ),
+                          );
+                        } catch (e) {
+                          return null;
+                        }
+                      })()
+                    : null,
+                o = parsedProcess
+                  ? `${parsedProcess.service || "service"}: ${parsedProcess.message || parsedProcess.phase || "process event"}`
+                  : n.split("\n")[0] || "",
+                r =
+                  agentNames[e.agent_id] ||
+                  agentNames[(e.agent_id || "").substring(0, 8)] ||
+                  `NODE-${(e.agent_id || "unknown").substring(0, 8)}`;
+              return Object.assign({}, e, t, {
+                cleanContent: n,
+                firstLine: o,
+                processEvent: parsedProcess,
+                displayName: r,
+              });
+            });
+        }
+        function normalizeAppLogEntries(payload) {
+          return (Array.isArray(payload?.logs) ? payload.logs : []).map((entry) => {
+            const level = String(entry.level || "info").toLowerCase(),
+              stream = String(entry.stream || "process").toLowerCase(),
+              displayName =
+                agentNames[entry.agent_id] ||
+                agentNames[String(entry.agent_id || "").substring(0, 8)] ||
+                `NODE-${String(entry.agent_id || "unknown").substring(0, 8)}`;
+            return {
+              ...entry,
+              level,
+              stream,
+              displayName,
+              isError: level === "error",
+              isWarn: level === "warn",
+            };
+          });
+        }
+        function populateAppLogServiceFilter(payload) {
+          const select = document.getElementById("app-log-service-filter");
+          if (!select) return;
+          const selected = select.value || "all",
+            services = Array.isArray(payload?.facets?.services) ? payload.facets.services : [];
+          select.innerHTML = `<option value="all">All Services</option>${services
+            .map(
+              (item) =>
+                `<option value="${escapeHtml(item.key)}">${escapeHtml(item.key)} (${Number(item.count || 0).toLocaleString()})</option>`,
+            )
+            .join("")}`;
+          if (selected !== "all" && ![...select.options].some((option) => option.value === selected)) {
+            const option = new Option(selected, selected); select.add(option);
+          }
+          select.value = selected;
+        }
+        let appLogsOffset = 0, appLogsQueryTimer = null;
+        function queryAppLogs(debounce = false) {
+          clearTimeout(appLogsQueryTimer);
+          appLogsOffset = 0;
+          renderAppLogs();
+          if (debounce) appLogsQueryTimer = setTimeout(() => fetchAppLogs(true), 300);
+          else fetchAppLogs(true);
+        }
+        function pageAppLogs(direction) {
+          const limit = getNumericSelectValue("app-log-limit", 500);
+          appLogsOffset = direction < 0 ? Math.max(0, appLogsOffset - limit) : Number(_appLogsMeta?.pagination?.next_offset || 0);
+          fetchAppLogs(true);
+        }
+        async function fetchAppLogs(force = !1) {
+          if (appLogsRefreshPromise) {
+            force && (appLogsRefreshQueued = !0);
+            return appLogsRefreshPromise;
+          }
+          const request = (async () => {
+            let applied = !0;
+            do {
+              appLogsRefreshQueued = !1;
+              const params = new URLSearchParams(),
+                scopedIds = [...(window.getFleetAgentScope?.() || [])].filter(Boolean).slice(0, 100),
+                limit = getNumericSelectValue("app-log-limit", 500);
+              const queryGeneration = window.__ivFleetScopeGeneration || 0;
+              window.ivSetTelemetryScopeNotice?.("app-logs", 100, window.getFleetAgentScope?.()?.size || 0);
+              if (window.getFleetScope?.().kind !== "fleet" && window.getFleetAgentScope?.() && !scopedIds.length) {
+                _appLogsMeta = { logs: [], total: 0, scope: [] }; _appLogs = []; renderAppLogs(); return true;
+              }
+              scopedIds.length && params.set("agent_ids", scopedIds.join(","));
+              params.set("limit", String(Math.max(1, Math.min(2000, limit || 500))));
+              params.set("offset", String(appLogsOffset));
+              params.set("level", getSelectValue("app-log-level-filter", "all"));
+              params.set("stream", getSelectValue("app-log-stream-filter", "all"));
+              params.set("service", getSelectValue("app-log-service-filter", "all"));
+              params.set("q", String(document.getElementById("app-log-search")?.value || "").trim());
+              const response = await freshFetch(`${API.appLogs}?${params.toString()}`);
+              if (!response.ok) throw new Error(`App log query failed (${response.status})`);
+              const payload = await response.json();
+              if (queryGeneration !== (window.__ivFleetScopeGeneration || 0)) { appLogsRefreshQueued = true; continue; }
+              if (appLogsRefreshQueued) continue;
+              _appLogsMeta = payload;
+              _appLogs = normalizeAppLogEntries(payload);
+              populateAppLogServiceFilter(payload);
+              getCurrentViewId() === "app-logs" && renderAppLogs();
+            } while (appLogsRefreshQueued);
+            return applied;
+          })(),
+            tracked = request
+              .catch((error) => {
+                console.error(error);
+                showToast("Application logs could not be loaded", "error");
+                return !1;
+              })
+              .finally(() => {
+                appLogsRefreshPromise === tracked && (appLogsRefreshPromise = null);
+              });
+          appLogsRefreshPromise = tracked;
+          return tracked;
+        }
+        function toggleAppLogDetails(id) {
+          const detail = document.getElementById(`app-log-detail-${id}`),
+            icon = document.getElementById(`app-log-icon-${id}`);
+          if (!detail) return;
+          const opening = detail.classList.contains("hidden");
+          detail.classList.toggle("hidden", !opening);
+          opening ? expandedAppLogIds.add(id) : expandedAppLogIds.delete(id);
+          icon && (icon.style.transform = opening ? "rotate(180deg)" : "rotate(0deg)");
+        }
+        function renderAppLogs() {
+          const feed = document.getElementById("app-log-feed"),
+            summary = document.getElementById("app-log-summary-bar"),
+            notice = document.getElementById("app-log-scope-notice");
+          if (!feed) return;
+          const search = String(document.getElementById("app-log-search")?.value || "").trim().toLowerCase(),
+            service = getSelectValue("app-log-service-filter", "all"),
+            stream = getSelectValue("app-log-stream-filter", "all"),
+            level = getSelectValue("app-log-level-filter", "all"),
+            rows = _appLogs.filter((entry) => {
+              if (service !== "all" && entry.service !== service) return !1;
+              if (stream !== "all" && entry.stream !== stream) return !1;
+              if (level !== "all" && entry.level !== level) return !1;
+              if (!search) return !0;
+              return `${entry.displayName} ${entry.service} ${entry.runtime} ${entry.stream} ${entry.level} ${entry.phase} ${entry.message}`
+                .toLowerCase()
+                .includes(search);
+            }),
+            scopeLabel = window.getFleetScopeLabel?.() || "Entire fleet",
+            scopeRequired = Boolean(_appLogsMeta?.scope_required),
+            signature = JSON.stringify({
+              search,
+              service,
+              stream,
+              level,
+              scopeLabel,
+              scopeRequired,
+              offset: appLogsOffset, pagination: _appLogsMeta?.pagination, retention: _appLogsMeta?.retention,
+              rows: rows.map((entry) => [
+                entry.agent_id,
+                entry.timestamp,
+                entry.service,
+                entry.stream,
+                entry.level,
+                entry.phase,
+                entry.message,
+                entry.process_exit_code,
+              ]),
+            });
+          if (signature === lastAppLogsRenderSignature) return;
+          lastAppLogsRenderSignature = signature;
+          summary &&
+            (summary.innerHTML = [
+              renderOpsStat("Visible Lines", rows.length, "after current filters"),
+              renderOpsStat(
+                "Errors",
+                rows.filter((entry) => entry.isError).length,
+                "error-level application output",
+                rows.some((entry) => entry.isError) ? "border-red-500/20 bg-red-500/[0.04]" : "",
+              ),
+              renderOpsStat("Warnings", rows.filter((entry) => entry.isWarn).length, "warning-level output"),
+              renderOpsStat("Services", new Set(rows.map((entry) => entry.service)).size, "applications represented"),
+              renderOpsStat("Scope", scopeLabel, `${Number(_appLogsMeta?.scoped_agent_count || 0).toLocaleString()} workloads queried`),
+            ].join(""));
+          if (notice) {
+            notice.classList.toggle("hidden", !scopeRequired);
+            notice.innerHTML = scopeRequired
+              ? `<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"><span>This fleet has ${Number(_appLogsMeta?.fleet_size || 0).toLocaleString()} workloads. Select a launcher or workload on Operations Home to open a bounded application stream.</span><button class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest" onclick="switchView('overview')">Choose Scope</button></div>`
+              : "";
+          }
+          const previous = document.getElementById("app-log-previous"), next = document.getElementById("app-log-next"), retention = document.getElementById("app-log-retention");
+          if (previous) previous.disabled = appLogsOffset === 0;
+          if (next) next.disabled = !_appLogsMeta?.pagination?.has_more;
+          if (retention) {
+            const info = _appLogsMeta?.retention || {};
+            retention.textContent = `Retained current and previous log files. Page ${Math.floor(appLogsOffset / Math.max(1, Number(_appLogsMeta?.pagination?.limit || 500))) + 1}.` + (info.scan_truncated ? " Search limit reached; narrow workload scope." : "") + (info.read_failures ? " Some retained files could not be read." : "");
+          }
+          const scroll = captureFeedScroll(feed);
+          if (!rows.length) {
+            feed.innerHTML = `<div class="p-10 text-center"><i data-lucide="scroll-text" class="w-8 h-8 mx-auto mb-3 opacity-30"></i><div class="text-sm" style="color: var(--text-main)">${scopeRequired ? "Select a telemetry scope to read application output." : "No application output matches this view."}</div><div class="text-xs mt-2" style="color: var(--text-subtle)">${scopeRequired ? "The dashboard will not choose an arbitrary slice of a fleet over 100 workloads." : "The workload may be quiet, or the current service, stream, level, or text filter may exclude its output."}</div></div>`;
+            restoreFeedScroll(feed, scroll);
+            window.lucide && lucide.createIcons();
+            return;
+          }
+          window.ivStableLogRows(feed, rows
+            .map((entry) => {
+              const id = `app-${hashCode(JSON.stringify([entry.agent_id, entry.timestamp, entry.service, entry.stream, entry.message]))}`,
+                expanded = expandedAppLogIds.has(id),
+                tone = entry.isError
+                  ? "text-red-400"
+                  : entry.isWarn
+                    ? "text-amber-400"
+                    : entry.stream === "stdout"
+                      ? "text-emerald-400"
+                      : "text-sky-400",
+                time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : "--";
+              return `<div class="operator-log-row" style="border-color: var(--table-border)">
+                <div class="grid grid-cols-[9rem_8rem_10rem_5rem_minmax(0,1fr)_2rem] gap-3 px-6 py-3 items-center text-xs min-w-[860px] cursor-pointer" onclick="toggleAppLogDetails('${id}')">
+                  <span class="font-mono-cli" style="color: var(--text-subtle)">${escapeHtml(time)}</span>
+                  <span class="truncate" title="${escapeHtml(entry.displayName)}" style="color: var(--text-muted)">${escapeHtml(entry.displayName)}</span>
+                  <span class="truncate font-semibold" title="${escapeHtml(entry.service)}" style="color: var(--text-main)">${escapeHtml(entry.service)}</span>
+                  <span class="font-mono-cli ${tone}">${escapeHtml(entry.stream)}</span>
+                  <span class="font-mono-cli truncate" title="${escapeHtml(entry.message)}" style="color: var(--text-main)">${escapeHtml(entry.message || entry.phase || "Process event")}</span>
+                  <i id="app-log-icon-${id}" data-lucide="chevron-down" class="w-4 h-4 transition-transform" style="color: var(--text-subtle); transform:${expanded ? "rotate(180deg)" : "rotate(0deg)"}"></i>
+                </div>
+                <div id="app-log-detail-${id}" class="${expanded ? "" : "hidden"} px-6 py-4 border-t" style="border-color: var(--table-border); background: var(--nav-hover)">
+                  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div><div class="text-[10px] uppercase tracking-widest font-bold mb-2" style="color: var(--text-subtle)">Source</div><pre class="operator-code-block">${escapeHtml(JSON.stringify({ workload: entry.displayName, agent_id: entry.agent_id, service: entry.service, runtime: entry.runtime || null }, null, 2))}</pre></div>
+                    <div><div class="text-[10px] uppercase tracking-widest font-bold mb-2" style="color: var(--text-subtle)">Process</div><pre class="operator-code-block">${escapeHtml(JSON.stringify({ stream: entry.stream, level: entry.level, phase: entry.phase, exit_code: entry.process_exit_code ?? null }, null, 2))}</pre></div>
+                    <div><div class="text-[10px] uppercase tracking-widest font-bold mb-2" style="color: var(--text-subtle)">Raw Output</div><pre class="operator-code-block">${escapeHtml(entry.message || "")}</pre></div>
+                  </div>
+                </div>
+              </div>`;
+            })
+            .join(""));
+          restoreFeedScroll(feed, scroll);
+          window.lucide && lucide.createIcons();
+        }
+        function isConsoleIncident(e) {
+          return (
+            e.isError ||
+            e.isWarn ||
+            e.isSecurity ||
+            /EADDRINUSE|Address already in use|Process exited with code|OSError|Traceback|Port \d+ in use/i.test(
+              e.cleanContent || "",
+            ) ||
+            /exited|restart|port-busy|port-reclaim|health-restart|process event/i.test(
+              `${e.processEvent?.phase || ""} ${e.processEvent?.message || ""}`,
+            )
+          );
+        }
+        function focusConsoleIncidents() {
+          const e = document.getElementById("console-level-filter");
+          (e && (e.value = "important"), renderConsole());
+        }
+        function renderConsoleSummary(e, t) {
+          const n = document.getElementById("console-summary-bar"),
+            o = document.getElementById("console-priority-feed"),
+            s = window.getFleetScopeLabel?.() || "Entire fleet",
+            a = t.filter(isConsoleIncident).slice(0, 6);
+          if (
+            (n &&
+              (n.innerHTML = [
+                renderOpsStat(
+                  "Visible Lines",
+                  t.length,
+                  "after current filters",
+                ),
+                renderOpsStat(
+                  "Critical",
+                  t.filter((e) => e.isError).length,
+                  "errors on screen",
+                  t.some((e) => e.isError)
+                    ? "border-red-500/20 bg-red-500/[0.04]"
+                    : "",
+                ),
+                renderOpsStat(
+                  "Warnings",
+                  t.filter((e) => e.isWarn).length,
+                  "warn signals",
+                ),
+                renderOpsStat(
+                  "Security",
+                  t.filter((e) => e.isSecurity).length,
+                  "security-tagged lines",
+                ),
+                renderOpsStat("Focus", s, "selected operator scope"),
+              ].join("")),
+            o)
+          ) {
+            if (!a.length)
+              return void (o.innerHTML =
+                '<div class="px-5 py-4 text-xs" style="color: var(--text-subtle)">No urgent lines in the current slice.</div>');
+            o.innerHTML = a
+              .map(
+                (e) =>
+                  `\n                        <div class="px-5 py-4">\n                            <div class="rounded-xl border px-4 py-3 ${e.isError ? "text-red-300 border-red-500/20 bg-red-500/[0.05]" : e.isSecurity ? "text-emerald-300 border-emerald-500/20 bg-emerald-500/[0.05]" : "text-amber-300 border-amber-500/20 bg-amber-500/[0.05]"}" style="border-color: var(--table-border)">\n                                <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">\n                                    <div class="min-w-0">\n                                        <div class="text-[10px] uppercase tracking-widest font-bold">${escapeHtml(e.displayName)} · ${escapeHtml(e.rawLevel || e.category || "INFO")}</div>\n                                        <div class="text-sm mt-1 break-words">${escapeHtml(e.firstLine || e.cleanContent || "Log line")}</div>\n                                    </div>\n                                    <div class="text-[10px] font-mono-cli shrink-0" style="color: var(--text-subtle)">${e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : "--"}</div>\n                                </div>\n                            </div>\n                        </div>\n                    `,
+              )
+              .join("");
+          }
+        }
+        function renderNetworkSummary(e, t) {
+          const n = document.getElementById("network-summary-bar");
+          if (!n) return;
+          const o = t.filter((e) => {
+              const t = e.details?.telemetry || {};
+              return ["block", "ratelimit"].includes(String(t.decision || "").toLowerCase());
+            }).length,
+            r = t.filter((e) =>
+              /\/\.env|\/wp-login\.php|\/phpmyadmin\/|\/\.git\/config/i.test(
+                e.details?.endpoint || "",
+              ),
+            ).length,
+            s = getSelectValue("network-focus-filter", "all");
+          n.innerHTML = [
+            renderOpsStat(
+              "Visible Requests",
+              t.length,
+              "after current filters",
+            ),
+            renderOpsStat(
+              "Blocked",
+              o,
+              "final gateway blocks and rate limits",
+              o ? "border-red-500/20 bg-red-500/[0.04]" : "",
+            ),
+            renderOpsStat("Honeypots", r, "attack probes caught"),
+            renderOpsStat(
+              "Window",
+              getLogWindowLabel("network-limit", t),
+              "rows rendered",
+            ),
+            renderOpsStat(
+              "Focus",
+              "all" === s ? "Full stream" : s,
+              "current traffic slice",
+            ),
+          ].join("");
+        }
+        function renderInternalSummary(e, t) {
+          const n = document.getElementById("internal-network-summary-bar");
+          if (!n) return;
+          const o = getSelectValue("internal-network-method-filter", "all"),
+            r = new Set(
+              t.map(
+                (e) => e.details?.endpoint || e.details?.path || "/unknown",
+              ),
+            ).size;
+          n.innerHTML = [
+            renderOpsStat(
+              "Visible Calls",
+              t.length,
+              "service-to-service requests",
+            ),
+            renderOpsStat("Routes", r, "distinct internal paths"),
+            renderOpsStat(
+              "POST Calls",
+              t.filter((e) => "POST" === (e.details?.method || "GET")).length,
+              "mutating traffic",
+            ),
+            renderOpsStat(
+              "Window",
+              getLogWindowLabel("internal-network-limit", t),
+              "rows rendered",
+            ),
+            renderOpsStat(
+              "Focus",
+              "all" === o ? "All methods" : o,
+              "current internal slice",
+            ),
+          ].join("");
+        }
+        function shouldRenderHeavyView(e) {
+          return getCurrentViewId() === e;
+        }
+        function updateJohnnyConfidence(e = null, t = null, n = null) {
+          const o = document.getElementById("johnny-confidence-card");
+          if (!o) return;
+          n && Array.isArray(n.events) && (johnnySecurityEvents = n.events);
+          const r = johnnyFreshEvidence(Array.isArray(t?.logs) ? t.logs : []),
+            s = johnnyFreshEvidence(Array.isArray(e?.logs) ? e.logs : []),
+            a = johnnyFreshEvidence(johnnySecurityEvents),
+            i = normalizeJohnnyText(r),
+            l = normalizeJohnnyText(s),
+            c = normalizeJohnnyText(a),
+            combinedEvidence = `${i} ${l} ${c}`,
+            { proofTargets = [] } = getJohnnyFleetContext(),
+            targetHits = proofTargets.map((e) =>
+              johnnyTargetEvidence(e, combinedEvidence),
+            ),
+            testedTargets = targetHits.filter(Boolean).length,
+            requiredTargets = Math.max(proofTargets.length, 1),
+            allTargetsTested =
+              requiredTargets <= 1
+                ? targetHits[0] ||
+                  /\/api\/status|\/api\/products|\/api\/orders|\/health|gateway|request|http|status":?2\d\d|status_code":?2\d\d/.test(
+                    combinedEvidence,
+                  )
+                : testedTargets >= requiredTargets,
+            u =
+              /\.env|wp-login|phpmyadmin|\.git\/?config|honeypot|trap|scanner|suspicious|probe/.test(
+                combinedEvidence,
+              ),
+            p =
+              /rate[_\s-]?limit|ratelimit|too many requests|429|rate pressure|limit exceeded|rate limited/.test(
+                combinedEvidence,
+              ) ||
+              ((combinedEvidence.match(/\/api\/status/g) || []).length >=
+                12 &&
+                /429|rate|limit|exceeded/.test(combinedEvidence)),
+            m =
+              /\/api\/status|\/api\/products|\/api\/orders|\/health|gateway|request|http|status":?2\d\d|status_code":?2\d\d/.test(
+                combinedEvidence,
+              ) || r.length > 0,
+            g =
+              /node started|server running|\[process_event\]|payload|listening on|runtime manifest loaded|starting process service|gateway listening/.test(
+                combinedEvidence,
+              ),
+            h =
+              0 !==
+              (
+                combinedEvidence.match(/status":?429|status_code":?429|\b429\b/g) ||
+                []
+              ).length,
+            isStackProof =
+              Array.isArray(window.__launcherAgents) &&
+              window.__launcherAgents.length > 1,
+            y = [
+              {
+                id: "traffic",
+                label: isStackProof
+                  ? "Live traffic captured across the stack"
+                  : "Normal traffic captured",
+                hint: "Run /api/status or any core endpoint.",
+                done: m && allTargetsTested,
+              },
+              {
+                id: "targets",
+                label: `Every stack tested (${testedTargets}/${requiredTargets})`,
+                hint:
+                  requiredTargets > 1
+                    ? `Run the Johnny script against all ${requiredTargets} detected stacks.`
+                    : "Run the Johnny script against the live stack.",
+                done: allTargetsTested,
+              },
+              {
+                id: "honeypot",
+                label: "Honeypot trip recorded",
+                hint: "Hit /.env, /wp-login.php, /phpmyadmin/, or /.git/config.",
+                done: u,
+              },
+              {
+                id: "ratelimit",
+                label: "Rate pressure detected",
+                hint: "Burst /api/status repeatedly after saving the rate-limit policy.",
+                done: p || h,
+              },
+              {
+                id: "runtime",
+                label: isStackProof
+                  ? "Runtime logs prove the launched stack is alive"
+                  : "Runtime logs prove the node is alive",
+                hint: "Watch console output after the launcher starts or restarts.",
+                done: g,
+              },
+            ],
+            completedProofs = y.filter((e) => e.done).length,
+            confidence = Math.max(Math.round((completedProofs / y.length) * 100), johnnyProofSessionActive ? (johnnyConfidenceScore || 0) : 0);
+          johnnyConfidenceScore = confidence;
+          const v = document.getElementById("johnny-face"),
+            x = document.getElementById("johnny-confidence-score"),
+            w = document.getElementById("johnny-confidence-bar"),
+            proofList = document.getElementById("johnny-proof-list"),
+            header = document.getElementById("johnny-confidence-header"),
+            k = document.getElementById("johnny-title"),
+            E = document.getElementById("johnny-copy"),
+            T = confidence >= 100;
+          (v &&
+            (v.textContent =
+              confidence >= 100
+                ? ":D"
+                : confidence >= 50
+                  ? ":)"
+                  : confidence > 0
+                    ? ":|"
+                    : ":("),
+            x && (x.textContent = `${confidence}%`),
+            w &&
+              ((w.style.width = `${confidence}%`),
+              w.classList.toggle("bg-emerald-500", T),
+              w.classList.toggle("bg-blue-500", !T)),
+            o &&
+              (o.classList.toggle("border-emerald-400/40", T),
+              o.classList.toggle("shadow-[0_0_45px_rgba(16,185,129,0.22)]", T)),
+            header &&
+              ((header.style.background = T
+                ? "linear-gradient(135deg, rgba(6,78,59,0.46), rgba(2,6,23,0.72))"
+                : "var(--nav-hover)"),
+              (header.style.borderColor = T
+                ? "rgba(52,211,153,0.35)"
+                : "var(--table-border)")),
+            k &&
+              (k.textContent = T
+                ? "The selected telemetry checks returned the expected observations."
+                : "This is Johnny. Johnny is skeptical."),
+            E &&
+              (E.textContent = T
+                ? "Every proof signal came from live workspace activity. Johnny saw traffic, enforcement, logs, and attack handling all in one place."
+                : "Copy the proof script to start a fresh session, then hit the live system from multiple angles. Johnny only counts telemetry created after that moment."),
+            proofList &&
+              ((proofList.innerHTML = y
+                .map(
+                  (e) =>
+                    `\n                    <div class="rounded-xl border px-4 py-3 transition-all ${e.done ? "border-blue-400/40 bg-blue-500/10" : "border-white/10 bg-white/[0.03]"}">\n                        <div class="flex items-start gap-3">\n                            <div class="mt-0.5 w-5 h-5 rounded-full border flex items-center justify-center ${e.done ? "border-blue-300 bg-blue-500 text-white" : "border-white/15 text-slate-500"}">\n                                <i data-lucide="${e.done ? "check" : "circle"}" class="w-3.5 h-3.5"></i>\n                            </div>\n                            <div>\n                                <div class="text-sm font-semibold text-white">${e.label}</div>\n                                <div class="text-[11px] mt-1" style="color: var(--text-muted)">${e.done ? "Confirmed by live workspace telemetry." : e.hint}</div>\n                            </div>\n                        </div>\n                    </div>\n                `,
+                )
+                .join("")),
+              window.lucide && lucide.createIcons()),
+            updateJohnnyTourGate());
+        }
+        function updateJohnnyTourGate() {
+          const e = (
+            "function" == typeof currentDemoSteps ? currentDemoSteps() : []
+          )[demoTourIndex];
+          if (!e || !e.waitForJohnnyHappy) return;
+          const t = document.getElementById("demo-tour-next");
+          if (!t) return;
+          const n = johnnyConfidenceScore >= 100 || johnnyProofSkipped;
+          ((t.disabled = !n),
+            t.classList.toggle("opacity-50", !n),
+            t.classList.toggle("cursor-not-allowed", !n),
+            (t.innerText = johnnyProofSkipped
+              ? "Skip & Continue"
+              : n
+                ? "I'm Back"
+                : "Make Johnny happy..."));
+        }
+        function skipJohnnyProof() {
+          ((johnnyProofSkipped = !0),
+            updateJohnnyTourGate(),
+            showToast(
+              "Johnny proof skipped. You can still continue the tour.",
+              "info",
+            ));
+        }
+        function focusJohnnyGame() {
+          (switchView("api-reference"),
+            setTimeout(() => {
+              const e = document.getElementById("johnny-confidence-card");
+              e &&
+                (e.scrollIntoView({ behavior: "smooth", block: "center" }),
+                e.classList.add("tour-focus"),
+                setTimeout(() => e.classList.remove("tour-focus"), 1600));
+            }, 80));
+        }

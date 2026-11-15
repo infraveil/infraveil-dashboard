@@ -1,0 +1,83 @@
+<div
+            id="view-catalog"
+            class="view-section hidden max-w-7xl mx-auto space-y-6"
+          >
+            <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
+              <div>
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Service Catalog
+                </div>
+                <h2 class="text-2xl font-light mt-2" style="color: var(--text-main)">
+                  Application inventory
+                </h2>
+                <p class="text-sm mt-2 max-w-3xl" style="color: var(--text-muted)">
+                  Find each workload's assigned server, runtime, and reported health.
+                  Registered workloads remain listed when they are offline.
+                </p>
+              </div>
+              <span class="inline-flex items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Auto Sync
+              </span>
+            </div>
+            <div
+              id="catalog-summary-grid"
+              class="grid md:grid-cols-4 gap-4"
+            >
+              <div class="acrylic-panel rounded-2xl p-5">
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Services</div>
+                <div class="text-3xl text-white font-mono-cli mt-2">0</div>
+                <div class="text-xs mt-2" style="color: var(--text-muted)">registered workloads</div>
+              </div>
+              <div class="acrylic-panel rounded-2xl p-5">
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Hosts</div>
+                <div class="text-3xl text-white font-mono-cli mt-2">0</div>
+                <div class="text-xs mt-2" style="color: var(--text-muted)">launcher fleet size</div>
+              </div>
+              <div class="acrylic-panel rounded-2xl p-5">
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Online</div>
+                <div class="text-3xl text-white font-mono-cli mt-2">0</div>
+                <div class="text-xs mt-2" style="color: var(--text-muted)">active workloads</div>
+              </div>
+              <div class="acrylic-panel rounded-2xl p-5">
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Policy Events</div>
+                <div class="text-3xl text-white font-mono-cli mt-2">0</div>
+                <div class="text-xs mt-2" style="color: var(--text-muted)">recorded security activity</div>
+              </div>
+            </div>
+            <div
+              id="catalog-list"
+              class="grid xl:grid-cols-2 gap-4"
+            >
+              <div class="acrylic-panel rounded-2xl p-6 xl:col-span-2">
+                <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                  <div>
+                    <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Service Catalog Preview</div>
+                    <h3 class="text-xl text-white mt-2">No workload reports available</h3>
+                    <p class="text-sm mt-2 max-w-3xl" style="color: var(--text-muted)">Connect a server and configure a workload to inspect its runtime, assignment, and health here.</p>
+                  </div>
+                  
+                </div>
+                <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-3 mt-6">
+                  <div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                    <div class="text-[10px] uppercase tracking-widest" style="color: var(--text-subtle)">Runtime</div>
+                    <div class="text-sm text-white mt-1">Runtime contract</div>
+                  </div>
+                  <div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                    <div class="text-[10px] uppercase tracking-widest" style="color: var(--text-subtle)">Host</div>
+                    <div class="text-sm text-white mt-1">Awaiting launcher</div>
+                  </div>
+                  <div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                    <div class="text-[10px] uppercase tracking-widest" style="color: var(--text-subtle)">Contract</div>
+                    <div class="text-sm text-white mt-1 font-mono-cli">not attached</div>
+                  </div>
+                  <div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                    <div class="text-[10px] uppercase tracking-widest" style="color: var(--text-subtle)">Owner</div>
+                    <div class="text-sm text-white mt-1">Workspace operators</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>

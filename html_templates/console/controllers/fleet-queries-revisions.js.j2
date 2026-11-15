@@ -1,0 +1,566 @@
+        const FLEET_SURFACES = {
+          deployments: ["agents", "hosts"],
+          launcher: ["hosts", "agents"],
+          rollout: ["hosts", "agents"],
+          catalog: ["agents", "hosts"],
+          "status-page": ["agents", "hosts"],
+          "capacity-audit": ["hosts"],
+          "app-logs": ["agents"],
+          console: ["agents"],
+          network: ["agents"],
+          security: ["agents"],
+          pipelines: ["agents", "hosts"],
+          "pipeline-logs": ["agents"],
+          "runtime-evidence": ["agents", "hosts", "receipts"],
+          "cache-queue": ["agents"],
+          "process-supervisor": ["agents"],
+          "gateway-routes": ["agents"],
+          "trust-receipts": ["agents", "hosts", "receipts"],
+        };
+        const fleetSurfaceState = new Map();
+
+        function fleetSurfaceViewState(view) {
+          if (!fleetSurfaceState.has(view)) {
+            fleetSurfaceState.set(view, {
+              page: 1,
+              limit: 200,
+              query: "",
+              status: "all",
+              region: "all",
+              runtime: "all",
+              sort: "state",
+              payloads: {},
+              loading: false,
+              refreshQueued: false,
+              queryRevision: 0,
+              promise: null,
+            });
+          }
+          return fleetSurfaceState.get(view);
+        }
+
+        function fleetFacetOptions(items, selected, fallback) {
+          const rows = Array.isArray(items) ? items : [];
+          return `<option value="all">${fallback}</option>${rows.map((item) => `<option value="${escapeHtml(item.key)}" ${String(selected) === String(item.key) ? "selected" : ""}>${escapeHtml(item.key)} (${Number(item.count || 0).toLocaleString()})</option>`).join("")}`;
+        }
+
+        function ensureFleetSurfaceToolbar(view) {
+          const root = document.getElementById(`view-${view}`);
+          if (!root || !FLEET_SURFACES[view]) return null;
+          root.querySelectorAll(":scope > .iv-macro-toolbar").forEach((toolbar) => toolbar.remove());
+          if (!["deployments", "launcher"].includes(view)) return null;
+          let toolbar = root.querySelector(`.iv-inventory-toolbar[data-view="${view}"]`);
+          if (!toolbar) {
+            toolbar = document.createElement("div");
+            toolbar.className = "iv-inventory-toolbar";
+            toolbar.dataset.view = view;
+            toolbar.innerHTML = `
+              <label class="iv-inventory-search">
+                <i data-lucide="search"></i>
+                <input type="search" autocomplete="off" aria-label="Search ${view === "deployments" ? "workloads" : "servers"}" placeholder="Search ${view === "deployments" ? "workloads" : "servers"}">
+              </label>
+              <span class="iv-inventory-range" aria-live="polite">Loading inventory...</span>
+              <div class="iv-inventory-pager">
+                <button type="button" data-page="previous" aria-label="Previous inventory page" title="Previous page"><i data-lucide="chevron-left"></i></button>
+                <span data-page-label>Page 1</span>
+                <button type="button" data-page="next" aria-label="Next inventory page" title="Next page"><i data-lucide="chevron-right"></i></button>
+              </div>`;
+            const anchor = view === "deployments"
+              ? root.querySelector(".workload-table-shell")
+              : root.querySelector("#launcher-host-grid");
+            anchor?.parentElement?.insertBefore(toolbar, anchor);
+            const input = toolbar.querySelector("input");
+            input.value = fleetSurfaceViewState(view).query || "";
+            input.addEventListener("input", () => ivQueueFleetInventoryQuery(view, input.value));
+            toolbar.querySelector('[data-page="previous"]').addEventListener("click", () => ivMoveFleetInventoryPage(view, -1));
+            toolbar.querySelector('[data-page="next"]').addEventListener("click", () => ivMoveFleetInventoryPage(view, 1));
+            window.lucide && lucide.createIcons();
+          }
+          return toolbar;
+        }
+
+        const fleetInventoryQueryTimers = new Map();
+        function ivQueueFleetInventoryQuery(view, query) {
+          const state = fleetSurfaceViewState(view);
+          state.query = String(query || "").trim();
+          state.page = 1;
+          state.queryRevision += 1;
+          if (state.loading) state.refreshQueued = true;
+          clearTimeout(fleetInventoryQueryTimers.get(view));
+          fleetInventoryQueryTimers.set(view, setTimeout(() => {
+            hydrateFleetSurface(view, { force: true });
+          }, 180));
+        }
+
+        function ivMoveFleetInventoryPage(view, delta) {
+          const state = fleetSurfaceViewState(view),
+            kind = view === "deployments" ? "agents" : "hosts",
+            page = state.payloads[kind]?.page || {},
+            next = Math.max(1, Math.min(Number(page.total_pages || 1), Number(page.number || state.page || 1) + Number(delta || 0)));
+          if (next === Number(page.number || state.page || 1)) return;
+          state.page = next;
+          hydrateFleetSurface(view, { force: true });
+        }
+
+        function fleetResourceUrl(view, kinds, state) {
+          const activeScope = window.getFleetScope?.() || { kind: "fleet", id: "", hostId: "" },
+            scope = activeScope;
+          const params = new URLSearchParams({
+            kinds: kinds.join(","),
+            page: String(state.page),
+            limit: String(state.limit),
+            q: state.query,
+            status: state.status,
+            region: state.region,
+            runtime: state.runtime,
+            sort: state.sort,
+            scope_kind: scope.kind || "fleet",
+            scope_id: scope.id || "",
+            scope_host_id: scope.hostId || "",
+            scope_ids: scope.selectionType === "launcher" ? "" : (scope.ids || []).join(","),
+            scope_host_ids: (scope.hostIds || []).join(","),
+            scope_selection_type: scope.selectionType || "agent",
+          });
+          return `${API.fleetResources}?${params.toString()}`;
+        }
+
+        function updateFleetSurfaceToolbar(view) {
+          const toolbar = ensureFleetSurfaceToolbar(view);
+          if (!toolbar) return;
+          const state = fleetSurfaceViewState(view),
+            kind = view === "deployments" ? "agents" : "hosts",
+            noun = view === "deployments" ? "workload" : "server",
+            page = state.payloads[kind]?.page || {},
+            number = Number(page.number || 1),
+            size = Number(page.size || state.limit || 200),
+            total = Number(page.total_items || 0),
+            pages = Number(page.total_pages || 1),
+            start = total ? (number - 1) * size + 1 : 0,
+            end = Math.min(total, number * size);
+          state.page = number;
+          toolbar.dataset.loading = state.loading ? "true" : "false";
+          const range = toolbar.querySelector(".iv-inventory-range"),
+            label = toolbar.querySelector("[data-page-label]"),
+            previous = toolbar.querySelector('[data-page="previous"]'),
+            next = toolbar.querySelector('[data-page="next"]');
+          if (range) range.textContent = total ? `${start.toLocaleString()}-${end.toLocaleString()} of ${total.toLocaleString()} ${noun}${total === 1 ? "" : "s"}` : `No ${noun}s found`;
+          const scope = window.getFleetScope?.() || { kind: "fleet" };
+          let scopeNote = toolbar.querySelector(".iv-inventory-scope-note");
+          if (!scopeNote) { scopeNote = document.createElement("div"); scopeNote.className = "iv-inventory-scope-note"; toolbar.appendChild(scopeNote); }
+          scopeNote.hidden = scope.kind === "fleet";
+          const scopeSignature = JSON.stringify([scope.kind, scope.label]);
+          if (scopeNote.dataset.signature !== scopeSignature) {
+            scopeNote.dataset.signature = scopeSignature;
+            scopeNote.innerHTML = `<span>Filtered to ${escapeHtml(scope.label || "selected workloads")}</span><button type="button" onclick="window.setGlobalFleetScope?.({kind:'fleet',label:'Entire fleet'})">View entire fleet</button>`;
+          }
+          if (label) label.textContent = `Page ${number.toLocaleString()} of ${pages.toLocaleString()}`;
+          if (previous) previous.disabled = !page.has_previous || state.loading;
+          if (next) next.disabled = !page.has_next || state.loading;
+        }
+
+        function fleetStatusSlice(state) {
+          const agents = state.payloads.agents?.items || [],
+            hosts = state.payloads.hosts?.items || [],
+            receipts = state.payloads.receipts?.items || [],
+            inventory = state.payloads.agents?.inventory || state.payloads.hosts?.inventory || state.payloads.receipts?.inventory || {};
+          return {
+            ...(window.__latestStatusPayload || {}),
+            agents,
+            launcher_hosts: hosts,
+            command_receipts: receipts,
+            inventory,
+            resource_mode: "paged",
+          };
+        }
+
+        function mergeOperationsFleetState(payload, view = getCurrentViewId()) {
+          if (!payload || !["catalog", "status-page"].includes(view)) return payload;
+          const state = fleetSurfaceState.get(view),
+            agents = state?.payloads?.agents?.items,
+            hosts = state?.payloads?.hosts?.items;
+          if (!Array.isArray(agents) || !Array.isArray(hosts)) return payload;
+          return {
+            ...payload,
+            catalog: {
+              ...(payload.catalog || {}),
+              services: agents,
+              hosts,
+              resource_mode: "paged",
+            },
+            status_page: {
+              ...(payload.status_page || {}),
+              components: agents.map((item) => ({
+                name: item.name,
+                status: item.health === "healthy" ? "Operational" : item.health === "unhealthy" ? "Degraded" : "Unknown",
+                service_id: item.agent_id,
+              })),
+              resource_mode: "paged",
+            },
+          };
+        }
+
+        function applyOperationsState(payload, render = !0) {
+          if (!payload) return null;
+          const view = getCurrentViewId();
+          _opsState = mergeOperationsFleetState(payload, view);
+          window.renderFleetIntelligence?.(_opsState.fleet_intelligence);
+          if (render) {
+            "incidents" === view && renderIncidentCommand();
+            "status-page" === view && renderStatusPage();
+            "catalog" === view && renderServiceCatalog();
+          }
+          return _opsState;
+        }
+
+        function fetchOperationsSnapshot() {
+          if (operationsRefreshPromise) return operationsRefreshPromise;
+          const request = fetchAPI(API.operations, !0),
+            tracked = request.finally(() => {
+              operationsRefreshPromise === tracked && (operationsRefreshPromise = null);
+            });
+          operationsRefreshPromise = tracked;
+          return tracked;
+        }
+
+        async function renderFleetTelemetrySurface(view, state) {
+          const explicitScope = [...(window.getFleetAgentScope?.() || [])].filter(Boolean).slice(0, 100),
+            ids = view === "app-logs"
+              ? explicitScope
+              : (state.payloads.agents?.items || []).map((item) => item.agent_id).filter(Boolean).slice(0, 50),
+            query = ids.length ? `?agent_ids=${encodeURIComponent(ids.join(","))}` : "";
+          state.agentQuery = query;
+          if (view === "app-logs") {
+            await fetchAppLogs(true);
+          } else if (view === "console") {
+            const payload = await fetchAPI(`/client/api/console${query}`, true);
+            payload && renderConsole(payload);
+          } else if (view === "network") {
+            const payload = await fetchAPI(`/client/api/network_logs${query}`, true);
+            payload && renderNetwork(payload);
+          } else if (view === "pipeline-logs") {
+            const payload = await fetchAPI(`/client/api/security/pipeline_logs${query}`, true);
+            _pipelineLogs = Array.isArray(payload?.logs) ? payload.logs : [];
+            renderPipelineLogs();
+          } else if (view === "security") {
+            const payload = await fetchAPI(`/client/api/security/events${query}`, true);
+            _securityEvents = Array.isArray(payload?.events) ? payload.events : [];
+            window.__latestSecurityEvents = _securityEvents;
+            renderSecurityEvents();
+            renderTrafficChart();
+          }
+        }
+
+        function renderFleetSurface(view, state) {
+          const payload = fleetStatusSlice(state), agents = payload.agents, hosts = payload.launcher_hosts;
+          window.__macroStatusPayload = payload;
+          window.__launcherAgents = agents;
+          window.__launcherHosts = hosts;
+          agents.forEach((item) => {
+            agentNames[item.agent_id] = item.name;
+            agentNames[String(item.agent_id || "").substring(0, 8)] = item.name;
+          });
+          if (view === "deployments") {
+            renderInfo({ ...(window.__latestInfoPayload || {}), agents, launcher_hosts: hosts, inventory: payload.inventory, resource_page: true });
+          } else if (view === "launcher") renderLauncherFleet(hosts, agents, payload.inventory);
+          else if (view === "rollout") renderRolloutPlan(payload);
+          else if (view === "capacity-audit") renderCapacityAudit(payload);
+          else if (view === "runtime-evidence") renderRuntimeEvidence(payload);
+          else if (view === "cache-queue") renderCacheQueue(payload);
+          else if (view === "process-supervisor") renderProcessSupervisor(payload);
+          else if (view === "gateway-routes") renderGatewayRoutes(payload);
+          else if (view === "trust-receipts") renderTrustReceipts(payload);
+          else if (view === "pipelines") renderPipelineBuilder();
+          else if (view === "catalog" || view === "status-page") {
+            if (_opsState) {
+              _opsState = mergeOperationsFleetState(_opsState, view);
+              view === "catalog" ? renderServiceCatalog() : renderStatusPage();
+            }
+          }
+          if (["app-logs", "console", "network", "pipeline-logs", "security"].includes(view)) renderFleetTelemetrySurface(view, state);
+        }
+
+        async function hydrateFleetSurface(view, options = {}) {
+          if (dashboardAccess.paused) return false;
+          if (!FLEET_SURFACES[view]) return true;
+          const state = fleetSurfaceViewState(view);
+          if (state.loading) {
+            options.force && (state.refreshQueued = true);
+            return state.promise || true;
+          }
+          state.loading = true;
+          const toolbar = ensureFleetSurfaceToolbar(view);
+          toolbar && (toolbar.dataset.loading = "true");
+          const request = (async () => {
+            do {
+              state.refreshQueued = false;
+              const queryRevision = state.queryRevision;
+              const response = await freshFetch(fleetResourceUrl(view, FLEET_SURFACES[view], state));
+              if (!response.ok) throw new Error("Fleet query failed");
+              const payload = await response.json();
+              if (state.refreshQueued || queryRevision !== state.queryRevision) continue;
+              state.payloads = payload.resources || {};
+              getCurrentViewId() === view && renderFleetSurface(view, state);
+            } while (state.refreshQueued);
+            return true;
+          })();
+          state.promise = request;
+          try {
+            return await request;
+          } catch (error) {
+            console.error(error);
+            showToast("Fleet query failed", "error");
+            return false;
+          } finally {
+            if (state.promise === request) {
+              state.promise = null;
+              state.loading = false;
+            }
+            updateFleetSurfaceToolbar(view);
+          }
+        }
+
+        window.ivMacroAgentQuery = (view = getCurrentViewId()) => fleetSurfaceViewState(view).agentQuery || "";
+        window.applyGlobalFleetScope = () => {
+          fleetSurfaceState.forEach((state) => {
+            state.page = 1;
+            state.payloads = {};
+            state.agentQuery = "";
+          });
+          const view = getCurrentViewId();
+          if (FLEET_SURFACES[view]) hydrateFleetSurface(view, { force: true });
+        };
+
+        const DASHBOARD_REVISION_ACTIVE_MS = 500,
+          DASHBOARD_REVISION_HIDDEN_MS = 15e3,
+          DASHBOARD_FULL_RECONCILE_MS = 1e4;
+        function dashboardSectionMatches(sections, ...names) {
+          return sections.has("all") || names.some((name) => sections.has(name));
+        }
+        function queueDashboardRevision(payload) {
+          if (dashboardAccess.paused) return;
+          const epoch = String(payload?.epoch || ""),
+            revision = Math.max(0, Number(payload?.revision || 0));
+          if (dashboardRevisionEpoch && epoch && dashboardRevisionEpoch !== epoch) {
+            pendingDashboardSections.clear();
+            pendingDashboardSections.add("all");
+            dashboardRevision = 0;
+          }
+          pendingDashboardEpoch = epoch || pendingDashboardEpoch;
+          pendingDashboardRevision = Math.max(pendingDashboardRevision, revision);
+          (Array.isArray(payload?.sections) && payload.sections.length ? payload.sections : ["all"]).forEach((section) =>
+            pendingDashboardSections.add(String(section || "all").toLowerCase()),
+          );
+          drainDashboardSections();
+        }
+        async function drainDashboardSections() {
+          if (dashboardAccess.paused || dashboardDrainTimer !== null || dashboardRevisionApplyInFlight || dashboardRefreshInFlight || !pendingDashboardSections.size) return;
+          dashboardRevisionApplyInFlight = !0;
+          try {
+            const sections = [...pendingDashboardSections],
+              targetRevision = pendingDashboardRevision,
+              targetEpoch = pendingDashboardEpoch;
+            const coreApplied = await updateDashboardData({ reason: "revision", sections });
+            const view = getCurrentViewId(), sectionSet = new Set(sections),
+              needsFleetHydration =
+                FLEET_SURFACES[view] &&
+                !activeElementIsEditable() &&
+                dashboardSectionMatches(
+                  sectionSet,
+                  view,
+                  "fleet",
+                  "info",
+                  "operations",
+                  "status",
+                  "app-logs",
+                  "console",
+                  "network",
+                  "internal-network",
+                  "pipeline-logs",
+                  "security-events",
+                ),
+              fleetApplied = needsFleetHydration
+                ? await hydrateFleetSurface(view, { force: true })
+                : true;
+            if (!coreApplied || !fleetApplied) {
+              dashboardDrainFailures = Math.min(6, dashboardDrainFailures + 1);
+              scheduleDashboardDrain(Math.min(30000, DASHBOARD_REVISION_ACTIVE_MS * 2 ** dashboardDrainFailures));
+              return;
+            }
+            dashboardDrainFailures = 0;
+            if (
+              view === "remediation" &&
+              dashboardSectionMatches(sectionSet, "remediation-settings", "remediation-activity", "remediation-proposals")
+            ) await window.ivMcpRefresh?.();
+            if (
+              (view === "pipeline-logs" || view === "pipelines") &&
+              dashboardSectionMatches(sectionSet, "pipeline-logs", "security-insights", "security-policy")
+            ) await refreshPipelineAnalytics();
+            if (view === "support" && dashboardSectionMatches(sectionSet, "support"))
+              await refreshSupportTickets(!1);
+            if (view === "security" && dashboardSectionMatches(sectionSet, "security-policy"))
+              await fetchSecuritySettings();
+            dashboardRevision = Math.max(dashboardRevision, targetRevision);
+            dashboardRevisionEpoch = targetEpoch || dashboardRevisionEpoch;
+            if (pendingDashboardRevision === targetRevision && pendingDashboardEpoch === targetEpoch) {
+              pendingDashboardSections.clear();
+              pendingDashboardRevision = 0;
+            }
+          } finally {
+            dashboardRevisionApplyInFlight = !1;
+          }
+          pendingDashboardSections.size && scheduleDashboardDrain(0);
+        }
+        function scheduleDashboardRevisionPoll(delay) {
+          dashboardPollingInterval && clearTimeout(dashboardPollingInterval);
+          dashboardPollingInterval = null;
+          if (dashboardAccess.paused) return;
+          const jitter = document.hidden ? 0 : Math.floor(75 * Math.random());
+          dashboardPollingInterval = setTimeout(pollDashboardRevision, Math.max(100, delay + jitter));
+        }
+        async function pollDashboardRevision() {
+          if (dashboardAccess.paused) return;
+          if (dashboardRevisionPollInFlight || dashboardRevisionApplyInFlight || dashboardRefreshInFlight)
+            return scheduleDashboardRevisionPoll(DASHBOARD_REVISION_ACTIVE_MS);
+          dashboardRevisionPollInFlight = !0;
+          dashboardPollCounter += 1;
+          try {
+            const response = await freshFetch(
+              `${API.revision}?since=${dashboardRevision}&epoch=${encodeURIComponent(dashboardRevisionEpoch)}`,
+              { timeoutMs: 4e3 },
+            );
+            if (response.status === 401 || response.status === 403) {
+              redirectToLoginOnSessionExpiry();
+              throw new Error("Dashboard session expired");
+            }
+            if (dashboardAccess.paused) return;
+            if (!response.ok) throw new Error(`Revision check failed (${response.status})`);
+            const payload = await response.json();
+            payload?.changed && queueDashboardRevision(payload);
+            if (!payload?.changed) {
+              dashboardRevision = Math.max(dashboardRevision, Number(payload?.revision || 0));
+              dashboardRevisionEpoch = String(payload?.epoch || dashboardRevisionEpoch);
+            }
+            dashboardRevisionFailures = 0;
+
+            const now = Date.now(), view = getCurrentViewId();
+            if (now - dashboardLastFullRefreshAt >= DASHBOARD_FULL_RECONCILE_MS && !dashboardRefreshInFlight) {
+              await updateDashboardData({ reason: "reconcile", force: true });
+            }
+            if (now - dashboardLastAncillaryRefreshAt >= 1e4) {
+              dashboardLastAncillaryRefreshAt = now;
+              "remediation" === view && window.ivMcpRefresh?.();
+              "support" === view && refreshSupportTickets(!1);
+              ("pipeline-logs" === view || "pipelines" === view) && refreshPipelineAnalytics();
+            }
+            if ("security" === view && now - dashboardLastSecurityRefreshAt >= 4e4) {
+              dashboardLastSecurityRefreshAt = now;
+              fetchSecuritySettings();
+            }
+          } catch (error) {
+            dashboardRevisionFailures = Math.min(4, dashboardRevisionFailures + 1);
+            console.warn("Dashboard revision check delayed", error);
+          } finally {
+            dashboardRevisionPollInFlight = !1;
+            const base = document.hidden
+              ? DASHBOARD_REVISION_HIDDEN_MS
+              : Math.min(5e3, DASHBOARD_REVISION_ACTIVE_MS * 2 ** dashboardRevisionFailures);
+            scheduleDashboardRevisionPoll(base);
+          }
+        }
+        function startDashboardPolling() {
+          dashboardPollingInterval && clearTimeout(dashboardPollingInterval);
+          scheduleDashboardRevisionPoll(0);
+        }
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden) scheduleDashboardRevisionPoll(0);
+        });
+        function freshUrl(e) {
+          const t = e.includes("?") ? "&" : "?";
+          return `${e}${t}_ts=${Date.now()}`;
+        }
+        async function freshFetch(e, t = {}) {
+          const n = { ...t, cache: "no-store" },
+            o = new Headers(n.headers || {}),
+            r = new AbortController(),
+            s = setTimeout(() => r.abort(), Number(n.timeoutMs || 12e3));
+          return (
+            o.has("Cache-Control") ||
+              o.set("Cache-Control", "no-store, no-cache, max-age=0"),
+            o.has("Pragma") || o.set("Pragma", "no-cache"),
+            (n.headers = o),
+            delete n.timeoutMs,
+            (n.signal = n.signal || r.signal),
+            fetch(freshUrl(e), n).finally(() => clearTimeout(s))
+          );
+        }
+        async function fetchAPI(e, t = !1) {
+          const scopeGeneration = window.__ivFleetScopeGeneration || 0;
+          const selectedScope = window.getFleetScope?.();
+          const telemetryPaths = ["/client/api/console", "/client/api/network_logs", "/client/api/security/events", "/client/api/security/pipeline_logs"];
+          if (selectedScope && selectedScope.kind !== "fleet" && telemetryPaths.includes(String(e).split("?")[0])) {
+            const ids = [...(window.getFleetAgentScope?.() || [])];
+            if (!ids.length) return { logs: [], events: [], overview: { available: true, pressure: "No workloads selected", requests: 0, denied: 0, buckets: [] } };
+            const parts = String(e).split("?"), query = new URLSearchParams(parts[1] || "");
+            if (!query.has("agent_ids") && !query.has("agent_id")) query.set("agent_ids", ids.slice(0, 50).join(","));
+            e = parts[0] + "?" + query.toString();
+            window.ivSetTelemetryScopeNotice?.(getCurrentViewId(), 50, ids.length);
+          }
+          try {
+            const started = performance.now();
+            if (String(e).split("?")[0] === "/client/api/status" && typeof window.ivDemoGuideStatusHost === "function") {
+              const selected = window.ivDemoGuideStatusHost();
+              if (selected) {
+                const parts = String(e).split("?"), query = new URLSearchParams(parts[1] || "");
+                query.set("compact", "0");
+                query.set("scope_kind", "launcher");
+                query.set("scope_id", selected);
+                e = parts[0] + "?" + query.toString();
+              }
+            }
+            const n = await freshFetch(e);
+            if ([401, 403, 402, 423].includes(n.status)) {
+              if (!t) console.warn(`Access denied to ${e}`);
+              if (n.status === 401 || n.status === 403) redirectToLoginOnSessionExpiry();
+              else pauseDashboardForAccess(n.status);
+              return null;
+            }
+            if (!n.ok) return null;
+            const data = await n.json();
+            if (scopeGeneration !== (window.__ivFleetScopeGeneration || 0)) return null;
+            if (String(e).split("?")[0] === "/client/api/security/events") { window.__ivSecurityOverview = data.overview || null; window.ivRenderSecurityOverview?.(data.overview); }
+            if (String(e).split("?")[0] === "/client/api/status") {
+              const serverNow = Date.parse(n.headers.get("Date")) / 1000;
+              const ageHeader = n.headers.get("Age");
+              const age = ageHeader == null ? 0 : Number(ageHeader);
+              if (Number.isFinite(serverNow) && Number.isFinite(age) && age === 0
+                  && (ageHeader == null || /^0$/.test(ageHeader.trim()))) {
+                window.__ivRuntimeClock = { serverNow: serverNow + (performance.now() - started) / 1000, receivedAt: performance.now() };
+                window.dispatchEvent(new CustomEvent("infraveil:status-receipt", { detail: {
+                  data, serverNow: serverNow + (performance.now() - started) / 1000,
+                  receivedAt: performance.now()
+                } }));
+              }
+            }
+            return data;
+          } catch (e) {
+            return null;
+          }
+        }
+        window.fetch = function (e, t = {}) {
+          try {
+            const n = "string" == typeof e ? e : e?.url || "",
+              o = new Headers(
+                t?.headers || ("string" != typeof e ? e.headers : void 0) || {},
+              );
+            return (
+              _activeActionPin &&
+                n.includes("/client/api/") &&
+                !o.has("X-Account-Pin") &&
+                o.set("X-Account-Pin", _activeActionPin),
+              t && "object" == typeof t && (t = { ...t, headers: o }),
+              dashboardFetch(e, t)
+            );
+          } catch (n) {
+            return Promise.reject(n);
+          }
+        };

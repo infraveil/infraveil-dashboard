@@ -1,0 +1,386 @@
+
+      (function () {
+        function el(id) { return document.getElementById(id); }
+        function j(method, url, body, totp) {
+          var h = { Accept: "application/json" };
+          if (body) h["Content-Type"] = "application/json";
+          if (totp) h["X-TOTP-Auth"] = totp;
+          return fetch(url, { method: method, headers: h, credentials: "same-origin", body: body ? JSON.stringify(body) : undefined })
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }).catch(function () { return { ok: r.ok, status: r.status, data: {} }; }); });
+        }
+        var enrollmentChallenge = "", approvalPending = [], bulkTokenUrl = "";
+        function updateBulkApprovalState() {
+          var enrolled = !!(window.APP_STATE && APP_STATE.release_approval_enrolled);
+          var count = approvalPending.length;
+          var badge = el("ra-approve-all-count"), confirmation = el("ra-approve-all-confirm"), button = el("ra-approve-all-button");
+          if (badge) {
+            badge.textContent = count === 1 ? "1 pending" : count + " pending";
+            badge.dataset.state = count ? "warning" : "success";
+          }
+          if (confirmation) {
+            confirmation.disabled = !enrolled || !count;
+            if (!enrolled || !count) confirmation.checked = false;
+          }
+          if (button) button.disabled = !enrolled || !count || !(confirmation && confirmation.checked);
+        }
+        function prepareBulkTokenDownload(token) {
+          if (bulkTokenUrl) URL.revokeObjectURL(bulkTokenUrl);
+          bulkTokenUrl = URL.createObjectURL(new Blob([String(token || "") + "\n"], { type: "text/plain" }));
+          var link = el("ra-token-download");
+          if (link) link.href = bulkTokenUrl;
+          if (link) link.click();
+        }
+        function setEnrollmentState(d) {
+          var required = !!d.required, enrolled = !!d.enrolled;
+          if (window.APP_STATE) {
+            APP_STATE.release_approval_required = required;
+            APP_STATE.release_approval_enrolled = enrolled;
+            APP_STATE.release_approval_pubkey = enrolled ? String(d.registered_pubkey || "") : "";
+          }
+          window.APP_CONFIG = window.APP_CONFIG || {};
+          window.APP_CONFIG.release_approval_required = required;
+          window.APP_CONFIG.release_approval_enrolled = enrolled;
+          window.APP_CONFIG.release_approval_pubkey = enrolled ? String(d.registered_pubkey || "") : "";
+
+          var pill = el("ra-enforcement"), status = el("ra-enrollment-status"), note = el("ra-required-note");
+          var challengeButton = el("ra-challenge-button"), registerButton = el("ra-register-button"), tokenButton = el("ra-token-button");
+          if (pill) {
+            pill.classList.add("iv-status-pill");
+            if (enrolled) {
+              pill.textContent = "Approval ready";
+              pill.dataset.state = "success";
+            } else {
+              pill.textContent = "Setup needed";
+              pill.dataset.state = "warning";
+            }
+          }
+          if (status) {
+            status.textContent = enrolled
+              ? "Your release-approval key is registered. This does not confirm that a server is connected. Open Servers to see its live connection, or run the setup command on the server you want to connect."
+              : "Copy the setup command into your Linux server's terminal. Verification is automatic.";
+            status.style.color = enrolled ? "var(--signal-healthy)" : "var(--signal-warning)";
+          }
+          if (note) {
+            note.textContent = enrolled
+              ? "Your approval setup is verified. Review named changes on its machine; viewing this page approves nothing."
+              : "Complete setup before connecting your first server. Existing workloads are never stopped just because setup is incomplete.";
+          }
+          if (challengeButton) challengeButton.disabled = enrolled;
+          if (registerButton) registerButton.disabled = enrolled;
+          if (tokenButton) tokenButton.disabled = !enrolled;
+          var pubkeyInput = el("ra-pubkey");
+          if (pubkeyInput && enrolled && d.registered_pubkey) {
+            pubkeyInput.value = d.registered_pubkey;
+            pubkeyInput.readOnly = true;
+          }
+          updateBulkApprovalState();
+        }
+        var ra = {
+          refresh: function () {
+            j("GET", "/client/api/release-approval/pending").then(function (res) {
+              var enf = el("ra-enforcement"), pend = el("ra-pending");
+              if (!res.ok) { if (enf) enf.textContent = "Unavailable"; return; }
+              var d = res.data || {};
+              setEnrollmentState(d);
+              if (!pend) return;
+              var list = d.pending || [];
+              approvalPending = list.filter(function (hash) { return /^[0-9a-f]{64}$/.test(String(hash || "").toLowerCase()); });
+              updateBulkApprovalState();
+              pend.replaceChildren();
+              if (!list.length) {
+                var empty = document.createElement("div");
+                empty.className = "text-xs";
+                empty.style.color = "var(--text-muted)";
+                empty.textContent = "No changes are waiting for approval. Server and app connection are checked separately.";
+                pend.appendChild(empty);
+                return;
+              }
+              list.forEach(function (pendingHash) {
+                var hh = String(pendingHash || "");
+                var card = document.createElement("div");
+                card.className = "iv-release-approval-card space-y-2";
+
+                var appChanges = (Array.isArray(d.agents) ? d.agents : []).filter(function (agent) { return String(agent.payload_hash || "").toLowerCase() === hh.toLowerCase(); });
+                var appUpdates = (Array.isArray(d.agents) ? d.agents : []).filter(function (agent) { return String(agent.runtime_source_hash || "").toLowerCase() === hh.toLowerCase(); });
+                var serverUpdates = (Array.isArray(d.launchers) ? d.launchers : []).filter(function (host) { return String(host.runtime_source_hash || "").toLowerCase() === hh.toLowerCase(); });
+                var namedChanges = [];
+                appChanges.forEach(function (agent) { namedChanges.push("App change: " + String(agent.name || agent.agent_id || "Unnamed app")); });
+                appUpdates.forEach(function (agent) { namedChanges.push("App runtime update: " + String(agent.name || agent.agent_id || "Unnamed app") + (agent.target_runtime_version ? " to " + String(agent.target_runtime_version) : "")); });
+                serverUpdates.forEach(function (host) { namedChanges.push("Server update: " + String(host.name || host.launcher_host_id || "Unnamed server") + (host.target_runtime_version ? " to " + String(host.target_runtime_version) : "")); });
+                var title = document.createElement("strong");
+                title.className = "iv-review-change-title";
+                title.textContent = namedChanges.length ? namedChanges[0] + (namedChanges.length > 1 ? " + " + (namedChanges.length - 1) + " more" : "") : "Unidentified change — inspect before approving";
+                var state = document.createElement("span");
+                state.className = "iv-status-pill";
+                state.dataset.state = "warning";
+                state.textContent = "Awaiting your review";
+                var heading = document.createElement("div");
+                heading.className = "iv-review-change-heading";
+                heading.append(title, state);
+                var guidance = document.createElement("p");
+                guidance.className = "iv-section-copy";
+                guidance.textContent = namedChanges.length ? "Review this named change in setup on your server. It stays pending until you approve it there." : "No matching app or server name was reported. Inspect the technical details before deciding; this page has not approved it.";
+                var advanced = document.createElement("details");
+                advanced.className = "iv-technical-details iv-review-change-advanced";
+                var summary = document.createElement("summary");
+                summary.textContent = "Advanced: exact release & manual signature";
+                advanced.appendChild(summary);
+
+                var hash = document.createElement("div");
+                hash.className = "text-xs font-mono-cli break-all";
+                hash.style.color = "var(--text-main)";
+                hash.textContent = hh;
+
+                var context = document.createElement("div");
+                context.className = "text-[10px]";
+                context.style.color = "var(--text-muted)";
+                context.textContent = namedChanges.length ? namedChanges.join("; ") : "No workload or server identity reported for this hash.";
+
+                var copyCommand = document.createElement("button");
+                copyCommand.type = "button";
+                copyCommand.className = "btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest";
+                copyCommand.textContent = "Copy Local Signing Command";
+                copyCommand.addEventListener("click", function () {
+                  runtimeCopy("python3 infraveil.py --sign " + hh, "Trust Console signing command");
+                });
+
+                var actions = document.createElement("div");
+                actions.className = "flex gap-2";
+
+                var input = document.createElement("input");
+                input.placeholder = "signature from your offline key";
+                input.className = "ra-sig ink-input flex-1 text-xs rounded-lg px-3 py-2 font-mono-cli";
+
+                var button = document.createElement("button");
+                button.type = "button";
+                button.className = "btn-primary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest";
+                button.textContent = "Approve";
+                button.addEventListener("click", function () { ra.submit(button, hh); });
+
+                actions.append(input, button);
+                advanced.append(hash, context, copyCommand, actions);
+                card.append(heading, guidance, advanced);
+                pend.appendChild(card);
+              });
+            });
+          },
+          challenge: function () {
+            var pk = (el("ra-pubkey").value || "").trim().toLowerCase();
+            if (!/^[0-9a-f]{64}$/.test(pk)) { ivAlert("Public key must be exactly 64 hexadecimal characters."); return; }
+            var button = el("ra-challenge-button");
+            if (button) { button.disabled = true; button.textContent = "Creating Challenge"; }
+            j("POST", "/client/api/release-approval/challenge", { pubkey: pk }).then(function (res) {
+              if (!res.ok) { ivAlert("Failed: " + ((res.data || {}).error || res.status)); return; }
+              enrollmentChallenge = String((res.data || {}).challenge || "");
+              el("ra-challenge").textContent = enrollmentChallenge;
+              el("ra-challenge-command").textContent = "python3 infraveil.py --sign " + enrollmentChallenge;
+              el("ra-challenge-shell").classList.remove("hidden");
+              el("ra-proof-signature").value = "";
+              el("ra-enrollment-status").textContent = "Challenge created. It expires in 10 minutes and can be used only for this public key.";
+              el("ra-enrollment-status").style.color = "var(--signal-info)";
+            }).finally(function () {
+              if (button) { button.disabled = false; button.textContent = "Create Proof Challenge"; }
+            });
+          },
+          register: function () {
+            var pk = (el("ra-pubkey").value || "").trim().toLowerCase(), sig = (el("ra-proof-signature").value || "").trim().toLowerCase(), totp = (el("ra-reg-totp").value || "").trim();
+            if (!enrollmentChallenge) { ivAlert("Create a fresh proof challenge first."); return; }
+            if (!/^[0-9a-f]{64}$/.test(pk)) { ivAlert("Public key must be exactly 64 hexadecimal characters."); return; }
+            if (!/^[0-9a-f]{128}$/.test(sig)) { ivAlert("Challenge signature must be exactly 128 hexadecimal characters."); return; }
+            if (!(window.APP_STATE && APP_STATE.demo_mode) && !totp) { ivAlert("Enter your TOTP code to complete enrollment."); return; }
+            var button = el("ra-register-button");
+            if (button) { button.disabled = true; button.textContent = "Verifying Proof"; }
+            j("POST", "/client/api/release-approval/register", { pubkey: pk, challenge: enrollmentChallenge, signature: sig, totp: totp }, totp).then(function (res) {
+              if (!res.ok) { ivAlert("Failed: " + ((res.data || {}).error || res.status)); return; }
+              enrollmentChallenge = "";
+              el("ra-challenge-shell").classList.add("hidden");
+              if (window.showToast) showToast("Offline release key verified. Launcher installation is unlocked.", "success");
+              ra.refresh();
+            }).finally(function () {
+              if (button) { button.disabled = false; button.textContent = "Verify Key & Unlock Install"; }
+            });
+          },
+          genToken: function () {
+            if (window.APP_STATE && APP_STATE.release_approval_required && !APP_STATE.release_approval_enrolled) {
+              ivAlert("Verify your offline release key before generating an approval token.");
+              return;
+            }
+            var totp = (el("ra-tok-totp").value || "").trim();
+            j("POST", "/client/api/release-approval/token", { totp: totp }, totp).then(function (res) {
+              var out = el("ra-token-out");
+              if (out) out.textContent = res.ok ? "Token (copy now, shown once): " + (res.data || {}).token : "Failed: " + ((res.data || {}).error || res.status);
+            });
+          },
+          updateBulk: updateBulkApprovalState,
+          approveAll: function () {
+            if (!(window.APP_STATE && APP_STATE.release_approval_enrolled)) { ivAlert("Verify your offline release key first."); return; }
+            if (!approvalPending.length) { ivAlert("There are no pending releases to approve."); return; }
+            var confirmation = el("ra-approve-all-confirm");
+            if (!(confirmation && confirmation.checked)) { ivAlert("Confirm that you intend to sign every pending release."); return; }
+            var demo = !!(window.APP_STATE && APP_STATE.demo_mode), totp = (el("ra-bulk-totp").value || "").trim();
+            if (!demo && !totp) { ivAlert("Enter your TOTP code to prepare bulk approval."); return; }
+            var button = el("ra-approve-all-button");
+            if (button) { button.disabled = true; button.textContent = "Preparing Local Approval"; }
+            j("POST", "/client/api/release-approval/token", { totp: totp, mode: "bulk" }, totp).then(function (res) {
+              var token = String((res.data || {}).token || "");
+              if (!res.ok || !token) { ivAlert("Failed: " + ((res.data || {}).error || res.status)); return; }
+              prepareBulkTokenDownload(token);
+              var command = "python3 infraveil.py --once";
+              el("ra-approve-all-command").textContent = command;
+              el("ra-approve-all-status").textContent = "Open the Trust Console and review this batch locally, then refresh pending releases.";
+              el("ra-approve-all-shell").classList.remove("hidden");
+              if (window.showToast) showToast("Local approve-all command prepared. Your private key stays on your machine.", "success");
+            }).finally(function () {
+              if (button) button.textContent = "Prepare Approve All";
+              updateBulkApprovalState();
+            });
+          },
+          submit: function (btn, hh) {
+            var inp = btn.parentNode.querySelector(".ra-sig"), sig = (inp ? inp.value : "" || "").trim().toLowerCase();
+            if (!sig || sig.length < 16) { ivAlert("Paste the signature your offline key produced for this hash."); return; }
+            j("POST", "/client/api/release-approval/approve", { payload_hash: hh, signature: sig }).then(function (res) {
+              ivAlert(res.ok ? "Approved." : "Failed: " + ((res.data || {}).error || res.status));
+              if (res.ok) ra.refresh();
+            });
+          }
+        };
+        async function saveTrustConsoleDownload(data) {
+          var source = String((data || {}).source || ""), expected = String((data || {}).sha256 || "").toLowerCase();
+          if (!source || !/^[0-9a-f]{64}$/.test(expected)) throw new Error("Trust Console download was incomplete.");
+          if (!(window.crypto && crypto.subtle && window.TextEncoder)) throw new Error("This browser cannot verify the Trust Console download. Use a current browser with WebCrypto enabled.");
+          var digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source));
+          var actual = Array.from(new Uint8Array(digest)).map(function (value) { return value.toString(16).padStart(2, "0"); }).join("");
+          if (actual !== expected) throw new Error("Trust Console download failed its SHA-256 check.");
+          var url = URL.createObjectURL(new Blob([source], { type: "text/x-python;charset=utf-8" }));
+          var link = document.createElement("a");
+          link.href = url;
+          link.download = String((data || {}).filename || "infraveil.py");
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        }
+        var setupCommand = null, setupRequest = null, setupEpoch = 0, setupExpiryTimer = 0;
+        function setupHostId() {
+          var selected = window.currentLauncherHostId || (typeof fleetSelectionState.currentLauncherHostId !== "undefined" ? fleetSelectionState.currentLauncherHostId : "");
+          return String(typeof canonicalLauncherHostId === "function" ? canonicalLauncherHostId(selected) : selected || "").trim();
+        }
+        function setupWorkspaceId() { return String((window.APP_CONFIG || {}).client_id || ""); }
+        function setupAccessAllowed() {
+          return !(window.ivDashboardAccess && window.ivDashboardAccess.paused)
+            && !(window.APP_STATE && (APP_STATE.payment_required || APP_STATE.workspace_locked))
+            && !(typeof lockRequiresBilling === "function" && lockRequiresBilling());
+        }
+        function clearSetupCommand(message) {
+          setupEpoch += 1;
+          setupCommand = null;
+          clearTimeout(setupExpiryTimer);
+          setupExpiryTimer = 0;
+          var command = el("trust-console-command"), copy = el("trust-console-copy"), status = el("trust-console-download-status");
+          if (command) command.textContent = "";
+          if (copy) { copy.disabled = true; copy.textContent = "Copy command"; }
+          if (status && message) status.textContent = message;
+        }
+        function currentSetupCommand() {
+          if (!setupCommand) return null;
+          if (!setupAccessAllowed() || setupCommand.hostId !== setupHostId()
+              || setupCommand.workspaceId !== setupWorkspaceId() || performance.now() >= setupCommand.deadline) {
+            clearSetupCommand("Get a fresh command for your selected server.");
+            return null;
+          }
+          return setupCommand;
+        }
+        async function requestTrustConsole(totp) {
+          var hostId = setupHostId(), workspaceId = setupWorkspaceId();
+          if (!hostId || !workspaceId || !setupAccessAllowed()) throw new Error("Select your Linux server and resolve workspace access first.");
+          clearSetupCommand();
+          var epoch = setupEpoch;
+          var button = el("trust-console-download"), status = el("trust-console-download-status");
+          if (button) { button.disabled = true; button.textContent = "Preparing command…"; }
+          if (status) status.textContent = "Preparing the command for your selected server…";
+          try {
+            var started = performance.now();
+            var response = await j("POST", "/client/api/trust-console/command", { totp: totp || "", launcher_host_id: hostId }, totp || "");
+            if (!response.ok) throw new Error((response.data || {}).error || "Could not prepare setup.");
+            var data = response.data || {}, ttl = Number(data.expires_in), expires = Number(data.expires_at), serverNow = Number(data.server_now);
+            var remaining = Math.min(ttl, expires - serverNow) * 1000 - (performance.now() - started);
+            if (epoch !== setupEpoch || hostId !== setupHostId() || workspaceId !== setupWorkspaceId() || !setupAccessAllowed()) return;
+            if (typeof data.command !== "string" || !data.command.trim() || data.command.length > 16384
+                || !/^[a-f0-9]{64}$/i.test(String(data.sha256 || ""))
+                || String(data.launcher_host_id || "") !== hostId || String(data.client_id || "") !== workspaceId
+                || !Number.isFinite(ttl) || ttl <= 0 || ttl > 300
+                || !Number.isFinite(expires) || !Number.isFinite(serverNow) || serverNow <= 0
+                || !Number.isFinite(remaining) || remaining <= 0) throw new Error("Setup returned an incomplete or expired command. Try again.");
+            setupCommand = { command: data.command, hostId: hostId, workspaceId: workspaceId,
+              deadline: performance.now() + remaining };
+            var command = el("trust-console-command"), copy = el("trust-console-copy");
+            if (command) command.textContent = setupCommand.command;
+            if (copy) copy.disabled = false;
+            setupExpiryTimer = setTimeout(function () { clearSetupCommand("Command expired. Get a fresh one, then paste it into your server's terminal."); }, remaining);
+            if (status) status.textContent = "Ready. Copy the command, paste it into your selected Linux server's terminal and press Enter. Expires in five minutes—not connected yet.";
+          } finally {
+            if (button) { button.disabled = false; button.textContent = "Get setup command"; }
+          }
+        }
+        window.ivTrustConsole = {
+          clear: clearSetupCommand,
+          command: function () {
+            if (setupRequest) return setupRequest;
+            if (!setupHostId() || !setupWorkspaceId() || !setupAccessAllowed()) { ivAlert("Select your Linux server and resolve workspace access first."); return Promise.resolve(); }
+            if (currentSetupCommand()) return Promise.resolve();
+            function prepare(totp) {
+              if (setupRequest) return setupRequest;
+              setupRequest = requestTrustConsole(totp).catch(function (error) { ivAlert(error.message || "Could not prepare setup."); })
+                .finally(function () { setupRequest = null; });
+              return setupRequest;
+            }
+            if (window.APP_STATE && APP_STATE.demo_mode) {
+              return prepare(window.__demoAccessCode || "");
+            }
+            showTotpPrompt("Connect your Linux server", prepare);
+          },
+          copy: async function () {
+            var value = currentSetupCommand();
+            if (!value) return false;
+            var copied = false;
+            try {
+              if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(value.command); copied = true; }
+            } catch (_) { /* Fall back to the existing textarea clipboard path. */ }
+            if (!currentSetupCommand() || setupCommand !== value) return;
+            if (!copied && typeof fallbackClipboardCopy === "function") copied = fallbackClipboardCopy(value.command);
+            if (!currentSetupCommand() || setupCommand !== value) return;
+            var status = el("trust-console-download-status"), button = el("trust-console-copy");
+            if (copied) {
+              if (button) button.textContent = "Copied";
+              if (status) status.textContent = "Copied. Paste into your server's terminal and press Enter. Keep the terminal open and follow the prompts.";
+            } else {
+              var details = el("trust-console-command-details"), command = el("trust-console-command");
+              if (details) details.open = true;
+              if (command) command.focus();
+              if (status) status.textContent = "Clipboard is unavailable. Open View command, select the full command and copy it manually.";
+              if (window.showToast) showToast("Clipboard unavailable. Copy the command from View command.", "error");
+            }
+            return copied;
+          },
+          offer: async function () {
+            var accepted = await ivConfirm(
+              "Prepare a curl command for this server? Paste it into the server's terminal. Setup handles verification and asks which named apps you want to run.",
+              { title: "Connect your server", confirmText: "Get setup command" }
+            );
+            if (accepted) return window.ivTrustConsole.command();
+          }
+        };
+        ["infraveil:access-paused", "infraveil:session-expired", "infraveil:launcher-selected", "pagehide"].forEach(function (name) {
+          window.addEventListener(name, function () { clearSetupCommand("Get a fresh command when you return to this server."); });
+        });
+        window.addEventListener("infraveil:status-receipt", function () { currentSetupCommand(); });
+        window.ivApproval = ra;
+        function boot() {
+          if (window.APP_STATE && APP_STATE.demo_mode) {
+            ["ra-reg-totp", "ra-tok-totp", "ra-bulk-totp"].forEach(function (id) { var e = el(id); if (e) { e.style.display = "none"; e.value = ""; } });
+          }
+          setTimeout(function () { try { ra.refresh(); } catch (e) {} }, 1500);
+        }
+        if (document.readyState !== "loading") boot(); else document.addEventListener("DOMContentLoaded", boot);
+      })();
+    

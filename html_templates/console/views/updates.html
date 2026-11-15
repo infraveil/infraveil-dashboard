@@ -1,0 +1,123 @@
+<div
+            id="view-updates"
+            class="view-section hidden max-w-5xl mx-auto space-y-6 pb-8"
+          >
+            <div>
+              <h2 class="text-xl font-light" style="color: var(--text-main)">
+                Updates
+              </h2>
+              <p class="text-sm mt-1" style="color: var(--text-muted)">
+                Your runtime version, what each release changed, and whether new
+                releases roll out automatically.
+              </p>
+            </div>
+
+            <div
+              class="rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center gap-5"
+              style="background: var(--panel-bg); border: 1px solid var(--panel-border)"
+            >
+              <div class="flex-1">
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                  style="color: var(--text-subtle)"
+                >
+                  Current runtime
+                </div>
+                <div class="flex items-center gap-3">
+                  <span
+                    id="upd-version"
+                    class="text-2xl font-light"
+                    style="color: var(--text-main)"
+                    >—</span
+                  >
+                  <span id="upd-status-pill"></span>
+                </div>
+                <div
+                  id="upd-fleet-line"
+                  class="text-sm mt-2"
+                  style="color: var(--text-muted)"
+                ></div>
+              </div>
+              <div
+                id="upd-relaunch-wrap"
+                class="hidden shrink-0"
+              >
+                <button
+                  onclick="switchView('launcher')"
+                  class="btn-secondary px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Re-download launcher
+                </button>
+              </div>
+            </div>
+
+            <div
+              class="rounded-2xl p-6"
+              style="background: var(--panel-bg); border: 1px solid var(--panel-border)"
+            >
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <div
+                    class="text-sm font-semibold"
+                    style="color: var(--text-main)"
+                  >
+                    Automatic updates
+                  </div>
+                  <p
+                    id="upd-auto-desc"
+                    class="text-sm mt-1 max-w-xl"
+                    style="color: var(--text-muted)"
+                  >
+                    When on, your servers pick up new runtime releases on their
+                    next sync — usually within seconds.
+                  </p>
+                  <p
+                    id="upd-veto-note"
+                    class="hidden text-[12px] mt-2 max-w-xl"
+                    style="color: var(--text-subtle)"
+                  ></p>
+                </div>
+                <button
+                  id="upd-auto-toggle"
+                  aria-label="Automatic updates"
+                  role="switch"
+                  aria-checked="true"
+                  onclick="toggleAutoUpdate()"
+                  class="relative shrink-0 w-12 h-7 rounded-full transition"
+                  style="background: var(--panel-border)"
+                >
+                  <span
+                    id="upd-auto-knob"
+                    class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform"
+                  ></span>
+                </button>
+              </div>
+            </div>
+
+            <div id="upd-rollout-card" class="iv-rollout-card">
+              <div class="iv-rollout-head">
+                <div>
+                  <div class="iv-eyebrow">Controlled rollout</div>
+                  <h3 id="upd-rollout-title">Preparing release</h3>
+                  <p id="upd-rollout-copy">The first healthy agent becomes the canary before the release expands.</p>
+                </div>
+                <span id="upd-rollout-pill" class="iv-status-pill" data-state="neutral">Checking</span>
+              </div>
+              <div class="iv-rollout-track" aria-hidden="true"><span id="upd-rollout-progress"></span></div>
+              <div id="upd-rollout-metrics" class="iv-rollout-metrics"></div>
+              <details class="iv-technical-details">
+                <summary>Technical rollout details</summary>
+                <div id="upd-rollout-details" class="iv-detail-grid"></div>
+              </details>
+            </div>
+
+            <div>
+              <div
+                class="text-[10px] uppercase tracking-widest font-bold mb-3 px-1"
+                style="color: var(--text-subtle)"
+              >
+                Release history
+              </div>
+              <div id="upd-changelog" class="space-y-4"></div>
+            </div>
+          </div>

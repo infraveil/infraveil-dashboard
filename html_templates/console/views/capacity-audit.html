@@ -1,0 +1,50 @@
+<div
+            id="view-capacity-audit"
+            class="view-section hidden max-w-7xl mx-auto space-y-6"
+          >
+            <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
+              <div>
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Capacity Audit</div>
+                <h2 class="text-2xl text-white mt-2">Server capacity diagnostics</h2>
+                <p class="text-sm mt-2 max-w-4xl" style="color: var(--text-muted)">
+                  Compare server load, resource pressure, and reported placement estimates.
+                  Estimates depend on the workloads measured; they are not reserved capacity.
+                </p>
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <button onclick="sendLauncherCommand('capacity-diagnostic')" class="btn-primary px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+                  <i data-lucide="gauge" class="w-4 h-4"></i> Run Selected
+                </button>
+                <button onclick="sendSelectedLauncherCommand('capacity-diagnostic')" class="btn-secondary px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+                  <i data-lucide="server-cog" class="w-4 h-4"></i> Run Checked
+                </button>
+                <button onclick="switchView('launcher')" class="btn-secondary px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Servers</button>
+              </div>
+            </div>
+            <div id="capacity-audit-summary" class="grid md:grid-cols-2 xl:grid-cols-4 gap-4"></div>
+            <div class="acrylic-panel rounded-2xl p-6 space-y-4">
+              <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                  <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Latest Reports</div>
+                  <div class="text-sm mt-1" style="color: var(--text-muted)">One card per launcher host. Run diagnostics from Servers or from this page.</div>
+                </div>
+                <div class="grid sm:grid-cols-2 gap-3 lg:w-[460px]">
+                  <select id="capacity-audit-filter" onchange="renderCapacityAudit(window.__latestStatusPayload || {})" class="ink-input text-xs rounded-lg px-3 py-2">
+                    <option value="all">All servers</option>
+                    <option value="with-report">With report</option>
+                    <option value="missing">Missing report</option>
+                    <option value="limited">Limited / weak</option>
+                  </select>
+                  <select id="capacity-audit-sort" onchange="renderCapacityAudit(window.__latestStatusPayload || {})" class="ink-input text-xs rounded-lg px-3 py-2">
+                    <option value="capacity">Sort by safe capacity</option>
+                    <option value="name">Sort by server name</option>
+                    <option value="limiter">Sort by limiting resource</option>
+                    <option value="recent">Sort by latest report</option>
+                  </select>
+                </div>
+              </div>
+              <div id="capacity-audit-list" class="space-y-5">
+                <div class="rounded-xl border border-dashed border-white/10 bg-black/20 px-5 py-5 text-sm" style="color: var(--text-muted)">No capacity reports loaded yet.</div>
+              </div>
+            </div>
+          </div>

@@ -1,0 +1,100 @@
+<div
+            id="view-network"
+            class="view-section hidden operator-log-page flex flex-col w-full px-6 xl:px-8"
+          >
+            <div class="flex flex-col gap-4 mb-6">
+              <div
+                class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4"
+              >
+                <div class="flex items-center gap-4">
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest"
+                      style="color: var(--text-subtle)"
+                    >
+                      Live Traffic
+                    </div>
+                    <div class="text-sm mt-1" style="color: var(--text-muted)">
+                      Every inbound request, the security decision (allow,
+                      block, or deceive), and the response sent back.
+                    </div>
+                  </div>
+                  <input
+                    id="network-search"
+                    placeholder="Search path, IP, method, stack..."
+                    class="ink-input text-xs font-mono-cli rounded px-3 py-2 w-64"
+                    oninput="renderNetwork()"
+                  />
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <select
+                    id="network-focus-filter"
+                    class="ink-input text-xs font-mono-cli rounded px-3 py-2 w-40 appearance-none cursor-pointer"
+                    onchange="renderNetwork()"
+                  >
+                    <option value="all">All Traffic</option>
+                    <option value="blocked">Blocked Only</option>
+                    <option value="honeypot">Honeypots</option>
+                    <option value="stacked">Policy Matches</option>
+                  </select>
+                  <select
+                    id="network-limit"
+                    class="ink-input text-xs font-mono-cli rounded px-3 py-2 w-32 appearance-none cursor-pointer"
+                    onchange="renderNetwork()"
+                  >
+                    <option value="60">Latest 60</option>
+                    <option value="120" selected="selected">Latest 120</option>
+                    <option value="200">Latest 200</option>
+                    <option value="500">Latest 500</option>
+                    <option value="1000">Latest 1000</option>
+                    <option value="0">All loaded</option>
+                  </select>
+                  <button
+                    onclick="clearNetworkLogs()"
+                    class="text-[10px] font-bold text-gray-400 hover:text-white flex items-center gap-2 uppercase tracking-widest transition-colors"
+                  >
+                    <i data-lucide="trash-2" class="w-3 h-3"></i> Clear
+                  </button>
+                  <div class="operator-quiet-status px-3 py-2 rounded-lg flex items-center gap-2">
+                    <div
+                      class="operator-status-dot bg-emerald-400"
+                    ></div>
+                    <span
+                      class="text-[10px] uppercase tracking-widest text-emerald-500 font-bold"
+                      >Live</span
+                    >
+                  </div>
+                </div>
+              </div>
+              <div
+                id="network-summary-bar"
+                class="grid grid-cols-2 xl:grid-cols-5 gap-3"
+              ></div>
+            </div>
+            <div
+              class="flex-1 acrylic-panel operator-log-shell rounded-2xl overflow-hidden flex flex-col"
+            >
+              <div
+                class="operator-log-header flex px-6 py-3 text-[10px] font-bold uppercase tracking-widest"
+                style="
+                  color: var(--text-subtle);
+                "
+              >
+                <div class="w-40">Timestamp</div>
+                <div class="w-24">Source</div>
+                <div class="flex-1">Path, Method &amp; Outcome</div>
+                <div class="w-8"></div>
+              </div>
+              <div
+                id="network-feed"
+                class="operator-log-feed flex-1 custom-scroll"
+              >
+                <div
+                  class="p-4 text-center text-xs"
+                  style="color: var(--text-subtle)"
+                >
+                  Waiting for network traffic...
+                </div>
+              </div>
+            </div>
+          </div>

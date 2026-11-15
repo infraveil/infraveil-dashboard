@@ -1,0 +1,62 @@
+<div
+            id="view-remediation"
+            class="view-section hidden w-full px-6 xl:px-8 space-y-8"
+          >
+            <div class="operator-page-header">
+              <div><h2 class="text-xl font-light">MCP Control</h2><p class="text-sm mt-2" style="color:var(--text-muted)">Connect an AI client to inspect your fleet and request supported operations. Each connection has defined permissions, scope, and an expiration.</p></div>
+              <button type="button" class="btn-secondary px-4 py-2 rounded-lg" onclick="ivOpenFeatureGuide('remediation')">How it works</button>
+            </div>
+            <div class="iv-mcp-layout grid xl:grid-cols-2 gap-6">
+              <section class="acrylic-panel p-6 rounded-2xl space-y-4">
+                <h3 class="text-lg">Connect your AI agent</h3>
+                <p class="text-sm" style="color:var(--text-muted)">Give your agent a scoped connection to this workspace. Choose its client and permissions, approve access, then let the agent complete setup.</p>
+                <p id="mcp-preview-note" hidden class="iv-mcp-preview-note text-sm" role="note">No workspace is connected to this local dashboard. <a href="https://portal.infraveil.com/dashboard" target="_blank" rel="noopener" class="underline">Open your signed-in dashboard</a> to manage real connections. Setup is available only with active workspace access.</p>
+                <ol class="iv-mcp-progress" aria-label="Agent onboarding progress">
+                  <li id="mcp-progress-client"><span>1</span>Client</li><li id="mcp-progress-permissions"><span>2</span>Permissions</li><li id="mcp-progress-connect"><span>3</span>Setup</li><li id="mcp-progress-verify"><span>4</span>Verify</li>
+                </ol>
+                <div id="mcp-intro" class="iv-mcp-stage space-y-4">
+                  <p class="text-sm" style="color:var(--text-muted)">Works with Codex, Claude Desktop, Cursor and other MCP clients. Read-only access is the starting point; you decide whether to allow supported control operations.</p>
+                  <button id="mcp-start" type="button" onclick="ivMcpStartOnboarding()" class="btn-primary px-4 py-3 rounded-lg">Connect agent</button>
+                </div>
+                <div id="mcp-client-stage" hidden class="iv-mcp-stage space-y-4">
+                <h4 id="mcp-client-heading" tabindex="-1" class="text-base">Choose your agent's client</h4>
+                <div class="iv-mcp-fields">
+                  <label class="block text-sm">AI client<select id="mcp-client" onchange="ivMcpOptionsChanged()" class="ink-input w-full rounded-lg p-3 mt-2"><option value="codex">Codex</option><option value="claude">Claude Desktop</option><option value="cursor">Cursor</option><option value="manual">Other MCP client — manual client entry</option></select></label>
+                  <label class="block text-sm">AI client computer<select id="mcp-platform" onchange="ivMcpChoosePlatform()" class="ink-input w-full rounded-lg p-3 mt-2"><option value="windows">Windows — PowerShell</option><option value="posix">Linux / macOS — Terminal</option></select></label>
+                </div>
+                <p class="text-xs" style="color:var(--text-muted)">Python 3.11 or newer is required on the AI client's computer.</p>
+                <button id="mcp-next" type="button" onclick="ivMcpNextStep()" class="btn-primary px-4 py-3 rounded-lg">Continue to permissions</button>
+                </div>
+                <div id="mcp-permissions-stage" hidden class="iv-mcp-stage space-y-4">
+                <h4 id="mcp-permissions-heading" tabindex="-1" class="text-base">Choose what the agent can do</h4>
+                <label class="block text-sm">Workspace access<select id="mcp-scope" onchange="ivMcpActionPolicyChanged()" class="ink-input w-full rounded-lg p-3 mt-2"><option value="read">Read only — inspect the workspace</option><option value="control">Read + control — supported workspace operations</option></select></label>
+                <label id="mcp-action-row" hidden class="block text-sm">Action approval<select id="mcp-action-mode" onchange="ivMcpActionPolicyChanged()" disabled class="ink-input w-full rounded-lg p-3 mt-2"><option value="confirm">Ask for my PIN or authenticator on actions</option><option value="automatic">Execute authorized actions without asking each time</option></select></label>
+                <label id="mcp-auto-consent-row" hidden class="text-sm"><input type="checkbox" id="mcp-auto-consent" onchange="ivMcpOptionsChanged()" class="infraveil-check"> I authorize this connection to execute supported workspace actions without a per-action PIN/TOTP prompt until it expires or I revoke it.</label>
+                <p id="mcp-auth-hint" hidden class="text-xs" style="color:var(--text-muted)">Existing connections keep their original approval policy. This choice applies only to the new connection.</p>
+                <p class="text-xs" style="color:var(--text-muted)">Access covers this workspace. Control uses exact-target previews and your chosen approvals. Billing and account security are not granted; release-signing and hardware approvals remain separate.</p>
+                <details class="iv-mcp-options"><summary>Connection options · name and lifetime</summary><div class="iv-mcp-fields">
+                  <label class="block text-sm">Connection name<input id="mcp-name" oninput="ivMcpOptionsChanged()" maxlength="80" value="My AI client" class="ink-input w-full rounded-lg p-3 mt-2" autocomplete="off"></label>
+                  <label class="block text-sm">Connection lifetime<select id="mcp-days" onchange="ivMcpOptionsChanged()" class="ink-input w-full rounded-lg p-3 mt-2"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select></label>
+                </div></details>
+                <p id="mcp-access-summary" class="text-sm" style="color:var(--text-muted)"></p>
+                <div class="iv-mcp-actions"><button id="mcp-back" type="button" onclick="ivMcpBackStep()" class="btn-secondary px-4 py-3 rounded-lg">Back</button><button id="mcp-create" type="button" onclick="ivMcpCreateConnection()" class="btn-primary px-4 py-3 rounded-lg">Approve and get setup prompt</button></div>
+                </div>
+                <div id="mcp-setup" hidden class="iv-mcp-setup space-y-3">
+                  <h4 id="mcp-connect-heading" tabindex="-1" class="text-base">Let your agent complete setup</h4>
+                  <p class="text-sm" style="color:var(--text-muted)">Copy the entire prompt into a private chat with your selected agent. It contains the real one-use setup command and instructions to verify the connection.</p>
+                  <div class="iv-mcp-prompt-header"><label id="mcp-prompt-label" for="mcp-setup-prompt" class="text-sm">Private agent setup prompt</label><button type="button" id="mcp-copy" onclick="ivMcpCopySetup()" disabled class="btn-primary px-4 py-3 rounded-lg">Copy setup prompt</button></div>
+                  <textarea id="mcp-setup-prompt" readonly spellcheck="false" aria-describedby="mcp-command-expiry mcp-private-note" class="iv-mcp-prompt ink-input w-full rounded-lg p-3 font-mono-cli text-xs" rows="12"></textarea>
+                  <p id="mcp-command-expiry" class="text-xs" role="status"></p>
+                  <p id="mcp-private-note" class="text-xs" style="color:var(--text-muted)">Paste into a private agent chat. The setup command expires after five minutes and can be used once. Do not save this prompt or command in AGENTS.md, source control or shared documents. Copying is not proof your client connected.</p>
+                  <details id="mcp-manual-setup" class="iv-mcp-options"><summary>View exact command · manual setup</summary><label class="block text-sm">Private setup command<textarea id="mcp-setup-command" readonly spellcheck="false" class="ink-input w-full rounded-lg p-3 mt-2 font-mono-cli text-xs" rows="5"></textarea></label></details>
+                </div>
+                <div id="mcp-verification" hidden class="iv-mcp-verification space-y-3" aria-live="polite">
+                  <h4 id="mcp-verification-title" class="text-base">Waiting for agent setup</h4>
+                  <p id="mcp-verification-detail" class="text-sm" style="color:var(--text-muted)"></p>
+                  <div class="iv-mcp-actions"><button id="mcp-check" type="button" onclick="ivMcpCheckConnection()" class="btn-secondary px-4 py-3 rounded-lg">Check connection</button><button id="mcp-another" type="button" onclick="ivMcpStartOnboarding()" class="btn-secondary px-4 py-3 rounded-lg">Connect another agent</button></div>
+                </div>
+                <p id="mcp-status" class="text-sm" role="status" aria-live="polite">Start setup to choose your client and permissions.</p>
+              </section>
+              <section class="acrylic-panel p-6 rounded-2xl space-y-4"><div class="iv-mcp-prompt-header"><h3 class="text-lg">Your connections</h3><button id="mcp-refresh" type="button" onclick="ivMcpRefresh(true)" class="btn-secondary px-4 py-2 rounded-lg">Refresh</button></div><p class="text-sm" style="color:var(--text-muted)">Read verified means this connection completed a successful workspace read at the reported time. It is not a live heartbeat. Activation or copying alone does not verify setup. Revoke a connection to remove its access immediately.</p><div id="mcp-connections" class="space-y-3"></div><details><summary class="cursor-pointer py-3">See available tools</summary><p class="text-sm mb-3" style="color:var(--text-muted)">Available operations and their permissions load from this workspace's server.</p><div id="mcp-tools" class="space-y-3"></div></details></section>
+            </div>
+          </div>

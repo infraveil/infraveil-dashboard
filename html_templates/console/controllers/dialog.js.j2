@@ -1,0 +1,55 @@
+
+      (function () {
+        function dialog(opts) {
+          return new Promise(function (resolve) {
+            var settled = false;
+            var overlay = document.createElement("div");
+            overlay.className = "iv-modal-overlay";
+            var card = document.createElement("div");
+            card.className = "iv-modal-card";
+            var isPrompt = opts.type === "prompt";
+            var isAlert = opts.type === "alert";
+            var inputId = "iv-modal-input";
+            card.innerHTML =
+              '<div style="font-size:15px;font-weight:600;color:var(--text-main);margin-bottom:8px">' + escText(opts.title) + "</div>" +
+              '<div style="font-size:13.5px;line-height:1.5;color:var(--text-muted);white-space:pre-line">' + escText(opts.message) + "</div>" +
+              (isPrompt
+                ? '<input id="' + inputId + '" class="ink-input" style="margin-top:14px;width:100%;border-radius:10px;padding:10px 12px;font-size:14px;background:rgba(0,0,0,0.35);border:1px solid var(--panel-border);color:var(--text-main)" />'
+                : "") +
+              '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">' +
+              (isAlert ? "" : '<button data-iv="cancel" class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">' + escText(opts.cancelText || "Cancel") + "</button>") +
+              '<button data-iv="ok" class="' + (opts.danger ? "btn-danger" : "btn-primary") + ' px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">' + escText(opts.confirmText || "OK") + "</button>" +
+              "</div>";
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+            requestAnimationFrame(function () { overlay.classList.add("iv-show"); });
+            var input = isPrompt ? card.querySelector("#" + inputId) : null;
+            if (input) { input.value = opts.defaultValue || ""; setTimeout(function () { input.focus(); input.select(); }, 30); }
+            function close(result) {
+              if (settled) return;
+              settled = true;
+              overlay.classList.remove("iv-show");
+              document.removeEventListener("keydown", onKey);
+              setTimeout(function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 160);
+              resolve(result);
+            }
+            function cancelVal() { return isPrompt ? null : isAlert ? true : false; }
+            function okVal() { return isPrompt ? (input ? input.value : "") : true; }
+            function onKey(e) {
+              if (e.key === "Escape") { e.preventDefault(); close(cancelVal()); }
+              else if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); close(okVal()); }
+            }
+            document.addEventListener("keydown", onKey);
+            overlay.addEventListener("mousedown", function (e) { if (e.target === overlay) close(cancelVal()); });
+            card.querySelector('[data-iv="ok"]').addEventListener("click", function () { close(okVal()); });
+            var cancelBtn = card.querySelector('[data-iv="cancel"]');
+            if (cancelBtn) cancelBtn.addEventListener("click", function () { close(cancelVal()); });
+            if (!isPrompt) card.querySelector('[data-iv="ok"]').focus();
+          });
+        }
+        function escText(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+        window.ivConfirm = function (message, o) { o = o || {}; return dialog({ type: "confirm", message: message, title: o.title || "Please confirm", confirmText: o.confirmText || "Confirm", cancelText: o.cancelText || "Cancel", danger: !!o.danger }); };
+        window.ivAlert = function (message, o) { o = o || {}; return dialog({ type: "alert", message: message, title: o.title || "Heads up", confirmText: o.okText || "OK" }); };
+        window.ivPrompt = function (message, o) { o = o || {}; return dialog({ type: "prompt", message: message, title: o.title || "Enter a value", confirmText: o.confirmText || "Save", cancelText: o.cancelText || "Cancel", defaultValue: o.default || "" }); };
+      })();
+    

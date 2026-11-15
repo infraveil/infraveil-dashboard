@@ -1,0 +1,833 @@
+        function toggleMobileNav(e) {
+          const t =
+            "boolean" == typeof e
+              ? e
+              : !document.body.classList.contains("mobile-nav-open");
+          document.body.classList.toggle("mobile-nav-open", t);
+        }
+        function toggleGlobalAssistant(e) {
+          // Compatibility entry points navigate to genuine client access. The
+          // retired provider chat has no DOM/composer or accessible Send action.
+          if (e !== false) switchView("remediation");
+        }
+        (startJohnnyRefresh(),
+          document
+            .getElementById("settings-action-auth-mode")
+            ?.addEventListener("change", async (ev) => {
+              // Lockout guard: every mode except "TOTP or PIN" REMOVES PIN as an approval factor.
+              // Since approvals then require TOTP/passkey only, an operator without that factor
+              // enrolled would be permanently locked out — with no PIN path to revert. (BUG-7)
+              const v = ev.target.value;
+              if (v && v !== "totp_or_pin") {
+                const need = v === "totp_only" ? "your Authenticator (TOTP)" : "your Authenticator (TOTP) or a passkey";
+                if (!(await ivConfirm("This makes " + need + " REQUIRED for every high-trust approval and removes PIN as a fallback.\n\nIf that factor is not fully set up, you will be LOCKED OUT of approving any action — with no PIN path to undo it.\n\nContinue?", { title: "Change approval security", confirmText: "Yes, continue", danger: true }))) {
+                  ev.target.value = "totp_or_pin";
+                  return;
+                }
+              }
+              _securitySettingsDirty = !0;
+            }),
+          document
+            .getElementById("settings-recovery-mode")
+            ?.addEventListener("change", () => {
+              _securitySettingsDirty = !0;
+            }),
+          document
+            .getElementById("settings-auth-prompt-behavior")
+            ?.addEventListener("change", () => {
+              _securitySettingsDirty = !0;
+            }),
+          [
+            "sec-rl-enabled",
+            "sec-rl-rpm",
+            "sec-rl-burst",
+            "sec-rl-enforcement",
+            "sec-rl-burst-multiplier",
+            "sec-rl-exempt-paths",
+            "sec-rl-whitelisted-paths",
+            "sec-rl-bypass-ips",
+            "sec-ab-enabled",
+            "sec-ab-threshold",
+            "sec-ab-window",
+            "sec-ab-duration",
+            "sec-max-body-bytes",
+            "sec-blocked-methods",
+            "sec-waf-enabled",
+            "sec-waf-mode",
+            "sec-waf-sensitivity",
+            "sec-waf-threshold",
+            "sec-waf-inspection-bytes",
+            "sec-waf-uninspected-action",
+            "sec-waf-decode-rounds",
+            "sec-waf-custom-rules",
+            "sec-waf-exclusions",
+            "sec-waf-control-paths",
+            "sec-geo-enabled",
+            "sec-geo-mode",
+            "sec-hp-enabled",
+            "sec-hp-tarpit-delay",
+            "sec-hp-act-block",
+            "sec-hp-act-tarpit",
+            "sec-hp-act-deceive",
+            "sec-scope-select",
+            "sec-inherit-toggle",
+          ].forEach((e) => {
+            const t = document.getElementById(e);
+            if (!t) return;
+            const n =
+              "SELECT" === t.tagName || "checkbox" === t.type
+                ? "change"
+                : "input";
+            t.addEventListener(n, () => {
+              _securityPolicyDirty = !0;
+            });
+          }),
+          document
+            .getElementById("sec-geo-country-list")
+            ?.addEventListener("change", (e) => {
+              e.target?.classList?.contains("sec-geo-check") &&
+                (_securityPolicyDirty = !0);
+            }),
+          document
+            .getElementById("sec-hp-routes")
+            ?.addEventListener("input", () => {
+              _securityPolicyDirty = !0;
+            }),
+          document
+            .getElementById("sec-hp-routes")
+            ?.addEventListener("change", () => {
+              _securityPolicyDirty = !0;
+            }),
+          (function () {
+            const e = document.getElementById("assistant-resize-handle"),
+              t = document.getElementById("global-assistant-panel");
+            if (!e || !t) return;
+            let n = !1,
+              o = 0,
+              r = 0;
+            (e.addEventListener("mousedown", function (s) {
+              (s.preventDefault(),
+                (n = !0),
+                (o = s.clientX),
+                (r = t.getBoundingClientRect().width),
+                e.classList.add("dragging"),
+                t.classList.add("resizing"),
+                (document.body.style.cursor = "col-resize"),
+                (document.body.style.userSelect = "none"));
+            }),
+              document.addEventListener("mousemove", function (e) {
+                if (!n) return;
+                e.preventDefault();
+                const s = o - e.clientX,
+                  a = Math.max(340, Math.min(0.6 * window.innerWidth, r + s));
+                t.style.width = a + "px";
+              }),
+              document.addEventListener("mouseup", function () {
+                n &&
+                  ((n = !1),
+                  e.classList.remove("dragging"),
+                  t.classList.remove("resizing"),
+                  (document.body.style.cursor = ""),
+                  (document.body.style.userSelect = ""));
+              }));
+          })());
+        const ASSISTANT_COMMANDS = [
+          {
+            command: "/clear",
+            title: "Clear chat",
+            detail: "Empty the assistant thread and pending tools.",
+            action: "clear",
+          },
+          {
+            command: "/status",
+            title: "Workspace status",
+            detail: "Ask for agents, launchers, policy, and service health.",
+            prompt:
+              "Give me the current workspace status and call read-only tools if useful.",
+          },
+          {
+            command: "/traffic",
+            title: "Traffic summary",
+            detail: "Summarize recent traffic and suspicious patterns.",
+            prompt:
+              "Summarize recent traffic, anomalies, and attack patterns. Use traffic tools if useful.",
+          },
+          {
+            command: "/policy",
+            title: "Security policy",
+            detail:
+              "Review rate limits, honeypots, geo rules, and auto-blocking.",
+            prompt:
+              "Review the active security policy and point out risky gaps.",
+          },
+          {
+            command: "/rate-limit",
+            title: "Set rate limit",
+            detail: "Draft a tool call to update RPM safely.",
+            prompt:
+              "Help me set an appropriate rate limit. Ask for the target RPM if I did not provide it, then propose the tool call.",
+          },
+          {
+            command: "/honeypot",
+            title: "Honeypot route",
+            detail: "Create or tune honeypot endpoints and fake responses.",
+            prompt:
+              "Help me configure honeypot endpoints, including fake response behavior if needed.",
+          },
+          {
+            command: "/pipeline",
+            title: "Pipeline stack",
+            detail: "Build a security pipeline stack.",
+            prompt:
+              "Create a clean security pipeline stack for this workspace and propose the structured tool call.",
+          },
+          {
+            command: "/launcher",
+            title: "Launcher control",
+            detail: "Start, stop, restart, or inspect launcher state.",
+            prompt:
+              "Help me control or inspect launcher state. Use tool calls when appropriate.",
+          },
+        ];
+        let assistantCommandIndex = 0;
+        function getAssistantCommandMatches() {
+          const e = document.getElementById("global-assistant-input"),
+            t = (e?.value || "").trimStart();
+          if (!t.startsWith("/")) return [];
+          const n = t.toLowerCase();
+          return ASSISTANT_COMMANDS.filter(
+            (e) =>
+              e.command.startsWith(n) ||
+              e.title.toLowerCase().includes(n.slice(1)),
+          ).slice(0, 8);
+        }
+        function renderAssistantCommandMenu() {
+          const e = document.getElementById("global-assistant-command-menu");
+          if (!e) return;
+          const t = getAssistantCommandMatches();
+          if (
+            ((assistantCommandIndex = Math.min(
+              assistantCommandIndex,
+              Math.max(0, t.length - 1),
+            )),
+            !t.length)
+          )
+            return (e.classList.add("hidden"), void (e.innerHTML = ""));
+          (e.classList.remove("hidden"),
+            (e.innerHTML = t
+              .map(
+                (e, t) =>
+                  `\n                <button type="button" class="assistant-command-item ${t === assistantCommandIndex ? "active" : ""}" onmousedown="event.preventDefault(); applyAssistantCommand(${t});">\n                    <span class="font-mono-cli text-[11px] text-white w-24">${escapeCodeHtml(e.command)}</span>\n                    <span class="min-w-0">\n                        <span class="block text-sm text-zinc-100">${escapeCodeHtml(e.title)}</span>\n                        <span class="block text-[11px] text-zinc-500 truncate">${escapeCodeHtml(e.detail)}</span>\n                    </span>\n                </button>\n            `,
+              )
+              .join("")));
+        }
+        function hideAssistantCommandMenu() {
+          const e = document.getElementById("global-assistant-command-menu");
+          e && e.classList.add("hidden");
+        }
+        function handleAssistantInput() {
+          ((assistantCommandIndex = 0), renderAssistantCommandMenu());
+        }
+        function applyAssistantCommand(e = assistantCommandIndex) {
+          const t = getAssistantCommandMatches()[e],
+            n = document.getElementById("global-assistant-input");
+          if (t && n) {
+            if ((hideAssistantCommandMenu(), "clear" === t.action)) {
+              const e = document.getElementById("global-assistant-feed");
+              return (
+                e && (e.innerHTML = ""),
+                (globalAssistantHistory = []),
+                renderAssistantTools([]),
+                void (n.value = "")
+              );
+            }
+            ((n.value = t.prompt || t.command), n.focus());
+          }
+        }
+        function handleAssistantInputKeydown(e) {
+          const t = getAssistantCommandMatches();
+          if (
+            t.length &&
+            ["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(e.key)
+          ) {
+            if ("ArrowDown" === e.key)
+              return (
+                e.preventDefault(),
+                (assistantCommandIndex =
+                  (assistantCommandIndex + 1) % t.length),
+                void renderAssistantCommandMenu()
+              );
+            if ("ArrowUp" === e.key)
+              return (
+                e.preventDefault(),
+                (assistantCommandIndex =
+                  (assistantCommandIndex - 1 + t.length) % t.length),
+                void renderAssistantCommandMenu()
+              );
+            if ("Enter" === e.key || "Tab" === e.key)
+              return (e.preventDefault(), void applyAssistantCommand());
+            if ("Escape" === e.key)
+              return (e.preventDefault(), void hideAssistantCommandMenu());
+          }
+          "Enter" !== e.key ||
+            e.shiftKey ||
+            (e.preventDefault(), sendGlobalAssistantMessage());
+        }
+        function assistantLanguageFile(e) {
+          const t = String(e || "").toLowerCase();
+          return (
+            {
+              js: "file.js",
+              javascript: "file.js",
+              ts: "file.ts",
+              typescript: "file.ts",
+              json: "file.json",
+              py: "file.py",
+              python: "file.py",
+              html: "file.html",
+              css: "file.css",
+              md: "file.md",
+              markdown: "file.md",
+              sh: "file.sh",
+              bash: "file.sh",
+              powershell: "file.ps1",
+              ps1: "file.ps1",
+            }[t] || `file.${t || "txt"}`
+          );
+        }
+        function renderAssistantCodeBlock(e, t) {
+          const n = String(e || "").replace(/^\n+|\n+$/g, ""),
+            o = String(t || "text").trim() || "text",
+            r = n
+              .split("\n")
+              .map((e) =>
+                "function" == typeof highlightEditorLine
+                  ? highlightEditorLine(e, assistantLanguageFile(o))
+                  : escapeCodeHtml(e),
+              )
+              .join("\n");
+          return `<div class="assistant-code-block">\n                <div class="assistant-code-header"><span>${escapeCodeHtml(o)}</span><button type="button" onclick="copyAssistantCode(this)" class="text-zinc-500 hover:text-white transition-colors">Copy</button></div>\n                <pre><code>${r}</code></pre>\n            </div>`;
+        }
+        function copyAssistantCode(e) {
+          const t =
+            e?.closest(".assistant-code-block")?.querySelector("code")
+              ?.textContent || "";
+          if ((navigator.clipboard?.writeText(t), e)) {
+            const t = e.textContent;
+            ((e.textContent = "Copied"),
+              setTimeout(() => {
+                e.textContent = t;
+              }, 900));
+          }
+        }
+        function renderAssistantMarkdown(e) {
+          let t = String(e || "");
+          const n = [];
+          return (
+            (t = t.replace(
+              /```([A-Za-z0-9_-]+)?[ \t]*\n?([\s\S]*?)```/g,
+              (e, t, o) => {
+                const r = `@@CODE${n.length}@@`;
+                return (n.push(renderAssistantCodeBlock(o, t)), r);
+              },
+            )),
+            (t = escapeCodeHtml(t)
+              .replace(/^### (.*)$/gm, "<h3>$1</h3>")
+              .replace(/^## (.*)$/gm, "<h2>$1</h2>")
+              .replace(/^# (.*)$/gm, "<h1>$1</h1>")
+              .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")),
+            (t = parseInlineBackticks(t)),
+            (t = t
+              .replace(/\* /g, "\n• ")
+              .replace(/^- (.*)$/gm, "<li>$1</li>")
+              .replace(/^• (.*)$/gm, "<li>$1</li>")
+              .replace(/((?:<li>.*<\/li>\s*)+)/g, "<ul>$1</ul>")),
+            (t = t.replace(/\n{2,}/g, "</p><p>").replace(/\n/g, " ")),
+            (t = `<p>${t}</p>`
+              .replace(/<p>\s*<\/p>/g, "")
+              .replace(/<p>(<h[123]>)/g, "$1")
+              .replace(/(<\/h[123]>)<\/p>/g, "$1")
+              .replace(/<p>(<ul>)/g, "$1")
+              .replace(/(<\/ul>)<\/p>/g, "$1")
+              .replace(/<p>(<div)/g, "$1")
+              .replace(/(<\/div>)<\/p>/g, "$1")),
+            n.forEach((e, n) => {
+              t = t.replace(`@@CODE${n}@@`, e);
+            }),
+            t
+          );
+        }
+        function parseInlineBackticks(e) {
+          let t = "",
+            n = 0,
+            o = !1,
+            r = "";
+          function s() {
+            ((t += r), (r = ""));
+          }
+          function a(t) {
+            return "`" === e[t];
+          }
+          function i(t) {
+            return (e[t], t + 1);
+          }
+          for (; n < e.length; )
+            !a(n) || (0 !== n && "\\" === e[n - 1])
+              ? ((r += e[n]), n++)
+              : (o
+                  ? ((t += "<code>" + r + "</code>"), (r = ""), (o = !1))
+                  : (s(), (r = ""), (o = !0)),
+                (n = i(n)));
+          return ((t += o ? "<code>" + r + "</code>" : r), t);
+        }
+        function appendToolExecutionChip(e, t) {
+          const n = document.getElementById("global-assistant-feed");
+          if (!n) return;
+          const o = t?.ok,
+            r = assistantToolLabel(e),
+            s = o ? "check-circle-2" : "x-circle",
+            a = o ? "text-emerald-400" : "text-red-400",
+            i = o ? "border-emerald-500/20" : "border-red-500/20",
+            l = o ? "bg-emerald-500/[0.06]" : "bg-red-500/[0.06]";
+          let c = "";
+          const d = t?.data;
+          if (d && "object" == typeof d) {
+            c = Object.entries(d)
+              .slice(0, 4)
+              .map(([e, t]) => {
+                const n =
+                  "object" == typeof t
+                    ? JSON.stringify(t).slice(0, 60)
+                    : String(t).slice(0, 80);
+                return `<span class="text-[10px] text-zinc-500"><span class="text-zinc-400">${escapeCodeHtml(humanizeTelemetryKey(e))}</span>: ${escapeCodeHtml(n)}</span>`;
+              })
+              .join('<span class="text-zinc-700 mx-1">·</span>');
+          }
+          const u = document.createElement("div");
+          ((u.className = `ml-auto mr-auto max-w-[85%] text-sm ${l} ${i} border rounded-xl px-4 py-2.5`),
+            (u.innerHTML = `\n                <div class="flex items-center gap-2">\n                    <i data-lucide="${s}" class="w-4 h-4 ${a}"></i>\n                    <span class="font-semibold text-zinc-200 text-[13px]">${escapeCodeHtml(r)}</span>\n                    <span class="text-[10px] text-zinc-600 uppercase tracking-wider ml-auto">${o ? "executed" : "failed"}</span>\n                </div>\n                ${c ? `<div class="flex flex-wrap gap-x-2 gap-y-0.5 mt-1.5">${c}</div>` : ""}\n            `),
+            n.appendChild(u),
+            (n.scrollTop = n.scrollHeight),
+            window.lucide && lucide.createIcons());
+        }
+        function applyAssistantLogClearUI(e) {
+          const t = String(e || "all").toLowerCase();
+          if ("console" === t || "all" === t) {
+            ((_consoleLogs = []),
+              clearedConsoleIds.clear(),
+              expandedConsoleIds.clear(),
+              (consoleClearedNoticeActive = !0));
+            const e = document.getElementById("console-feed");
+            (e &&
+              (e.innerHTML =
+                '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)"><i data-lucide="check-circle" class="w-6 h-6 mx-auto mb-2 text-emerald-500"></i> Terminal cleared.</div>'),
+              renderConsole());
+          }
+          if ("network" === t || "all" === t) {
+            ((_networkLogs = []),
+              clearedNetworkIds.clear(),
+              expandedNetworkIds.clear(),
+              (networkClearedNoticeActive = !0),
+              updateNetworkChart(0));
+            const e = document.getElementById("stat-events");
+            e && (e.innerText = "0");
+            const t = document.getElementById("network-feed");
+            (t &&
+              (t.innerHTML =
+                '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)"><i data-lucide="check-circle" class="w-6 h-6 mx-auto mb-2 text-emerald-500"></i> Trace cleared.</div>'),
+              renderNetwork());
+          }
+          if ("internal_network" === t || "all" === t) {
+            ((_internalNetworkLogs = []),
+              expandedInternalNetworkIds.clear(),
+              (internalNetworkClearedNoticeActive = !0));
+            const e = document.getElementById("internal-network-feed");
+            (e &&
+              (e.innerHTML =
+                '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)"><i data-lucide="check-circle" class="w-6 h-6 mx-auto mb-2 text-emerald-500"></i> Internal trace cleared.</div>'),
+              renderInternalNetwork());
+          }
+          (("pipeline" !== t && "all" !== t) ||
+            ((_pipelineLogs = []),
+            expandedPipelineLogIds.clear(),
+            renderPipelineLogs()),
+            window.lucide && lucide.createIcons());
+        }
+        async function refreshAfterAssistantTools(e, t) {
+          const n = e
+              .map((e) => String(e?.name || e?.tool || "").trim())
+              .filter(Boolean),
+            o = (...e) => n.some((t) => e.includes(t));
+          ((t || []).forEach((e) => {
+            "clear_logs" === e?.tool &&
+              e?.content?.ok &&
+              applyAssistantLogClearUI(e?.content?.data?.type || "all");
+          }),
+            await updateDashboardData(),
+            o(
+              "set_rate_limit",
+              "add_honeypot_route",
+              "update_security_policy",
+              "get_security_policy",
+              "read_security_policy",
+              "refresh",
+            ) && (await fetchSecuritySettings()),
+            o("create_pipeline_stack") &&
+              (await Promise.all([
+                fetchSecuritySettings(),
+                refreshPipelineAnalytics(),
+              ])),
+            o(
+              "launcher_command",
+              "restart_launcher",
+              "stop_launcher",
+              "capacity_diagnostic",
+              "agent_command",
+              "deploy_agent",
+              "create_agent",
+              "delete_agent",
+              "drain_launcher",
+              "rebalance_placement",
+            ) &&
+              (await updateDashboardData(),
+              setTimeout(() => updateDashboardData(), 1800)));
+        }
+        function appendAssistantMessage(e, t, n = "") {
+          const o = document.getElementById("global-assistant-feed");
+          if (!o) return;
+          const r = document.createElement("div"),
+            s = "user" === e;
+          ((r.className = s
+            ? `ml-auto text-right text-zinc-100 max-w-[85%] text-[15px] leading-relaxed assistant-md bg-white/[0.06] rounded-2xl rounded-tr-md px-4 py-2.5 ${n}`
+            : `mr-auto text-zinc-300 max-w-[85%] text-[15px] leading-relaxed assistant-md ${n}`),
+            (r.innerHTML = s ? escapeCodeHtml(t) : renderAssistantMarkdown(t)),
+            o.appendChild(r),
+            (o.scrollTop = o.scrollHeight));
+        }
+        function assistantToolLabel(e) {
+          return (
+            {
+              set_rate_limit: "Set Rate Limit",
+              add_honeypot_route: "Add Honeypot Route",
+              update_security_policy: "Update Security Policy",
+              create_pipeline_stack: "Create Pipeline Stack",
+              launcher_command: "Launcher Action",
+              agent_command: "Agent Action",
+              deploy_agent: "Deploy Agent",
+              create_agent: "Create Agent",
+              delete_agent: "Delete Agent",
+              drain_launcher: "Drain Launcher",
+              rebalance_placement: "Rebalance Placement",
+              apply_remediation: "Apply Remediation",
+              decline_remediation: "Decline Remediation",
+              clear_logs: "Clear Logs",
+              restart_launcher: "Restart Launcher",
+              stop_launcher: "Stop Launcher",
+              capacity_diagnostic: "Capacity Diagnostic",
+              get_status: "Read Workspace Status",
+              read_status: "Read Workspace Status",
+              get_traffic: "Read Traffic",
+              read_traffic: "Read Traffic",
+              get_security_policy: "Read Security Policy",
+              read_security_policy: "Read Security Policy",
+              refresh: "Reload Context",
+            }[e] || humanizeTelemetryKey(e || "tool")
+          );
+        }
+        function assistantToolRequiresAuth(e) {
+          return ![
+            "get_status",
+            "read_status",
+            "get_traffic",
+            "read_traffic",
+            "get_security_policy",
+            "read_security_policy",
+            "refresh",
+          ].includes(e);
+        }
+        function assistantToolArgsHtml(e) {
+          const t = Object.entries(e || {}).slice(0, 6);
+          return t.length
+            ? t
+                .map(([e, t]) => {
+                  const n =
+                    "object" == typeof t && null !== t
+                      ? JSON.stringify(t)
+                      : String(t);
+                  return `<div class="assistant-tool-arg"><span class="text-zinc-500">${escapeCodeHtml(humanizeTelemetryKey(e))}</span><span class="text-zinc-200 font-mono-cli text-right break-all">${escapeCodeHtml(n)}</span></div>`;
+                })
+                .join("")
+            : '<div class="text-[11px] text-zinc-500 mt-2">No arguments.</div>';
+        }
+        function removeAssistantTool(e) {
+          !Array.isArray(pendingAssistantToolCalls) ||
+            e < 0 ||
+            e >= pendingAssistantToolCalls.length ||
+            (pendingAssistantToolCalls.splice(e, 1),
+            renderAssistantTools(pendingAssistantToolCalls));
+        }
+        function clearAssistantTools() {
+          ((pendingAssistantToolCalls = []), renderAssistantTools([]));
+        }
+        function renderAssistantTools(e) {
+          const t = document.getElementById("global-assistant-tools");
+          if (t) {
+            if (
+              ((pendingAssistantToolCalls = Array.isArray(e) ? e : []),
+              !pendingAssistantToolCalls.length)
+            )
+              return (t.classList.add("hidden"), void (t.innerHTML = ""));
+            (t.classList.remove("hidden"),
+              (t.innerHTML = `\n                <div class="flex items-center justify-between gap-3">\n                    <div class="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">Proposed Tool Calls</div>\n                    <button type="button" onclick="clearAssistantTools()" class="text-[10px] uppercase tracking-widest font-bold text-zinc-500 hover:text-white transition-colors">Decline All</button>\n                </div>\n                <div class="space-y-2">${pendingAssistantToolCalls
+                .map((e, t) => {
+                  const n = String(e.name || e.tool || "tool"),
+                    o = e.args && "object" == typeof e.args ? e.args : {};
+                  return `\n                    <div class="assistant-tool-card">\n                        <div class="flex items-start justify-between gap-3">\n                            <div class="min-w-0">\n                                <div class="flex items-center gap-2 text-white font-semibold text-sm">\n                                    <i data-lucide="${assistantToolRequiresAuth(n) ? "wrench" : "search"}" class="w-4 h-4 text-zinc-400"></i>\n                                    <span class="truncate">${escapeCodeHtml(assistantToolLabel(n))}</span>\n                                </div>\n                                <div class="text-[10px] text-zinc-600 font-mono-cli mt-1">${escapeCodeHtml(n)}</div>\n                            </div>\n                            <span class="assistant-tool-badge">${assistantToolRequiresAuth(n) ? "Requires Auth" : "Read Only"}</span>\n                        </div>\n                        <div class="mt-2">${assistantToolArgsHtml(o)}</div>\n                        <div class="mt-3 flex items-center justify-end gap-2">\n                            <button type="button" onclick="removeAssistantTool(${t})" class="text-[10px] uppercase tracking-widest font-bold text-zinc-500 hover:text-white transition-colors">Decline</button>\n                        </div>\n                        <details class="assistant-tool-json">\n                            <summary>Raw JSON</summary>\n                            <pre class="rounded-lg border border-white/10 bg-black p-2 text-[10px] text-zinc-400 overflow-x-auto mt-2">${escapeCodeHtml(JSON.stringify(e, null, 2))}</pre>\n                        </details>\n                    </div>`;
+                })
+                .join(
+                  "",
+                )}</div>\n                <button onclick="executeAssistantTools()" class="btn-secondary w-full py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Run Proposed Tools</button>\n            `),
+              window.lucide && lucide.createIcons());
+          }
+        }
+        async function sendGlobalAssistantMessage() {
+          const e = document.getElementById("global-assistant-input"),
+            t = (e?.value || "").trim();
+          if (!t) return;
+          if ("/clear" === t) {
+            const t = document.getElementById("global-assistant-feed");
+            return (
+              t && (t.innerHTML = ""),
+              (globalAssistantHistory = []),
+              renderAssistantTools([]),
+              (e.value = ""),
+              void hideAssistantCommandMenu()
+            );
+          }
+          ((e.value = ""),
+            hideAssistantCommandMenu(),
+            appendAssistantMessage("user", t),
+            globalAssistantHistory.push({ role: "user", content: t }));
+          const n = document.getElementById("global-assistant-feed");
+          if (!n) return;
+          const o = document.createElement("div");
+          ((o.className =
+            "mr-auto text-zinc-300 max-w-[85%] text-[15px] leading-relaxed assistant-md"),
+            (o.id = "assistant-streaming-message"),
+            (o.innerHTML =
+              '<span class="text-zinc-600 animate-pulse">...</span>'),
+            n.appendChild(o),
+            (n.scrollTop = n.scrollHeight));
+          let r = "",
+            s = !1;
+          try {
+            const e = await fetch(API.assistantChatStream, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                message: t,
+                history: globalAssistantHistory,
+              }),
+            });
+            if (!e.ok) {
+              const t = await e.json().catch(() => ({}));
+              throw new Error(t.error || "Assistant request failed");
+            }
+            const a = e.body.getReader(),
+              i = new TextDecoder();
+            let l = "";
+            for (;;) {
+              const { done: e, value: t } = await a.read();
+              if (e) break;
+              l += i.decode(t, { stream: !0 });
+              const c = l.split("\n");
+              l = c.pop() || "";
+              for (const e of c) {
+                if (!e.startsWith("data: ")) continue;
+                const t = e.slice(6);
+                try {
+                  const e = JSON.parse(t);
+                  if (
+                    (e.delta &&
+                      ((r += e.delta),
+                      !s &&
+                        r.trim().startsWith("{") &&
+                        ((s = !0),
+                        (o.innerHTML =
+                          '<span class="text-zinc-600 animate-pulse">...</span>')),
+                      s ||
+                        ((o.innerHTML = renderAssistantMarkdown(r)),
+                        (n.scrollTop = n.scrollHeight))),
+                    e.done)
+                  ) {
+                    o.removeAttribute("id");
+                    const t = e.response_md || "";
+                    return (
+                      (o.innerHTML = renderAssistantMarkdown(t || r)),
+                      globalAssistantHistory.push({
+                        role: "assistant",
+                        content: t || r,
+                      }),
+                      renderAssistantTools(e.tool_calls || []),
+                      void (window.lucide && lucide.createIcons())
+                    );
+                  }
+                } catch (e) {}
+              }
+            }
+          } catch (e) {
+            (document.getElementById("assistant-streaming-message")?.remove(),
+              appendAssistantMessage(
+                "assistant",
+                `Assistant unavailable: ${e.message}`,
+              ));
+          }
+        }
+        function executeAssistantTools() {
+          if (!pendingAssistantToolCalls.length) return;
+          const e = [...pendingAssistantToolCalls];
+          ((pendingAssistantToolCalls = []), renderAssistantTools([]));
+          const t = e.map((e, t) =>
+              showToolExecutionLoading(String(e?.name || e?.tool || "tool"), t),
+            ),
+            n = async (o = "") => {
+              const r = { "Content-Type": "application/json" };
+              o && (r["X-TOTP-Auth"] = o);
+              const s = await fetch(API.assistantChat, {
+                  method: "POST",
+                  headers: r,
+                  credentials: "include",
+                  body: JSON.stringify({
+                    message: "Run approved tool calls.",
+                    history: globalAssistantHistory,
+                    tool_calls: e,
+                  }),
+                }),
+                a = await s.json().catch(() => ({}));
+              if ((401 === s.status || 403 === s.status) && a.reauth)
+                return (
+                  (pendingAssistantToolCalls = e),
+                  renderAssistantTools(e),
+                  void showTotpPrompt("Authorize Assistant Tools", (e) => {
+                    ((pendingAssistantToolCalls = []),
+                      renderAssistantTools([]),
+                      n(e));
+                  })
+                );
+              if (!s.ok) throw new Error(a.error || "Tool execution failed");
+              ((a.messages || [])
+                .filter((e) => "tool" === e.role)
+                .forEach((e, n) => {
+                  const o = t[n];
+                  (o && document.getElementById(o)?.remove(),
+                    appendToolExecutionChip(e.tool, e.content));
+                }),
+                await refreshAfterAssistantTools(e, a.messages || []));
+              const i =
+                "The tool calls have been executed. Please summarize what was done and any visible changes.";
+              (globalAssistantHistory.push({ role: "user", content: i }),
+                sendFollowUpStream(i).catch(() => {}));
+            };
+          n().catch((e) => {
+            (t.forEach((e) => document.getElementById(e)?.remove()),
+              appendAssistantMessage(
+                "assistant",
+                `Tool execution failed: ${e.message}`,
+              ));
+          });
+        }
+        function showToolExecutionLoading(e, t) {
+          const n = document.getElementById("global-assistant-feed");
+          if (!n) return;
+          const o = assistantToolLabel(e),
+            r = `tool-chip-loading-${t}`,
+            s = document.createElement("div");
+          return (
+            (s.id = r),
+            (s.className =
+              "ml-auto mr-auto max-w-[85%] text-sm bg-white/[0.03] border border-white/10 rounded-xl px-4 py-2.5"),
+            (s.innerHTML = `\n                <div class="flex items-center gap-2">\n                    <i data-lucide="loader" class="w-4 h-4 text-zinc-500 animate-spin"></i>\n                    <span class="font-semibold text-zinc-200 text-[13px]">${escapeCodeHtml(o)}</span>\n                    <span class="text-[10px] text-zinc-600 uppercase tracking-wider ml-auto">executing</span>\n                </div>\n            `),
+            n.appendChild(s),
+            (n.scrollTop = n.scrollHeight),
+            window.lucide && lucide.createIcons(),
+            r
+          );
+        }
+        async function sendFollowUpStream(e) {
+          const t = document.getElementById("global-assistant-feed");
+          if (!t) return;
+          const n = document.createElement("div");
+          ((n.className =
+            "mr-auto text-zinc-300 max-w-[85%] text-[15px] leading-relaxed assistant-md"),
+            (n.id = "assistant-streaming-message"),
+            (n.innerHTML =
+              '<span class="text-zinc-600 animate-pulse">...</span>'),
+            t.appendChild(n),
+            (t.scrollTop = t.scrollHeight));
+          let o = "",
+            r = !1;
+          try {
+            const s = await fetch(API.assistantChatStream, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                message: e,
+                history: globalAssistantHistory,
+              }),
+            });
+            if (!s.ok) {
+              const e = await s.json().catch(() => ({}));
+              throw new Error(e.error || "Assistant request failed");
+            }
+            const a = s.body.getReader(),
+              i = new TextDecoder();
+            let l = "";
+            for (;;) {
+              const { done: e, value: s } = await a.read();
+              if (e) break;
+              l += i.decode(s, { stream: !0 });
+              const c = l.split("\n");
+              l = c.pop() || "";
+              for (const e of c) {
+                if (!e.startsWith("data: ")) continue;
+                const s = e.slice(6);
+                try {
+                  const e = JSON.parse(s);
+                  if (
+                    (e.delta &&
+                      ((o += e.delta),
+                      !r &&
+                        o.trim().startsWith("{") &&
+                        ((r = !0),
+                        (n.innerHTML =
+                          '<span class="text-zinc-600 animate-pulse">...</span>')),
+                      r ||
+                        ((n.innerHTML = renderAssistantMarkdown(o)),
+                        (t.scrollTop = t.scrollHeight))),
+                    e.done)
+                  ) {
+                    n.removeAttribute("id");
+                    const t = e.response_md || "";
+                    return (
+                      (n.innerHTML = renderAssistantMarkdown(t || o)),
+                      globalAssistantHistory.push({
+                        role: "assistant",
+                        content: t || o,
+                      }),
+                      renderAssistantTools(e.tool_calls || []),
+                      void (window.lucide && lucide.createIcons())
+                    );
+                  }
+                } catch (e) {}
+              }
+            }
+          } catch (e) {
+            (document.getElementById("assistant-streaming-message")?.remove(),
+              appendAssistantMessage(
+                "assistant",
+                `Follow-up unavailable: ${e.message}`,
+              ));
+          }
+        }

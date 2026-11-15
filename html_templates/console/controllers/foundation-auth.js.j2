@@ -1,0 +1,377 @@
+        const supportController = InfraveilUI.support.createController({
+          document, request: (...args) => fetch(...args),
+          readSupportEndpoint: () => API.support,
+          showToast: (...args) => showToast(...args),
+          refreshIcons: () => { if (window.lucide) lucide.createIcons(); },
+          setTimeout: (...args) => setTimeout(...args),
+          clearTimeout: (timer) => clearTimeout(timer), lifecycleTarget: window,
+        });
+        const feedbackController = InfraveilUI.feedback.createController({
+          document, request: (...args) => fetch(...args),
+          readFeedbackEndpoint: () => API.feedback,
+          readCurrentView: () => getCurrentViewId(),
+          showToast: (...args) => showToast(...args),
+          trackEvent: (...args) => trackDashboardEvent(...args),
+          refreshAccount: () => fetchAccountInfo(),
+        });
+        function getConsoleScopedAgentId() {
+          const scope = window.getFleetScope?.();
+          return scope?.kind === "agent" ? scope.id : null;
+        }
+        async function verifyLogIntegrity() {
+          const e = getConsoleScopedAgentId();
+          if (!e || "all" === e)
+            return (
+              (document.getElementById("log-integrity-text").innerText =
+                "Fleet Scope"),
+              void (document.getElementById("log-integrity-dot").className =
+                "w-1.5 h-1.5 rounded-full bg-gray-500")
+            );
+          try {
+            const t = await fetch(`/client/api/logs/verify?agent_id=${e}`);
+            if (!t.ok) throw new Error();
+            (await t.json()).valid
+              ? ((document.getElementById("log-integrity-text").innerText =
+                  "Integrity Verified"),
+                (document.getElementById("log-integrity-dot").className =
+                  "w-1.5 h-1.5 rounded-full bg-emerald-500 dot-glow"))
+              : ((document.getElementById("log-integrity-text").innerText =
+                  "Integrity Compromised"),
+                (document.getElementById("log-integrity-dot").className =
+                  "w-1.5 h-1.5 rounded-full bg-red-500"));
+          } catch {
+            ((document.getElementById("log-integrity-text").innerText =
+              "Verification Error"),
+              (document.getElementById("log-integrity-dot").className =
+                "w-1.5 h-1.5 rounded-full bg-red-500"));
+          }
+        }
+        function hashCode(e) {
+          let t = 0;
+          if (0 === e.length) return t.toString(16);
+          for (let n = 0; n < e.length; n++) {
+            ((t = (t << 5) - t + e.charCodeAt(n)), (t &= t));
+          }
+          return Math.abs(t).toString(16);
+        }
+        function showToast(e, t = "info") {
+          const n = document.getElementById("alertBanner");
+          if (!n) return;
+          n.classList.add("flex", "flex-col", "items-end", "gap-3");
+          const o = ["error", "success"].includes(t) ? t : "info",
+            r = "error" === o ? "circle-alert" : "success" === o ? "circle-check" : "info",
+            s = document.createElement("div");
+          ((s.className = `iv-toast iv-toast-${o} pointer-events-auto w-full max-w-sm border px-5 py-4 transition-all duration-300 ease-out translate-y-2 opacity-0`),
+            s.setAttribute("role", "error" === o ? "alert" : "status"),
+            (s.innerHTML = `<div class="iv-toast-content"><span class="iv-toast-icon"><i data-lucide="${r}" class="w-4 h-4"></i></span><span class="iv-toast-message">${escapeHtml(e)}</span></div>`),
+            n.appendChild(s),
+            lucide.createIcons(),
+            requestAnimationFrame(() => {
+              s.classList.remove("translate-y-2", "opacity-0");
+            }),
+            setTimeout(() => {
+              s.classList.add("-translate-y-2", "opacity-0");
+            }, 3200),
+            setTimeout(() => {
+              ((s.style.marginBottom = `-${s.offsetHeight}px`),
+                (s.style.pointerEvents = "none"));
+            }, 3500),
+            setTimeout(() => s.remove(), 3825));
+        }
+        var modalController;
+        function getModalController() {
+          return modalController || (modalController = {% include "console/controllers/modal.js.j2" %}({
+            readDocument: () => document,
+            readEnterHandler: () => handleModalEnterSubmit,
+            refreshIcons: () => lucide.createIcons(),
+          }));
+        }
+        function createModal(e, t = "w-full max-w-sm mx-4") {
+          return getModalController().createModal(e, t);
+        }
+        function closeModal() {
+          getModalController().closeModal();
+        }
+        function handleModalEnterSubmit(e) {
+          getModalController().handleModalEnterSubmit(e);
+        }
+        function showPaymentProcessorLoading() {
+          closeModal();
+          createModal(
+            `\n                <div class="p-8 text-center">\n                    <div class="mx-auto w-12 h-12 rounded-full border border-blue-400/30 bg-blue-500/10 flex items-center justify-center text-blue-300 animate-pulse">\n                        <i data-lucide="credit-card" class="w-5 h-5"></i>\n                    </div>\n                    <h3 class="text-white text-sm font-semibold mt-5">Contacting payment processor...</h3>\n                    <p class="text-xs text-gray-400 mt-2 leading-relaxed">Building a secure checkout session. This usually takes a few seconds.</p>\n                </div>\n            `,
+          );
+        }
+        lucide.createIcons();
+        let _hasWebAuthn = !1,
+          _sessionExpiredRedirecting = !1;
+        function redirectToLoginOnSessionExpiry() {
+          if (_sessionExpiredRedirecting) return;
+          _sessionExpiredRedirecting = !0;
+          window.dispatchEvent(new CustomEvent("infraveil:session-expired"));
+          window.location.replace("/login?logged_out=1#" + Date.now());
+        }
+        function base64urlToBuffer(e) {
+          const t = e.replace(/-/g, "+").replace(/_/g, "/"),
+            n = t.padEnd(t.length + ((4 - (t.length % 4)) % 4), "="),
+            o = atob(n),
+            r = new ArrayBuffer(o.length),
+            s = new Uint8Array(r);
+          for (let e = 0; e < o.length; e++) s[e] = o.charCodeAt(e);
+          return r;
+        }
+        function bufferToBase64url(e) {
+          const t = new Uint8Array(e);
+          let n = "";
+          for (let e = 0; e < t.byteLength; e++) n += String.fromCharCode(t[e]);
+          return btoa(n)
+            .replace(/\+/g, "-")
+            .replace(/\//g, "_")
+            .replace(/=/g, "");
+        }
+        async function getBiometricTotpCode(authPurpose = "") {
+          const e = await fetch("/client/auth/webauthn/action-challenge", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ purpose: authPurpose }),
+          });
+          const t = await e.json().catch(() => ({}));
+          if (!e.ok) throw new Error(t.error || "A passkey is not available");
+          const n = {
+              ...t,
+              challenge: base64urlToBuffer(t.challenge),
+              allowCredentials: (t.allowCredentials || []).map((e) => ({
+                ...e,
+                id: base64urlToBuffer(e.id),
+              })),
+            },
+            o = await navigator.credentials.get({ publicKey: n }),
+            r = {
+              id: o.id,
+              rawId: bufferToBase64url(o.rawId),
+              type: o.type,
+              response: {
+                authenticatorData: bufferToBase64url(
+                  o.response.authenticatorData,
+                ),
+                clientDataJSON: bufferToBase64url(o.response.clientDataJSON),
+                signature: bufferToBase64url(o.response.signature),
+                userHandle: o.response.userHandle
+                  ? bufferToBase64url(o.response.userHandle)
+                  : null,
+              },
+            },
+            s = await fetch("/client/auth/webauthn/get-totp-token", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ credential: r, purpose: authPurpose }),
+            });
+          const a = await s.json().catch(() => ({}));
+          if (!s.ok) throw new Error(a.error || "Passkey verification failed");
+          if (!a.authorized && !a.auth_token) throw new Error("No authorization returned");
+          return a.auth_token || "__webauthn_elevated__";
+        }
+        function demoActionRequiresProtectedAuth(e = "") {
+          return false;
+        }
+        function showTotpPrompt(e, t, authPurpose = "") {
+          if (
+            (closeModal(),
+            APP_STATE.demo_mode && !demoActionRequiresProtectedAuth(e))
+          ) {
+            const e =
+              window.__demoTotpCode ||
+              APP_STATE.demo_totp ||
+              APP_STATE.demo_access_code ||
+              window.__demoAccessCode ||
+              "";
+            return void t(e);
+          }
+          const n = APP_STATE.action_auth_mode || "totp_only";
+          if (APP_STATE.demo_mode || "totp_or_pin" !== n) {
+            if (
+              !APP_STATE.demo_mode &&
+              "totp_or_webauthn" === n &&
+              _hasWebAuthn &&
+              window.PublicKeyCredential
+            ) {
+              const o = e;
+              createModal(
+                `\n                <div class="iv-auth-modal">\n                    <div class="iv-modal-header">\n                        <div class="iv-modal-icon"><i data-lucide="fingerprint"></i></div>\n                        <div><div class="iv-modal-eyebrow">Protected action</div><h3>Confirm with your passkey</h3><p>Approve <strong>${escapeHtml(e)}</strong> with this device, or use your authenticator code instead.</p></div>\n                    </div>\n                    <div id="biometric-status" class="iv-modal-callout">\n                        <i data-lucide="fingerprint"></i>\n                        <div><strong>Waiting for your device</strong><span id="biometric-status-text">Follow the passkey prompt from your device or security key.</span></div>\n                    </div>\n                    <div class="iv-modal-actions">\n                        <button class="btn-secondary" id="switch-to-totp-btn">Use TOTP instead</button>\n                        <button class="btn-secondary" onclick="closeModal()">Cancel</button>\n                    </div>\n                </div>\n                `,
+              );
+              return (
+                (async () => {
+                  try {
+                    const e = await getBiometricTotpCode(authPurpose);
+                    (await t(e), closeModal());
+                  } catch (e) {
+                    closeModal();
+                    showTotpFallback(o, t, authPurpose);
+                    showToast(
+                      e.message && e.message.toLowerCase().includes("cancel")
+                        ? "Passkey prompt cancelled. Use TOTP instead."
+                        : "Passkey unavailable. Use TOTP instead.",
+                      "error",
+                    );
+                  }
+                })(),
+                void setTimeout(() => {
+                  const n = document.getElementById("switch-to-totp-btn");
+                  n &&
+                    (n.onclick = () => {
+                      (closeModal(), showTotpFallback(e, t, authPurpose));
+                    });
+                }, 100)
+              );
+            }
+            showTotpFallback(e, t, authPurpose);
+          } else showTotpFallback(e, t, authPurpose);
+        }
+        function showTotpFallback(e, t, authPurpose = "") {
+          closeModal();
+          const n = APP_STATE.action_auth_mode || "totp_only",
+            a = APP_STATE.auth_prompt_behavior || "smart",
+            p = n === "totp_and_pin" && APP_STATE.pin_enabled,
+            o =
+              !APP_STATE.demo_mode &&
+              "totp_or_pin" === n &&
+              APP_STATE.pin_enabled,
+            r =
+              (createModal(
+                `\n            <div class="p-6">\n                <h3 class="text-blue-400 font-bold tracking-widest uppercase mb-2 flex items-center gap-2"><i data-lucide="shield" class="w-4 h-4"></i> Security Lock</h3>\n                <p class="text-xs text-gray-400 mb-6">Action: <span class="text-white">${escapeHtml(e)}</span><br/>${p ? "Use your Authenticator code and your account PIN." : o ? "Use either your Authenticator code or your account PIN." : "Please verify with your Authenticator app."}</p>\n                <input type="text" id="modal-totp-input" placeholder="000000" maxlength="6" class="ink-input w-full rounded-lg px-4 py-3 text-center text-xl tracking-[0.5em] font-mono-cli text-blue-400 mb-4">\n                ${(o || p) ? '<div class="text-center text-[10px] uppercase tracking-widest mb-3" style="color: var(--text-subtle)">' + (p ? "and" : "or") + '</div><input type="password" id="modal-pin-input" placeholder="Account PIN" maxlength="12" class="ink-input w-full rounded-lg px-4 py-3 text-center text-sm font-mono-cli text-white mb-4">' : ""}\n                <div class="flex justify-end gap-3">\n                    <button class="px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:bg-white/5 transition-colors" onclick="closeModal()">CANCEL</button>\n                    <button class="px-4 py-2 rounded-lg text-xs font-bold bg-blue-500 text-white hover:brightness-110 transition-all" id="modal-submit-btn">AUTHORIZE</button>\n                </div>\n            </div>\n        `,
+              ),
+              document.getElementById("modal-totp-input"));
+          const s = document.getElementById("modal-pin-input");
+          ((o && "pin" === a ? s : r)?.focus(),
+            r.addEventListener("input", function (e) {
+              this.value = this.value.replace(/[^0-9]/g, "");
+            }));
+          (s &&
+            s.addEventListener("input", function () {
+              this.value = this.value.replace(/[^0-9]/g, "");
+            }),
+            s &&
+              s.addEventListener("keypress", function (e) {
+                "Enter" === e.key &&
+                  document.getElementById("modal-submit-btn").click();
+              }),
+            r.addEventListener("keypress", function (e) {
+              "Enter" === e.key &&
+                document.getElementById("modal-submit-btn").click();
+            }),
+            (document.getElementById("modal-submit-btn").onclick = () => {
+              const e = (r.value || "").trim(),
+                n = (s?.value || "").trim();
+              if (p) {
+                if (e.length < 6 || !/^\d{4,12}$/.test(n)) return showToast("Enter your Authenticator code and account PIN", "error");
+                _activeActionPin = n;
+                setTimeout(() => { _activeActionPin = ""; }, 15e3);
+                t(e);
+                closeModal();
+                return;
+              }
+              return o && /^\d{4,12}$/.test(n) && !e
+                ? ((_activeActionPin = n),
+                  setTimeout(() => {
+                    _activeActionPin = "";
+                  }, 15e3),
+                  t(""),
+                  void closeModal())
+                : e.length < 6
+                  ? showToast("Invalid TOTP length", "error")
+                  : ((_activeActionPin = ""), t(e), void closeModal());
+            }));
+        }
+        function showEditNodePrompt(e, t, n, o) {
+          (closeModal(),
+            createModal(
+              `\n            <div class="p-6">\n                <h3 class="text-blue-400 font-bold tracking-widest uppercase mb-4 flex items-center gap-2"><i data-lucide="pen-line" class="w-4 h-4"></i> Edit Node Identity</h3>\n                <div class="space-y-4">\n                    <div>\n                        <label class="block text-[10px] uppercase font-bold tracking-widest mb-1 text-gray-500">Node Name</label>\n                        <input type="text" id="modal-name-input" value="${t}" class="ink-input w-full rounded-lg px-3 py-2 text-sm text-white">\n                    </div>\n                    <div>\n                        <label class="block text-[10px] uppercase font-bold tracking-widest mb-1 text-gray-500">Node Type / Role</label>\n                        <input type="text" id="modal-type-input" value="${n}" placeholder="e.g. Scraper, Database, Worker" class="ink-input w-full rounded-lg px-3 py-2 text-sm text-white">\n                    </div>\n                </div>\n                <div class="flex justify-end gap-3 mt-6">\n                    <button class="px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:bg-white/5 transition-colors" onclick="closeModal()">CANCEL</button>\n                    <button class="px-4 py-2 rounded-lg text-xs font-bold bg-blue-500 text-white hover:brightness-110 transition-all" id="modal-save-btn">SAVE CHANGES</button>\n                </div>\n            </div>\n            `,
+            ),
+            (document.getElementById("modal-save-btn").onclick = () => {
+              const e = document
+                  .getElementById("modal-name-input")
+                  .value.trim(),
+                t = document.getElementById("modal-type-input").value.trim();
+              if (!e) return showToast("Name cannot be empty", "error");
+              showTotpPrompt("Update Node Details", (n) => {
+                o(e, t, n);
+              });
+            }));
+        }
+        function finalizeLogoutRedirect() {
+          window.location.replace(
+            "/client/login?logged_out=1&_ts=" + Date.now(),
+          );
+        }
+        let logoutInProgress = !1;
+        async function performLogout() {
+          window.dispatchEvent(new CustomEvent("infraveil:session-expired"));
+          if (logoutInProgress) return;
+          logoutInProgress = !0;
+          isMenuOpen && toggleUserMenu();
+          dashboardPollingInterval && clearTimeout(dashboardPollingInterval);
+          dashboardPollingInterval = null;
+          try {
+            if (
+              !(
+                await fetch("/client/logout", {
+                  method: "POST",
+                  credentials: "same-origin",
+                  cache: "no-store",
+                  headers: {
+                    "Cache-Control": "no-cache, no-store, max-age=0",
+                    Pragma: "no-cache",
+                  },
+                })
+              ).ok
+            )
+              throw new Error("Logout request was rejected");
+            (showToast("Session cleared. Redirecting..."),
+              setTimeout(finalizeLogoutRedirect, 100));
+          } catch (e) {
+            (showToast(
+              "Logout did not fully clear. Forcing a clean sign-out...",
+              "error",
+            ),
+              setTimeout(finalizeLogoutRedirect, 320));
+          }
+        }
+        const userMenu = document.getElementById("user-menu"),
+          userChevron = document.getElementById("user-menu-chevron");
+        let isMenuOpen = !1;
+        function toggleUserMenu() {
+          if (!isMenuOpen) { window.ivCloseGuides?.(); window.ivCloseDashboardSearch?.(); }
+          const restoreFocus = isMenuOpen && userMenu.contains(document.activeElement);
+          ((isMenuOpen = !isMenuOpen),
+            (userMenu.hidden = !isMenuOpen),
+            document.getElementById("user-profile-btn").setAttribute("aria-expanded", String(isMenuOpen)),
+            isMenuOpen
+              ? (userMenu.classList.add("open"),
+                (userChevron.style.transform = "rotate(180deg)"),
+                setTimeout(() => lucide.createIcons(), 10))
+              : (userMenu.classList.remove("open"),
+                (userChevron.style.transform = "rotate(0deg)")));
+          if (restoreFocus) document.getElementById("user-profile-btn").focus();
+        }
+        window.ivCloseUserMenu = () => { if (isMenuOpen) toggleUserMenu(); };
+        document.addEventListener("click", (e) => {
+          const t = document.getElementById("user-profile-btn");
+          userMenu.contains(e.target) ||
+            t.contains(e.target) ||
+            (isMenuOpen && toggleUserMenu());
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.key !== "Escape" || !isMenuOpen) return;
+          const modalVisible = (node) => {
+            for (let current = node; current && current.nodeType === 1; current = current.parentElement) {
+              const style = window.getComputedStyle(current);
+              if (current.hidden || style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
+            }
+            return true;
+          };
+          const dialogs = document.querySelectorAll('#activeModal, dialog[open], [role="dialog"][aria-modal="true"]:not(#iv-command-overlay), #iv-command-overlay[data-open="true"]');
+          if (![...dialogs].some(modalVisible)) {
+            e.preventDefault();
+            toggleUserMenu();
+            document.getElementById("user-profile-btn").focus();
+          }
+        });

@@ -1,0 +1,599 @@
+<div
+            id="view-settings"
+            class="view-section hidden max-w-7xl mx-auto space-y-8"
+          >
+            <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5 mb-8">
+              <div>
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Workspace Settings
+                </div>
+                <h2 class="text-2xl font-light mt-2" style="color: var(--text-main)">
+                  Account & Access
+                </h2>
+                <p class="text-sm mt-2 max-w-3xl" style="color: var(--text-muted)">
+                  Manage organization details, sign-in recovery, high-trust
+                  approvals, dashboard feedback, and workspace diagnostics from
+                  one place.
+                </p>
+              </div>
+              <div class="grid sm:grid-cols-3 gap-3 xl:w-[520px]">
+                <div class="acrylic-panel rounded-2xl px-4 py-3">
+                  <div class="text-[10px] uppercase tracking-widest" style="color: var(--text-subtle)">Account</div>
+                  <div class="text-sm text-white mt-1">Organization profile</div>
+                </div>
+                <div class="acrylic-panel rounded-2xl px-4 py-3">
+                  <div class="text-[10px] uppercase tracking-widest" style="color: var(--text-subtle)">Access</div>
+                  <div class="text-sm text-white mt-1">TOTP, PIN, passkeys</div>
+                </div>
+                <div class="acrylic-panel rounded-2xl px-4 py-3">
+                  <div class="text-[10px] uppercase tracking-widest" style="color: var(--text-subtle)">Recovery</div>
+                  <div class="text-sm text-white mt-1">Authenticator reset</div>
+                </div>
+              </div>
+            </div>
+            <div class="acrylic-panel rounded-2xl p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div>
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Fast Actions</div>
+                <div class="text-sm text-white mt-2">Jump directly into the high-trust controls operators use most.</div>
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <button onclick="exportAuditEvidence()" class="btn-secondary px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Export Audit</button>
+                <button onclick="exportProofPacket()" class="btn-secondary px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Proof Packet</button>
+                <button onclick="exportFullCustomerData()" class="btn-secondary px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Export Data</button>
+                <button onclick="runLauncherDoctor()" class="btn-secondary px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Run Doctor</button>
+                <button onclick="switchView('billing')" class="btn-primary px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Billing</button>
+              </div>
+            </div>
+            <div
+              id="expiry-warning-banner"
+              class="hidden acrylic-panel p-6 rounded-2xl border-2 border-amber-500/50 bg-amber-500/10"
+            >
+              <div class="flex items-start gap-4">
+                <i
+                  data-lucide="alert-triangle"
+                  class="w-6 h-6 text-amber-400 shrink-0 mt-0.5"
+                ></i>
+                <div class="flex-1">
+                  <h3 class="text-sm font-bold text-amber-300 mb-2">
+                    Account Expiry Warning
+                  </h3>
+                  <p
+                    id="expiry-warning-text"
+                    class="text-xs mb-4"
+                    style="color: var(--text-muted)"
+                  >
+                    Loading account retention status...
+                  </p>
+                  <div class="flex items-center gap-3">
+                    <button
+                      onclick="switchView('billing')"
+                      class="btn-primary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                    >
+                      Upgrade Plan
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="settings-profile-panel" class="p-8 space-y-6">
+              <div class="grid grid-cols-2 gap-6">
+                <div>
+                  <label
+                    class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                    style="color: var(--text-subtle)"
+                    >Organization</label
+                  ><input
+                    id="settings-org"
+                    value="Loading..."
+                    readonly="readonly"
+                    class="ink-input w-full rounded px-4 py-3 text-sm opacity-70"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                    style="color: var(--text-subtle)"
+                    >Created At</label
+                  ><input
+                    id="settings-created"
+                    value="Loading..."
+                    readonly="readonly"
+                    class="ink-input w-full rounded px-4 py-3 text-sm opacity-70"
+                  />
+                </div>
+              </div>
+            </div>
+            <div id="settings-auth-panel" class="p-8 space-y-8 border-t border-white/10">
+              <div>
+                <h3
+                  class="text-sm font-bold uppercase tracking-widest"
+                  style="color: var(--text-main)"
+                >
+                  Sign-in and action approvals
+                </h3>
+                <p class="text-xs mt-2" style="color: var(--text-muted)">
+                  Manage sign-in methods, recovery options, and verification
+                  for sensitive actions.
+                </p>
+              </div>
+              <div class="iv-access-methods grid md:grid-cols-3 gap-4">
+                <div
+                  class="rounded-xl border px-4 py-4"
+                  style="
+                    border-color: var(--table-border);
+                    background: rgba(255, 255, 255, 0.02);
+                  "
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Authenticator App
+                  </div>
+                  <div id="settings-totp-status" class="text-sm mt-2">
+                    Loading...
+                  </div>
+                  <div
+                    id="settings-totp-reset-at"
+                    class="text-[11px] mt-2"
+                    style="color: var(--text-muted)"
+                  >
+                    Last reset: -
+                  </div>
+                </div>
+                <div
+                  class="rounded-xl border px-4 py-4"
+                  style="
+                    border-color: var(--table-border);
+                    background: rgba(255, 255, 255, 0.02);
+                  "
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Account PIN
+                  </div>
+                  <div id="settings-pin-status" class="text-sm mt-2">
+                    Loading...
+                  </div>
+                  <div
+                    class="text-[11px] mt-2"
+                    style="color: var(--text-muted)"
+                  >
+                    An optional approval method for supported sensitive actions.
+                    A PIN does not replace your sign-in method.
+                  </div>
+                </div>
+                <div
+                  class="rounded-xl border px-4 py-4"
+                  style="
+                    border-color: var(--table-border);
+                    background: rgba(255, 255, 255, 0.02);
+                  "
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Passkeys
+                  </div>
+                  <div id="settings-webauthn-status" class="text-sm mt-2">
+                    Loading...
+                  </div>
+                  <div
+                    class="text-[11px] mt-2"
+                    style="color: var(--text-muted)"
+                  >
+                    Sign in and approve actions with a device passkey, Windows Hello,
+                    or a security key. Add a backup without replacing existing keys.
+                  </div>
+                  <button
+                    id="settings-passkey-setup"
+                    type="button"
+                    onclick="startPasskeySetup()"
+                    class="btn-secondary hidden w-full mt-4 px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                  >
+                    <span id="settings-passkey-label">Add passkey or security key</span>
+                  </button>
+                </div>
+              </div>
+              <div class="grid md:grid-cols-2 gap-6">
+                <div class="space-y-3">
+                  <label
+                    class="block text-[10px] uppercase font-bold tracking-widest"
+                    style="color: var(--text-subtle)"
+                    for="settings-pin-input">Set or change PIN</label
+                  >
+                  <input
+                    id="settings-pin-input"
+                    type="password"
+                    maxlength="12"
+                    inputmode="numeric"
+                    placeholder="8 to 12 digits"
+                    class="ink-input w-full rounded-lg px-4 py-3 text-sm font-mono-cli"
+                  />
+                  <div class="flex gap-3">
+                    <button
+                      onclick="saveAccountPin()"
+                      class="btn-primary flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                    >
+                      Save PIN
+                    </button>
+                    <button
+                      onclick="removeAccountPin()"
+                      class="btn-secondary flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                    >
+                      Remove PIN
+                    </button>
+                  </div>
+                </div>
+                <div class="space-y-3">
+                  <label
+                    class="block text-[10px] uppercase font-bold tracking-widest"
+                    style="color: var(--text-subtle)"
+                    >Reset authenticator</label
+                  >
+                  <p class="text-xs" style="color: var(--text-muted)">
+                    Reset requires your current authenticator code unless you
+                    use the recovery email path allowed by your policy.
+                  </p>
+                  <div class="flex gap-3">
+                    <button
+                      onclick="resetTotpFromSettings()"
+                      class="btn-secondary flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                    >
+                      Use Current Authenticator
+                    </button>
+                    <button
+                      onclick="startTotpRecoveryEmailFlow()"
+                      class="btn-secondary flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                    >
+                      Use Recovery Email
+                    </button>
+                  </div>
+                  <div
+                    class="rounded-xl border px-4 py-4 text-xs space-y-2"
+                    style="
+                      border-color: rgba(96, 165, 250, 0.18);
+                      background: rgba(30, 58, 138, 0.08);
+                    "
+                  >
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold text-blue-300"
+                    >
+                      Setup secret
+                    </div>
+                    <div style="color: var(--text-muted)">
+                      The new secret is displayed during setup only.
+                      Save it in your authenticator before closing the setup dialog.
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="pt-6 border-t" style="border-color: var(--table-border)">
+                <div class="text-[11px] uppercase tracking-widest font-semibold" style="color: var(--text-subtle)">Approval Policy</div>
+              </div>
+              <div class="grid md:grid-cols-2 gap-6">
+                <div class="space-y-3">
+                  <label
+                    class="block text-[10px] uppercase font-bold tracking-widest"
+                    style="color: var(--text-subtle)"
+                    for="settings-action-auth-mode">Action verification</label
+                  >
+                  <select
+                    id="settings-action-auth-mode"
+                    class="ink-input w-full rounded-lg px-4 py-3 text-sm"
+                  >
+                    <option value="totp_only">TOTP only</option>
+                    <option value="totp_or_webauthn">
+                      TOTP or passkey
+                    </option>
+                    <option value="totp_or_pin">TOTP or PIN</option>
+                  </select>
+                  <div class="text-[11px]" style="color: var(--text-muted)">
+                    Select which configured methods can approve sensitive actions.
+                    This does not change the account's sign-in methods.
+                  </div>
+                </div>
+                <div class="space-y-3">
+                  <label
+                    class="block text-[10px] uppercase font-bold tracking-widest"
+                    style="color: var(--text-subtle)"
+                    for="settings-recovery-mode">Authenticator recovery</label
+                  >
+                  <select
+                    id="settings-recovery-mode"
+                    class="ink-input w-full rounded-lg px-4 py-3 text-sm"
+                  >
+                    <option value="totp_or_email">
+                      Current authenticator or recovery email
+                    </option>
+                    <option value="totp_only">
+                      Current authenticator only
+                    </option>
+                    <option value="email_only">Recovery email only</option>
+                  </select>
+                  <div class="text-[11px]" style="color: var(--text-muted)">
+                    Choose the permitted method for requesting an authenticator reset.
+                  </div>
+                </div>
+              </div>
+              <div class="space-y-3">
+                <label
+                  class="block text-[10px] uppercase font-bold tracking-widest"
+                  style="color: var(--text-subtle)"
+                  for="settings-auth-prompt-behavior">Preferred approval method</label
+                >
+                <select
+                  id="settings-auth-prompt-behavior"
+                  class="ink-input w-full rounded-lg px-4 py-3 text-sm"
+                >
+                  <option value="smart">Smart default</option>
+                  <option value="pin">Prefer PIN when available</option>
+                  <option value="webauthn">Prefer a passkey when available</option>
+                  <option value="totp">Prefer TOTP</option>
+                  <option value="manual">Manual choice</option>
+                </select>
+                <div class="text-[11px]" style="color: var(--text-muted)">
+                  Choose which available method is offered first.
+                  Other permitted methods remain available.
+                </div>
+              </div>
+              <button
+                onclick="saveSecurityModes()"
+                class="btn-primary w-full py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+              >
+                Save approval settings
+              </button>
+            </div>
+            <div id="settings-feedback-panel" class="acrylic-panel p-8 rounded-2xl space-y-6">
+              <div>
+                <h3
+                  class="text-sm font-bold uppercase tracking-widest"
+                  style="color: var(--text-main)"
+                >
+                  Product Feedback
+                </h3>
+                <p class="text-xs mt-2" style="color: var(--text-muted)">
+                  Tell us what is clear, what is confusing, and where the
+                  dashboard slowed you down.
+                </p>
+              </div>
+              <div class="grid md:grid-cols-3 gap-4">
+                <button
+                  onclick="setFeedbackSentiment('sharp')"
+                  id="feedback-tone-sharp"
+                  class="btn-secondary py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Clear
+                </button>
+                <button
+                  onclick="setFeedbackSentiment('confusing')"
+                  id="feedback-tone-confusing"
+                  class="btn-secondary py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Confusing
+                </button>
+                <button
+                  onclick="setFeedbackSentiment('blocked')"
+                  id="feedback-tone-blocked"
+                  class="btn-secondary py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Blocked
+                </button>
+              </div>
+              <div class="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label
+                    class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                    style="color: var(--text-subtle)"
+                    >Page</label
+                  >
+                  <input
+                    id="feedback-view"
+                    readonly="readonly"
+                    class="ink-input w-full rounded-lg px-4 py-3 text-sm opacity-70"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                    style="color: var(--text-subtle)"
+                    >Category</label
+                  >
+                  <select
+                    id="feedback-category"
+                    class="ink-input w-full rounded-lg px-4 py-3 text-sm"
+                  >
+                    <option value="ux">Dashboard clarity</option>
+                    <option value="launcher">Server controls</option>
+                    <option value="rollout">Placement or failover</option>
+                    <option value="telemetry">Logs or monitoring</option>
+                    <option value="billing">Billing or account</option>
+                    <option value="performance">Performance</option>
+                  </select>
+                </div>
+              </div>
+              <textarea
+                id="feedback-message"
+                rows="5"
+                class="ink-input w-full rounded-lg px-4 py-3 text-sm"
+                placeholder="What did you expect to happen, and what actually happened?"
+              ></textarea>
+              <div class="flex items-center justify-between gap-4 flex-wrap">
+                <div class="text-[11px]" style="color: var(--text-muted)">
+                  Feedback includes the current dashboard page and category. Do
+                  not include secrets, private keys, or proprietary code.
+                </div>
+                <button
+                  onclick="submitDashboardFeedback()"
+                  class="btn-primary px-6 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Send Feedback
+                </button>
+              </div>
+            </div>
+            <div id="settings-activity-panel" class="acrylic-panel p-8 rounded-2xl space-y-6">
+              <div>
+                <h3
+                  class="text-sm font-bold uppercase tracking-widest"
+                  style="color: var(--text-main)"
+                >
+                  Workspace Activity
+                </h3>
+                <p class="text-xs mt-2" style="color: var(--text-muted)">
+                  A quick summary of dashboard usage and feedback patterns for
+                  this workspace.
+                </p>
+              </div>
+              <div class="grid md:grid-cols-4 gap-4">
+                <div
+                  class="rounded-xl border px-4 py-4"
+                  style="
+                    border-color: var(--table-border);
+                    background: rgba(255, 255, 255, 0.02);
+                  "
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    First View
+                  </div>
+                  <div id="settings-first-view" class="text-sm mt-2">-</div>
+                </div>
+                <div
+                  class="rounded-xl border px-4 py-4"
+                  style="
+                    border-color: var(--table-border);
+                    background: rgba(255, 255, 255, 0.02);
+                  "
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    First Action
+                  </div>
+                  <div id="settings-first-action" class="text-sm mt-2">-</div>
+                </div>
+                <div
+                  class="rounded-xl border px-4 py-4"
+                  style="
+                    border-color: var(--table-border);
+                    background: rgba(255, 255, 255, 0.02);
+                  "
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Feedback
+                  </div>
+                  <div id="settings-feedback-count" class="text-sm mt-2">0</div>
+                </div>
+                <div
+                  class="rounded-xl border px-4 py-4"
+                  style="
+                    border-color: var(--table-border);
+                    background: rgba(255, 255, 255, 0.02);
+                  "
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Manual Reloads
+                  </div>
+                  <div id="settings-refresh-count" class="text-sm mt-2">0</div>
+                </div>
+              </div>
+              <div class="grid md:grid-cols-3 gap-6">
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                    style="color: var(--text-subtle)"
+                  >
+                    Most Visited
+                  </div>
+                  <div id="settings-top-views" class="space-y-2 text-xs"></div>
+                </div>
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                    style="color: var(--text-subtle)"
+                  >
+                    Most Used Actions
+                  </div>
+                  <div
+                    id="settings-top-actions"
+                    class="space-y-2 text-xs"
+                  ></div>
+                </div>
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                    style="color: var(--text-subtle)"
+                  >
+                    Reported Issues
+                  </div>
+                  <div
+                    id="settings-top-friction"
+                    class="space-y-2 text-xs"
+                  ></div>
+                </div>
+              </div>
+            </div>
+            <div
+              id="delete-account-section"
+              class="hidden p-8 space-y-4 border-t border-red-500/20"
+            >
+              <div class="flex items-start gap-4">
+                <i
+                  data-lucide="alert-octagon"
+                  class="w-6 h-6 text-red-400 shrink-0 mt-0.5"
+                ></i>
+                <div class="flex-1">
+                  <h3 class="text-sm font-bold text-red-300 mb-2">
+                    Danger Zone: Delete Account
+                  </h3>
+                  <p class="text-xs mb-4" style="color: var(--text-muted)">
+                    This action is permanent and cannot be undone. All your
+                    data, agents, and configurations will be permanently
+                    deleted.
+                  </p>
+                  <button
+                    onclick="confirmDeleteAccount()"
+                    class="btn-danger px-6 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                  >
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> Delete My
+                    Account
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div id="settings-trust-panel" class="p-8 space-y-6 border-t border-white/10">
+              <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+                <div>
+                  <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Infraveil Audit</div>
+                  <h3 class="text-xl text-white mt-2">Export the proof packet</h3>
+                  <p class="text-sm mt-2 max-w-3xl" style="color: var(--text-muted)">Download customer-side evidence: launcher and agent versions, launcher/agent source hashes, runtime contract hashes, manifest summary, cache state, action receipts, billing lock state, and the official runtime release manifest.</p>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-3">
+                  <button onclick="exportAuditEvidence()" class="btn-primary px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Export Audit</button>
+                  <button onclick="exportProofPacket()" class="btn-secondary px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Proof Packet</button>
+                  <button onclick="runLauncherDoctor()" class="btn-secondary px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Run Doctor</button>
+                </div>
+              </div>
+              <div id="settings-trust-summary" class="grid md:grid-cols-3 gap-3 text-xs"></div>
+              <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Proof Summary</div>
+                <div class="text-sm text-white mt-2">What the launcher and agents are reporting right now.</div>
+                <div id="settings-evidence-chain-list" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-4 text-xs"></div>
+              </div>
+            </div>
+          </div>

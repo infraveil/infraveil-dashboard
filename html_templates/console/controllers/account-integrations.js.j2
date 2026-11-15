@@ -1,0 +1,367 @@
+        function toggleSupportTicket(e) {
+          return supportController.toggleTicket(e);
+        }
+        function deleteSupportTicket(e, t = !1) {
+          return supportController.deleteTicket(e, t);
+        }
+        function refreshSupportTickets(e = !1) {
+          return supportController.refresh(e);
+        }
+        function submitSupportTicket() {
+          return supportController.submitTicket();
+        }
+        function submitSupportReply(e) {
+          return supportController.submitReply(e);
+        }
+        function markSupportTicketRead(e) {
+          return supportController.markRead(e);
+        }
+        async function saveAccountPin() {
+          const e = (
+            document.getElementById("settings-pin-input")?.value || ""
+          ).trim();
+          /^\d{8,12}$/.test(e)
+            ? showTotpPrompt("Save account PIN", async (t) => {
+                try {
+                  const n = await fetch(API.pin, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-TOTP-Auth": t,
+                      },
+                      body: JSON.stringify({ action: "set", pin: e }),
+                    }),
+                    o = await n.json().catch(() => ({}));
+                  if (!n.ok || !o.success)
+                    throw new Error(o.error || "Could not save PIN.");
+                  ((document.getElementById("settings-pin-input").value = ""),
+                    trackDashboardEvent(
+                      "action",
+                      getCurrentViewId(),
+                      "save_pin",
+                    ),
+                    await fetchAccountInfo(),
+                    showToast("PIN saved.", "success"));
+                } catch (e) {
+                  showToast(e.message || "Could not save PIN.", "error");
+                }
+              })
+            : showToast("PIN must be 8 to 12 digits.", "error");
+        }
+        async function removeAccountPin() {
+          showTotpPrompt("Remove account PIN", async (e) => {
+            try {
+              const t = await fetch(API.pin, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-TOTP-Auth": e,
+                  },
+                  body: JSON.stringify({ action: "remove" }),
+                }),
+                n = await t.json().catch(() => ({}));
+              if (!t.ok || !n.success)
+                throw new Error(n.error || "Could not remove PIN.");
+              (trackDashboardEvent("action", getCurrentViewId(), "remove_pin"),
+                await fetchAccountInfo(),
+                showToast("PIN removed.", "success"));
+            } catch (e) {
+              showToast(e.message || "Could not remove PIN.", "error");
+            }
+          });
+        }
+        async function resetTotpFromSettings() {
+          showTotpPrompt("Generate a new authenticator secret", async (e) => {
+            try {
+              const t = await fetch(API.resetTotp, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-TOTP-Auth": e,
+                  },
+                  body: JSON.stringify({}),
+                }),
+                n = await t.json().catch(() => ({}));
+              if (!t.ok || !n.success)
+                throw new Error(n.error || "Could not reset authenticator.");
+              (showTotpSetupModal(n),
+                trackDashboardEvent("action", getCurrentViewId(), "reset_totp"),
+                await fetchAccountInfo(),
+                showToast(
+                  "New authenticator secret generated. Complete setup in the secure modal, then confirm it from the login flow.",
+                  "success",
+                ));
+            } catch (e) {
+              showToast(e.message || "Could not reset authenticator.", "error");
+            }
+          });
+        }
+        async function startTotpRecoveryEmailFlow() {
+          try {
+            const e = await fetch(API.resetTotpEmailRequest, {
+                method: "POST",
+              }),
+              t = await e.json().catch(() => ({}));
+            if (!e.ok || !t.success)
+              throw new Error(t.error || "Could not send recovery code.");
+            showRecoveryCodePrompt();
+          } catch (e) {
+            showToast(e.message || "Could not send recovery code.", "error");
+          }
+        }
+        function showRecoveryCodePrompt() {
+          closeModal();
+          const e =
+            !APP_STATE.demo_mode &&
+            "totp_or_pin" === APP_STATE.action_auth_mode &&
+            APP_STATE.pin_enabled;
+          (createModal(
+            `\n                <div class="p-6">\n                    <h3 class="text-blue-400 font-bold tracking-widest uppercase mb-2 flex items-center gap-2"><i data-lucide="mail-check" class="w-4 h-4"></i> Email Recovery</h3>\n                    <p class="text-xs text-gray-400 mb-6">A recovery code was sent to the workspace email. Enter it below${e ? " along with your account PIN" : ""} to approve the authenticator reset.</p>\n                    <input type="text" id="modal-email-recovery-input" placeholder="RECOVERY CODE" maxlength="12" class="ink-input w-full rounded-lg px-4 py-3 text-center text-sm tracking-[0.25em] font-mono-cli text-blue-200 mb-4">\n                    ${e ? '<input type="password" id="modal-email-recovery-pin" placeholder="Account PIN" maxlength="12" class="ink-input w-full rounded-lg px-4 py-3 text-center text-sm font-mono-cli text-white mb-4">' : ""}\n                    <div class="flex justify-end gap-3">\n                        <button class="px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:bg-white/5 transition-colors" onclick="closeModal()">CANCEL</button>\n                        <button class="px-4 py-2 rounded-lg text-xs font-bold bg-blue-500 text-white hover:brightness-110 transition-all" id="modal-email-recovery-submit">AUTHORIZE RESET</button>\n                    </div>\n                </div>\n            `,
+          ),
+            (document.getElementById("modal-email-recovery-submit").onclick =
+              async () => {
+                const t = (
+                    document.getElementById("modal-email-recovery-input")
+                      ?.value || ""
+                  )
+                    .trim()
+                    .toUpperCase(),
+                  n = (
+                    document.getElementById("modal-email-recovery-pin")
+                      ?.value || ""
+                  ).trim();
+                if (!t) return showToast("Recovery code required.", "error");
+                if (e) {
+                  if (!/^\d{4,12}$/.test(n))
+                    return showToast("Valid account PIN required.", "error");
+                  ((_activeActionPin = n),
+                    setTimeout(() => {
+                      _activeActionPin = "";
+                    }, 15e3));
+                } else _activeActionPin = "";
+                try {
+                  const e = await fetch(API.resetTotp, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ email_code: t }),
+                    }),
+                    n = await e.json().catch(() => ({}));
+                  if (!e.ok || !n.success)
+                    throw new Error(
+                      n.error || "Could not reset authenticator.",
+                    );
+                  (showTotpSetupModal(n),
+                    trackDashboardEvent(
+                      "action",
+                      getCurrentViewId(),
+                      "reset_totp_email_recovery",
+                    ),
+                    await fetchAccountInfo(),
+                    closeModal(),
+                    showToast(
+                      "New authenticator secret generated from recovery flow. Complete setup in the secure modal.",
+                      "success",
+                    ));
+                } catch (e) {
+                  showToast(
+                    e.message || "Could not reset authenticator.",
+                    "error",
+                  );
+                }
+              }));
+        }
+        function showTotpSetupModal(e) {
+          closeModal();
+          const t = e?.totp_secret || "",
+            n = e?.totp_uri || "";
+          createModal(
+            `\n                <div class="p-6">\n                    <h3 class="text-blue-400 font-bold tracking-widest uppercase mb-2 flex items-center gap-2"><i data-lucide="shield-check" class="w-4 h-4"></i> Secure Authenticator Setup</h3>\n                    <p class="text-xs text-gray-400 mb-6">This secret is shown once for setup. It is not kept visible on the dashboard after you close this modal.</p>\n                    <div class="rounded-xl border px-4 py-4 mb-4" style="border-color: rgba(96,165,250,0.25); background: rgba(30,58,138,0.12)">\n                        <div class="text-[10px] uppercase tracking-widest font-bold text-blue-300 mb-2">Secret</div>\n                        <div class="font-mono-cli break-all text-blue-200 select-all">${escapeHtml(t)}</div>\n                    </div>\n                    <div class="rounded-xl border px-4 py-4 mb-6" style="border-color: rgba(255,255,255,0.08); background: rgba(255,255,255,0.03)">\n                        <div class="text-[10px] uppercase tracking-widest font-bold mb-2" style="color: var(--text-subtle)">otpauth URI</div>\n                        <div class="break-all text-xs select-all" style="color: var(--text-muted)">${escapeHtml(n)}</div>\n                    </div>\n                    <div class="flex justify-end gap-3">\n                        <button class="px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:bg-white/5 transition-colors" onclick="closeModal()">CLOSE</button>\n                    </div>\n                </div>\n            `,
+          );
+        }
+        async function saveSecurityModes() {
+          showTotpPrompt("Save account auth policy", async (e) => {
+            try {
+              const t =
+                  document.getElementById("settings-action-auth-mode")?.value ||
+                  "totp_only",
+                n =
+                  document.getElementById("settings-recovery-mode")?.value ||
+                  "totp_or_email",
+                s =
+                  document.getElementById("settings-auth-prompt-behavior")
+                    ?.value || "smart",
+                o = await fetch(API.securitySettings, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-TOTP-Auth": e,
+                  },
+                  body: JSON.stringify({
+                    action_auth_mode: t,
+                    recovery_mode: n,
+                    auth_prompt_behavior: s,
+                  }),
+                }),
+                r = await o.json().catch(() => ({}));
+              if (!o.ok || !r.success)
+                throw new Error(r.error || "Could not save auth policy.");
+              (trackDashboardEvent(
+                "action",
+                getCurrentViewId(),
+                "save_auth_policy",
+                { action_auth_mode: t, recovery_mode: n, auth_prompt_behavior: s },
+              ),
+                (APP_STATE.action_auth_mode = t),
+                (APP_STATE.recovery_mode = n),
+                (APP_STATE.auth_prompt_behavior = s),
+                (_securitySettingsDirty = !1),
+                await fetchAccountInfo(),
+                showToast("Auth policy saved.", "success"));
+            } catch (e) {
+              showToast(e.message || "Could not save auth policy.", "error");
+            }
+          });
+        }
+        function submitDashboardFeedback() {
+          return feedbackController.submit();
+        }
+        const INTEGRATION_META = {
+          slack: { label: "Slack", detail: "Post macro incidents, emergency actions, and audit events to the channel fixed by your Slack incoming webhook.", secret: "webhook_url", fields: [{ key: "channel_note", label: "Channel note", placeholder: "fixed by Slack webhook" }] },
+          teams: { label: "Microsoft Teams", detail: "Send evidence notifications to a Teams webhook using Adaptive Card format by default.", secret: "webhook_url", fields: [{ key: "payload_mode", label: "Payload mode", placeholder: "adaptive_card or simple_text" }] },
+          incident_io: { label: "incident.io", detail: "Create incident.io incidents from Infraveil macro incidents using the required severity, visibility, and idempotency contract.", secret: "api_key", fields: [{ key: "severity_id", label: "Severity ID", placeholder: "required from incident.io severities" }, { key: "incident_type_id", label: "Incident type ID", placeholder: "optional" }, { key: "visibility", label: "Visibility", placeholder: "private or public" }, { key: "mode", label: "Mode", placeholder: "standard, test, tutorial, retrospective" }] },
+          github: { label: "GitHub Issues", detail: "Open work items from runtime evidence or remediation proposals through the official GitHub Issues REST API.", secret: "token", fields: [{ key: "owner", label: "Owner", placeholder: "acme" }, { key: "repo", label: "Repo", placeholder: "backend" }, { key: "labels", label: "Labels", placeholder: "infraveil,runtime-evidence" }] },
+          generic_webhook: { label: "Generic Webhook", detail: "POST signed Infraveil evidence to your own edge receiver.", secret: "url", fields: [{ key: "signing_secret", label: "Signing secret", placeholder: "leave blank to keep existing" }] },
+          opentelemetry: { label: "OpenTelemetry", detail: "Store a vendor-neutral OTLP/HTTP endpoint reference. Runtime export stays explicit instead of silently changing control-plane behavior.", secret: "", fields: [{ key: "endpoint", label: "OTLP HTTP endpoint", placeholder: "https://collector.example.com/v1/logs" }, { key: "signal", label: "Signal", placeholder: "logs, traces, or metrics" }] },
+        };
+        const INTEGRATION_EVENTS = [
+          ["macro_incident", "Macro incident"],
+          ["emergency_action", "Emergency action"],
+          ["audit_export", "Audit export"],
+          ["remediation_proposal", "Remediation proposal"],
+          ["runtime_signal", "Runtime signal"],
+          ["security_signal", "Security signal"],
+        ];
+        function integrationSecretConfigured(e, t) {
+          if (Object.prototype.hasOwnProperty.call(t || {}, "configured")) return !!t.configured;
+          if ("slack" === e || "teams" === e) return !!t.webhook_url_configured;
+          if ("incident_io" === e) return !!t.api_key_configured;
+          if ("github" === e) return !!t.token_configured;
+          if ("generic_webhook" === e) return !!t.url_configured;
+          if ("opentelemetry" === e) return !!t.enabled && !!String(t.endpoint || "").trim();
+          return !1;
+        }
+        function renderIntegrations(e) {
+          _latestIntegrations = e || {};
+          const t = document.getElementById("integrations-grid"),
+            n = document.getElementById("integrations-status-summary"),
+            o = _latestIntegrations.integrations || {};
+          if (!t) return;
+          if (_integrationsDirty && "integrations" === getCurrentViewId()) return;
+          const r = Object.entries(INTEGRATION_META).filter(([e]) => o[e]).filter(([e]) => o[e].enabled).length,
+            s = Object.entries(INTEGRATION_META).filter(([e]) => integrationSecretConfigured(e, o[e] || {})).length;
+          n &&
+            (n.innerHTML = `
+              ${evidenceCard("Enabled", r, "Outbound bridges currently active.")}
+              ${evidenceCard("Configured", s, "Bridges with stored credentials or endpoints.")}
+              ${evidenceCard("Mode", "Outbound", "Evidence leaves Infraveil; runtime control stays here.")}
+              ${evidenceCard("Last Test", _latestIntegrations.last_test?.message || "-", _latestIntegrations.last_test?.tested_at || "No test recorded yet.")}
+            `);
+          t.innerHTML = Object.entries(INTEGRATION_META)
+            .map(([e, n]) => {
+              const r = o[e] || {},
+                s = integrationSecretConfigured(e, r),
+                a = (r.events || []).reduce((e, t) => ((e[t] = !0), e), {});
+              return `<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-5 space-y-4" data-integration-card="${e}">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <div class="text-sm text-white font-semibold">${escapeHtml(n.label)}</div>
+                      <span class="text-[9px] uppercase tracking-widest px-2 py-1 rounded-full border ${s ? "border-emerald-400/25 text-emerald-300 bg-emerald-500/10" : "border-white/10 text-slate-400 bg-white/[0.03]"}">${s ? "Configured" : "Not configured"}</span>
+                    </div>
+                    <p class="text-xs mt-2 leading-relaxed" style="color: var(--text-muted)">${escapeHtml(n.detail)}</p>
+                  </div>
+                  <label class="rem-check shrink-0 mt-1"><input type="checkbox" data-integration-field="${e}.enabled" ${r.enabled ? "checked" : ""} /><span class="rem-check-box"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span></label>
+                </div>
+                ${n.secret ? `<input class="ink-input w-full rounded-xl px-4 py-3 text-xs" data-integration-field="${e}.${n.secret}" placeholder="${s ? "Leave blank to keep existing secret" : "Paste " + n.secret.replaceAll("_", " ")}" type="${"url" === n.secret || "webhook_url" === n.secret ? "url" : "password"}" />` : ""}
+                ${n.fields.map((t) => `<label class="block"><span class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">${escapeHtml(t.label)}</span><input class="ink-input w-full rounded-xl px-4 py-3 text-xs mt-2" data-integration-field="${e}.${t.key}" value="${escapeHtml(r[t.key] || "")}" placeholder="${escapeHtml(t.placeholder || "")}" /></label>`).join("")}
+                <div class="grid grid-cols-2 gap-2 text-[11px]">
+                  ${INTEGRATION_EVENTS.map(([t, n]) => `<label class="flex items-center gap-2 rounded-xl border border-white/10 bg-black/10 px-3 py-2"><span class="rem-check"><input type="checkbox" data-integration-event="${e}.${t}" ${a[t] ? "checked" : ""} /><span class="rem-check-box"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span></span><span style="color: var(--text-muted)">${n}</span></label>`).join("")}
+                </div>
+                <button onclick="testIntegration('${e}')" class="btn-secondary w-full px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Test Bridge</button>
+              </div>`;
+            })
+            .join("");
+          t.querySelectorAll("[data-integration-field], [data-integration-event]").forEach((e) => {
+            const t = "checkbox" === e.type ? "change" : "input";
+            e.addEventListener(t, () => {
+              _integrationsDirty = !0;
+            });
+            "input" === t &&
+              e.addEventListener("change", () => {
+                _integrationsDirty = !0;
+              });
+          });
+          lucide.createIcons();
+        }
+        async function refreshIntegrations(e = !0) {
+          try {
+            const t = await fetchAPI(API.integrations, !0);
+            renderIntegrations(t || {});
+          } catch (t) {
+            e && showToast(t.message || "Could not load integrations.", "error");
+          }
+        }
+        function collectIntegrationsPayload() {
+          const e = { integrations: {} };
+          Object.keys(INTEGRATION_META).forEach((t) => (e.integrations[t] = { events: [] }));
+          document.querySelectorAll("[data-integration-field]").forEach((t) => {
+            const [n, o] = t.dataset.integrationField.split(".");
+            if (!e.integrations[n]) e.integrations[n] = { events: [] };
+            e.integrations[n][o] = "checkbox" === t.type ? t.checked : t.value.trim();
+          });
+          document.querySelectorAll("[data-integration-event]").forEach((t) => {
+            if (!t.checked) return;
+            const [n, o] = t.dataset.integrationEvent.split(".");
+            if (!e.integrations[n]) e.integrations[n] = { events: [] };
+            e.integrations[n].events.push(o);
+          });
+          return e;
+        }
+        async function saveIntegrations() {
+          showTotpPrompt("Save outbound integrations", async (e) => {
+            try {
+              const t = await fetch(API.integrations, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "X-TOTP-Auth": e },
+                  body: JSON.stringify(collectIntegrationsPayload()),
+                }),
+                n = await t.json().catch(() => ({}));
+              if (!t.ok || !n.success) throw new Error(n.error || "Could not save integrations.");
+              _integrationsDirty = !1;
+              renderIntegrations(n);
+              trackDashboardEvent("action", getCurrentViewId(), "save_integrations");
+              showToast("Integrations saved.", "success");
+            } catch (e) {
+              showToast(e.message || "Could not save integrations.", "error");
+            }
+          });
+        }
+        async function testIntegration(e) {
+          showTotpPrompt(`Test ${INTEGRATION_META[e]?.label || "integration"}`, async (t) => {
+            try {
+              const n = await fetch(API.integrationsTest, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "X-TOTP-Auth": t },
+                  body: JSON.stringify({ integration: e }),
+                }),
+                o = await n.json().catch(() => ({}));
+              if (!n.ok || !o.success) throw new Error(o.result?.error || o.error || "Integration test failed.");
+              await refreshIntegrations(!1);
+              trackDashboardEvent("action", getCurrentViewId(), "test_integration", { integration: e });
+              showToast("Integration test delivered.", "success");
+            } catch (e) {
+              await refreshIntegrations(!1);
+              showToast(e.message || "Integration test failed.", "error");
+            }
+          });
+        }

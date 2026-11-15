@@ -1,0 +1,409 @@
+<div
+            id="view-rollout"
+            class="view-section hidden max-w-7xl mx-auto space-y-6"
+          >
+            <div class="flex justify-between items-end gap-4 mb-4">
+              <div>
+                <h2 class="text-xl font-light" style="color: var(--text-main)">
+                  Placement
+                </h2>
+                <p class="text-sm mt-1" style="color: var(--text-muted)">
+                  Choose the default host behavior, set server priority, and pin
+                  APIs only when the default is not enough.
+                </p>
+              </div>
+              <div class="flex gap-3">
+                <button
+                  onclick="savePlacementPolicy()"
+                  class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Save Defaults
+                </button>
+                <button
+                  onclick="saveRolloutPlan()"
+                  class="btn-primary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Save Placement
+                </button>
+              </div>
+            </div>
+            <div class="acrylic-panel rounded-2xl overflow-hidden">
+              <div class="px-8 py-5">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <div class="rollout-step active flex items-center gap-2">
+                      <div
+                        class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold"
+                      >
+                        1
+                      </div>
+                      <span class="text-xs">Defaults</span>
+                    </div>
+                    <div class="w-8 h-px bg-white/10"></div>
+                    <div class="rollout-step flex items-center gap-2">
+                      <div
+                        class="w-8 h-8 rounded-full bg-white/10 text-white/50 flex items-center justify-center text-xs font-bold"
+                      >
+                        2
+                      </div>
+                      <span class="text-xs">Server Priority</span>
+                    </div>
+                    <div class="w-8 h-px bg-white/10"></div>
+                    <div class="rollout-step flex items-center gap-2">
+                      <div
+                        class="w-8 h-8 rounded-full bg-white/10 text-white/50 flex items-center justify-center text-xs font-bold"
+                      >
+                        3
+                      </div>
+                      <span class="text-xs">API Assignment</span>
+                    </div>
+                  </div>
+                  <button
+                    onclick="toggleRolloutAdvanced()"
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    <span id="rollout-advanced-label">Show Advanced</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="grid xl:grid-cols-[1fr_0.85fr] gap-6">
+              <div class="acrylic-panel rounded-2xl p-6">
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Simple Placement Flow
+                </div>
+                <div class="grid md:grid-cols-3 gap-4 mt-5">
+                  <div class="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                    <div class="text-sm text-white font-semibold">1. Defaults</div>
+                    <div class="text-xs mt-2" style="color: var(--text-muted)">
+                      Choose how Infraveil places new APIs unless you override
+                      them.
+                    </div>
+                  </div>
+                  <div class="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                    <div class="text-sm text-white font-semibold">2. Hosts</div>
+                    <div class="text-xs mt-2" style="color: var(--text-muted)">
+                      Choose which servers are preferred and when a server should
+                      be avoided.
+                    </div>
+                  </div>
+                  <div class="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                    <div class="text-sm text-white font-semibold">3. APIs</div>
+                    <div class="text-xs mt-2" style="color: var(--text-muted)">
+                      Pin specific APIs to a server only when the default is not
+                      enough.
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="acrylic-panel rounded-2xl p-6 space-y-4">
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Test Placement
+                  </div>
+                  <div class="text-sm mt-1" style="color: var(--text-muted)">
+                    Create temporary starter APIs to see how placement behaves
+                    across hosts.
+                  </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                  <label class="block"
+                    ><div
+                      class="text-[10px] uppercase tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Hosts
+                    </div>
+                    <input
+                      type="number"
+                      id="power-stack-host-count"
+                      min="1"
+                      max="15"
+                      value="2"
+                      class="ink-input w-full rounded-lg px-3 py-2 text-sm font-mono-cli"
+                  /></label>
+                  <label class="block"
+                    ><div
+                      class="text-[10px] uppercase tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      APIs
+                    </div>
+                    <input
+                      type="number"
+                      id="power-stack-count"
+                      min="1"
+                      max="15"
+                      value="3"
+                      class="ink-input w-full rounded-lg px-3 py-2 text-sm font-mono-cli"
+                  /></label>
+                  <label class="block min-w-0"
+                    ><div
+                      class="text-[10px] uppercase tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Prefix
+                    </div>
+                    <input
+                      id="power-stack-prefix"
+                      value="stack"
+                      class="ink-input w-full min-w-0 rounded-lg px-3 py-2 text-sm font-mono-cli"
+                      placeholder="stack prefix"
+                  /></label>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <select
+                    id="power-stack-placement-mode"
+                    class="ink-input w-full rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="spread">Balance across hosts</option>
+                    <option value="binpack">Fill one host first</option>
+                    <option value="region-first">Prefer region first</option>
+                  </select>
+                  <input
+                    id="power-stack-region"
+                    placeholder="region"
+                    class="ink-input w-full rounded-lg px-3 py-2 text-sm"
+                  />
+                  <input
+                    id="power-stack-labels"
+                    placeholder="labels"
+                    class="ink-input w-full rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+                <button
+                  onclick="launchPowerStack()"
+                  class="btn-primary w-full py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest flex justify-center items-center gap-2"
+                >
+                  <i data-lucide="layers-3" class="w-4 h-4"></i> Launch Test
+                  Stack
+                </button>
+              </div>
+            </div>
+            <div class="acrylic-panel rounded-2xl overflow-hidden">
+              <div id="rollout-step-1" class="p-8 space-y-6 rollout-step-content">
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    1. Default Placement
+                  </div>
+                  <div class="text-sm mt-1" style="color: var(--text-muted)">
+                    These defaults decide where new APIs go when you do not pin
+                    them manually.
+                  </div>
+                </div>
+                <div class="space-y-4">
+                  <label class="block"
+                    ><div
+                      class="text-[10px] uppercase tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Default Behavior
+                    </div>
+                    <select
+                      id="placement-mode"
+                      class="ink-input rounded-xl px-4 py-3 text-sm w-full"
+                    >
+                      <option value="spread">
+                        Balance across hosts
+                      </option>
+                      <option value="binpack">
+                        Fill one host first
+                      </option>
+                      <option value="region-first">
+                        Prefer region first
+                      </option>
+                    </select>
+                    <div
+                      class="text-[11px] mt-2"
+                      style="color: var(--text-muted)"
+                    >
+                      This is the normal rule. Specific API assignments below
+                      still win.
+                    </div></label
+                  >
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label class="block"
+                      ><div
+                        class="text-[10px] uppercase tracking-widest mb-2"
+                        style="color: var(--text-subtle)"
+                      >
+                        Preferred Region
+                      </div>
+                      <input
+                        id="placement-region"
+                        placeholder="any, us-east, eu-west"
+                        class="ink-input rounded-xl px-4 py-3 text-sm w-full"
+                    /></label>
+                    <label class="block"
+                      ><div
+                        class="text-[10px] uppercase tracking-widest mb-2"
+                        style="color: var(--text-subtle)"
+                      >
+                        Max APIs Per Server
+                      </div>
+                      <input
+                        id="placement-max-apis"
+                        type="number"
+                        min="1"
+                        max="1000"
+                        value="25"
+                        class="ink-input rounded-xl px-4 py-3 text-sm font-mono-cli w-full"
+                    /></label>
+                  </div>
+                  <label class="block"
+                    ><div
+                      class="text-[10px] uppercase tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      If Preferred Servers Are Full
+                    </div>
+                    <select
+                      id="placement-overflow-strategy"
+                      class="ink-input rounded-xl px-4 py-3 text-sm w-full"
+                    >
+                      <option value="least-loaded">
+                        Use the server with the most room
+                      </option>
+                    </select></label
+                  >
+                  <button
+                    onclick="rebalancePlacement()"
+                    class="btn-primary w-full py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                  >
+                    Apply Defaults Now
+                  </button>
+                </div>
+              </div>
+              <div id="rollout-step-2" class="p-8 space-y-6 border-t border-white/10 rollout-step-content">
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    2. Server Priority
+                  </div>
+                  <div class="text-sm mt-1" style="color: var(--text-muted)">
+                    Decide which servers receive work first and which are in
+                    maintenance. A saved backup candidate is a reference, not automatic recovery.
+                  </div>
+                  <div class="mt-4 flex flex-wrap gap-3">
+                    <button onclick="clearPlacementPlan()" class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">
+                      Reset Placement
+                    </button>
+                    <button onclick="saveRolloutPlan()" class="btn-primary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">
+                      Save Server Priority
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <div id="rollout-launcher-list" class="space-y-3"></div>
+                </div>
+              </div>
+              <div id="rollout-step-3" class="p-8 space-y-6 border-t border-white/10 rollout-step-content">
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    3. API Assignment
+                  </div>
+                  <div class="text-sm mt-1" style="color: var(--text-muted)">
+                    Only use this when a specific API must run on a specific
+                    server or start in a specific order.
+                  </div>
+                </div>
+                <div>
+                  <div id="rollout-api-list" class="space-y-3"></div>
+                </div>
+              </div>
+            </div>
+            <div
+              id="rollout-advanced-settings"
+              class="rollout-step-content hidden"
+            >
+              <div class="acrylic-panel rounded-2xl overflow-hidden">
+                <div
+                  class="px-8 py-5 border-b"
+                  style="border-color: var(--table-border)"
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Advanced Rules
+                  </div>
+                  <div class="text-sm mt-1" style="color: var(--text-muted)">
+                    Required server labels and the current cross-server recovery boundary.
+                    <p id="placement-failover-note" class="mt-2">
+                      Losing contact does not prove an app stopped. Automatic cross-server recovery is disabled until the previous owner can be fenced. Local app recovery and explicit fleet controls remain available; check the source and target before moving a workload.
+                    </p>
+                  </div>
+                </div>
+                <div class="p-6 space-y-4">
+                  <label class="block"
+                    ><div
+                      class="text-[10px] uppercase tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Only Use Servers With Labels
+                    </div>
+                    <input
+                      id="placement-required-labels"
+                      placeholder="prod, edge, gpu"
+                      class="ink-input rounded-xl px-4 py-3 text-sm w-full"
+                  /></label>
+                  <div class="space-y-3">
+                    <div
+                      class="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                    >
+                      <span class="text-sm text-white"
+                        >Automatic backup recovery (unavailable)</span
+                      >
+                      <label class="toggle-switch toggle-switch-sm"
+                        ><input
+                          id="placement-enable-failover"
+                          type="checkbox"
+                          disabled aria-describedby="placement-failover-note" /><span class="toggle-track"></span
+                      ></label>
+                    </div>
+                    <div
+                      class="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                    >
+                      <span class="text-sm text-white"
+                        >Move APIs after lost contact (unavailable)</span
+                      >
+                      <label class="toggle-switch toggle-switch-sm"
+                        ><input
+                          id="placement-auto-failover"
+                          type="checkbox"
+                          disabled aria-describedby="placement-failover-note" /><span class="toggle-track"></span
+                      ></label>
+                    </div>
+                    <div
+                      class="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                    >
+                      <span class="text-sm text-white"
+                        >Move APIs back automatically (unavailable)</span
+                      >
+                      <label class="toggle-switch toggle-switch-sm"
+                        ><input
+                          id="placement-rebalance-recovery"
+                          type="checkbox"
+                          disabled aria-describedby="placement-failover-note" /><span class="toggle-track"></span
+                      ></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>

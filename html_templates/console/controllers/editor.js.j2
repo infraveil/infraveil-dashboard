@@ -1,0 +1,800 @@
+        const DEFAULT_RUNTIME_CONTRACT = `{
+  "version": 1,
+  "mode": "external-process",
+  "source_custody": false,
+  "services": [
+    {
+      "name": "existing-api",
+      "runtime": "external",
+      "start": "systemctl start my-api",
+      "port": 8080,
+      "source_required": false,
+      "env": {}
+    }
+  ],
+  "routes": [
+    { "path": "/*", "service": "existing-api" }
+  ],
+  "gateway": { "listen": 18443 },
+  "persistent_paths": []
+}`;
+        const DEFAULT_EDITOR_FILES = {
+          "infraveil.json": DEFAULT_RUNTIME_CONTRACT,
+        };
+        let editorFiles = { ...DEFAULT_EDITOR_FILES },
+          editorFolders = new Set(),
+          currentTab = "infraveil.json",
+          selectedEditorFolder = "",
+          editorFileFilter = "",
+          pendingEditorEntry = null,
+          runtimeContractEditorBound = false;
+        const EDITOR_FILE_META = {
+          "infraveil.json": { lang: "JSON", color: "#c4b5fd" },
+          "package.json": { lang: "JSON", color: "#c4b5fd" },
+          "server.js": { lang: "Node.js", color: "#93c5fd" },
+          "config.json": { lang: "JSON", color: "#c4b5fd" },
+        };
+        function normalizeEditorPath(e) {
+          const t = String(e || "")
+              .replace(/\\/g, "/")
+              .replace(/^\/+|\/+$/g, "")
+              .replace(/\/+/g, "/"),
+            n = [
+              "logs",
+              "__pycache__",
+              "node_modules",
+              ".git",
+              "venv",
+              ".venv",
+            ];
+          return !t ||
+            t.includes("..") ||
+            t.startsWith(".") ||
+            t.split("/").some((e) => !e || n.includes(e))
+            ? ""
+            : t;
+        }
+        function editorJsString(e) {
+          return String(e || "")
+            .replace(/\\/g, "\\\\")
+            .replace(/'/g, "\\'");
+        }
+        function ensureEditorFolderAncestors(e) {
+          const t = normalizeEditorPath(e);
+          if (!t) return;
+          const n = t.split("/").filter(Boolean);
+          let o = "";
+          n.forEach((e) => {
+            ((o = o ? `${o}/${e}` : e), editorFolders.add(o));
+          });
+        }
+        function sanitizeEditorState() {
+          const e = {};
+          (Object.entries(editorFiles || {}).forEach(([t, n]) => {
+            const o = normalizeEditorPath(t);
+            o && (e[o] = n || "");
+          }),
+            (editorFiles = e),
+            (editorFolders = new Set(
+              Array.from(editorFolders || [])
+                .map(normalizeEditorPath)
+                .filter(Boolean),
+            )),
+            currentTab &&
+              !editorFiles.hasOwnProperty(currentTab) &&
+              (currentTab = Object.keys(editorFiles)[0] || ""));
+        }
+        function setEditorFileFilter(e) {
+          ((editorFileFilter = String(e || "")
+            .trim()
+            .toLowerCase()),
+            renderEditorFileTree());
+        }
+        function startPendingEditorEntry(e, t = "") {
+          if (APP_STATE.demo_mode)
+            return showToast(
+              `Demo runtime package is read-only. Create an account to edit optional ${"folder" === e ? "folders" : "files"}.`,
+              "info",
+            );
+          ((pendingEditorEntry = {
+            kind: e,
+            parent: normalizeEditorPath(t || selectedEditorFolder),
+          }),
+            renderEditorFileTree(),
+            setTimeout(() => {
+              const e = document.getElementById("editor-pending-input");
+              e && e.focus();
+            }, 0));
+        }
+        function cancelPendingEditorEntry() {
+          ((pendingEditorEntry = null), renderEditorFileTree());
+        }
+        function submitPendingEditorEntry() {
+          if (!pendingEditorEntry) return;
+          const e = document.getElementById("editor-pending-input"),
+            t = e ? e.value : "",
+            n = String(t || "")
+              .trim()
+              .replace(/\\/g, "/"),
+            o = pendingEditorEntry.parent || "",
+            r = normalizeEditorPath(
+              o && n && !n.startsWith(o + "/") ? `${o}/${n}` : n || o,
+            );
+          if (r) {
+            if ("folder" === pendingEditorEntry.kind)
+              return (
+                ensureEditorFolderAncestors(r),
+                (selectedEditorFolder = r),
+                (pendingEditorEntry = null),
+                renderEditorFileTree(),
+                void showToast(`${r}/ created in workload tree`, "success")
+              );
+            if (editorFiles.hasOwnProperty(r))
+              return (
+                (pendingEditorEntry = null),
+                renderEditorFileTree(),
+                void switchEditorTab(r)
+              );
+            (ensureEditorFolderAncestors(r.split("/").slice(0, -1).join("/")),
+              (editorFiles[r] = ""),
+              (pendingEditorEntry = null),
+              switchEditorTab(r),
+              showToast(`${r} created in workload tree`, "success"));
+          } else
+            showToast(
+              "Enter a valid relative path inside the workspace.",
+              "error",
+            );
+        }
+        function buildEditorTreeModel() {
+          const e = { folders: new Map(), files: [] },
+            t = Object.keys(editorFiles)
+              .filter(Boolean)
+              .sort((e, t) => e.localeCompare(t)),
+            n = new Set(Array.from(editorFolders).filter(Boolean));
+          t.forEach((e) => {
+            const t = e.split("/");
+            let o = "";
+            t.slice(0, -1).forEach((e) => {
+              ((o = o ? `${o}/${e}` : e), n.add(o));
+            });
+          });
+          const o = (t) => {
+            let n = e,
+              o = "";
+            return (
+              t
+                .split("/")
+                .filter(Boolean)
+                .forEach((e) => {
+                  ((o = o ? `${o}/${e}` : e),
+                    n.folders.has(e) ||
+                      n.folders.set(e, {
+                        folders: new Map(),
+                        files: [],
+                        path: o,
+                        name: e,
+                      }),
+                    (n = n.folders.get(e)));
+                }),
+              n
+            );
+          };
+          return (
+            Array.from(n)
+              .sort((e, t) => e.localeCompare(t))
+              .forEach((e) => {
+                const t = e.split("/").filter(Boolean),
+                  n = t[t.length - 1],
+                  r = t.slice(0, -1).join("/"),
+                  s = o(r);
+                s.folders.has(n) ||
+                  s.folders.set(n, {
+                    folders: new Map(),
+                    files: [],
+                    path: e,
+                    name: n,
+                  });
+              }),
+            t.forEach((e) => {
+              const t = e.split("/"),
+                n = t[t.length - 1],
+                r = t.slice(0, -1).join("/");
+              o(r).files.push({ path: e, name: n });
+            }),
+            e
+          );
+        }
+        function editorNodeMatchesFilter(e, t) {
+          return (
+            !t ||
+            !!(e.path || "").toLowerCase().includes(t) ||
+            !!(e.files || []).some((e) => e.path.toLowerCase().includes(t)) ||
+            Array.from(e.folders.values()).some((e) =>
+              editorNodeMatchesFilter(e, t),
+            )
+          );
+        }
+        function getEditorMeta(e) {
+          return EDITOR_FILE_META[e]
+            ? EDITOR_FILE_META[e]
+            : e.endsWith(".json")
+              ? { lang: "JSON", color: "#c4b5fd" }
+              : e.endsWith(".py")
+                ? { lang: "Python", color: "#7dd3fc" }
+                : e.endsWith(".js") || e.endsWith(".mjs") || e.endsWith(".cjs")
+                  ? { lang: "Node.js", color: "#93c5fd" }
+                  : e.endsWith(".ts")
+                    ? { lang: "TypeScript", color: "#93c5fd" }
+                    : e.endsWith(".go")
+                      ? { lang: "Go", color: "#67e8f9" }
+                      : e.endsWith(".rs")
+                        ? { lang: "Rust", color: "#fdba74" }
+                        : e.endsWith(".java")
+                          ? { lang: "Java", color: "#fca5a5" }
+                          : e.endsWith(".md")
+                            ? { lang: "Markdown", color: "#cbd5e1" }
+                            : { lang: "Text", color: "#cbd5e1" };
+        }
+        function getEditorMode(e) {
+          if (e.endsWith(".json")) return { name: "javascript", json: !0 };
+          if (e.endsWith(".py")) return "python";
+          if (e.endsWith(".js") || e.endsWith(".mjs") || e.endsWith(".cjs")) return "javascript";
+          if (e.endsWith(".ts")) return "text/typescript";
+          if (e.endsWith(".html") || e.endsWith(".htm")) return "htmlmixed";
+          if (e.endsWith(".css")) return "css";
+          if (e.endsWith(".yml") || e.endsWith(".yaml")) return "yaml";
+          if (e.endsWith(".sh") || e.endsWith(".bash")) return "shell";
+          if (e.endsWith(".go")) return "go";
+          if (e.endsWith(".rs")) return "rust";
+          if (e.endsWith(".java")) return "text/x-java";
+          if (e.endsWith(".md")) return "markdown";
+          return "text/plain";
+        }
+        function initRuntimeContractEditor() {
+          const e = document.getElementById("source-code-editor");
+          if (!e || e.dataset.runtimeContractBound) return;
+          e.dataset.runtimeContractBound = "1";
+          runtimeContractEditorBound = true;
+          e.readOnly = false;
+          e.addEventListener("input", () => {
+            currentTab &&
+              editorFiles.hasOwnProperty(currentTab) &&
+              ((editorFiles[currentTab] = e.value),
+              updateEditorStats(),
+              window.validateInfraveilContract?.(),
+              clearTimeout(_hashDebounce),
+              (_hashDebounce = setTimeout(updateEditorHash, 120)));
+          });
+          e.addEventListener("keyup", updateEditorCursorStatus);
+          e.addEventListener("click", updateEditorCursorStatus);
+        }
+        function getEditorValue() {
+          const e = document.getElementById("source-code-editor");
+          return e ? e.value : "";
+        }
+        function setEditorValue(e) {
+          initRuntimeContractEditor();
+          const t = document.getElementById("source-code-editor");
+          t && ((t.value = e || ""), (t.readOnly = false), window.validateInfraveilContract?.());
+        }
+        function iconForEditorFile(e) {
+          return e.endsWith(".json")
+            ? "braces"
+            : e.endsWith(".py") ||
+                e.endsWith(".js") ||
+                e.endsWith(".ts") ||
+                e.endsWith(".go") ||
+                e.endsWith(".rs") ||
+                e.endsWith(".java")
+              ? "file-code-2"
+              : e.endsWith(".md") || e.endsWith(".txt")
+                ? "file-text"
+                : "file";
+        }
+        function renderEditorFileTree() {
+          const e = document.getElementById("editor-file-tree");
+          if (!e) return;
+          sanitizeEditorState();
+          const t = editorFileFilter,
+            n = [],
+            o = buildEditorTreeModel(),
+            r = (e, t) => {
+              if (!pendingEditorEntry || pendingEditorEntry.parent !== e)
+                return;
+              const o = "folder" === pendingEditorEntry.kind;
+              n.push(
+                `\n                    <div class="explorer-inline-row" style="margin-left:${14 * t + 6}px">\n                        <i data-lucide="${o ? "folder-plus" : "file-plus"}" class="w-3.5 h-3.5 text-sky-300 shrink-0"></i>\n                        <input id="editor-pending-input" class="explorer-inline-input font-mono-cli" placeholder="${o ? "new-folder" : "new-file.js"}" onkeydown="if (event.key === 'Enter') submitPendingEditorEntry(); if (event.key === 'Escape') cancelPendingEditorEntry();">\n                        <span class="explorer-inline-actions">\n                            <button type="button" class="explorer-inline-btn" onclick="submitPendingEditorEntry()" title="Create"><i data-lucide="check" class="w-3.5 h-3.5"></i></button>\n                            <button type="button" class="explorer-inline-btn" onclick="cancelPendingEditorEntry()" title="Cancel"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>\n                        </span>\n                    </div>`,
+              );
+            },
+            s = (e, o = 0, a = "") => {
+              "" === a && r("", 0);
+              (Array.from(e.folders.values())
+                .sort((e, t) => e.name.localeCompare(t.name))
+                .forEach((e) => {
+                  const a = e.path;
+                  if (t && !editorNodeMatchesFilter(e, t)) return;
+                  const i = editorJsString(a),
+                    l = a === selectedEditorFolder ? " active" : "";
+                  (n.push(
+                    `\n                        <button type="button" onclick="selectEditorFolder('${i}')" class="file-tree-folder${l}" style="padding-left:${14 * o + 6}px" title="${escapeCodeHtml(a)}/">\n                            <i data-lucide="${a === selectedEditorFolder ? "folder-open" : "folder"}" class="w-3.5 h-3.5"></i>\n                            <span class="truncate">${escapeCodeHtml(e.name)}</span>\n                            <span class="file-tree-actions">\n                                <span onclick="event.stopPropagation(); createEditorFile('${i}')" class="file-tree-action" title="New file here"><i data-lucide="file-plus" class="w-3 h-3"></i></span>\n                                <span onclick="event.stopPropagation(); createEditorFolder('${i}')" class="file-tree-action" title="New folder here"><i data-lucide="folder-plus" class="w-3 h-3"></i></span>\n                                <span onclick="event.stopPropagation(); deleteEditorFolder('${i}')" class="file-tree-action" title="Delete folder"><i data-lucide="trash-2" class="w-3 h-3"></i></span>\n                            </span>\n                        </button>`,
+                  ),
+                    r(a, o + 1),
+                    s(e, o + 1, a));
+                }),
+                e.files
+                  .sort((e, t) => e.name.localeCompare(t.name))
+                  .forEach((e) => {
+                    if (t && !e.path.toLowerCase().includes(t)) return;
+                    const r = editorJsString(e.path);
+                    n.push(
+                      `<button type="button" onclick="switchEditorTab('${r}')" class="file-tree-item${e.path === currentTab ? " active" : ""}" style="padding-left:${14 * o + 10}px" title="${escapeCodeHtml(e.path)}"><i data-lucide="${iconForEditorFile(e.path)}" class="w-3.5 h-3.5"></i><span class="truncate">${escapeCodeHtml(e.name)}</span></button>`,
+                    );
+                  }));
+            };
+          (s(o, 0, ""),
+            (e.innerHTML =
+              n.join("") ||
+              `<div class="rounded-lg border border-dashed px-3 py-6 text-center text-[11px]" style="border-color: rgba(255,255,255,0.08); color: #7f8aa3">${t ? "No matching files or folders." : "No optional package files. A runtime contract is enough for no-source governance."}</div>`),
+            window.lucide && lucide.createIcons());
+        }
+        function selectEditorFolder(e) {
+          ((selectedEditorFolder = normalizeEditorPath(e)),
+            renderEditorFileTree(),
+            showToast(
+              `Selected ${selectedEditorFolder || "root"} folder`,
+              "info",
+            ));
+        }
+        function switchEditorTab(e) {
+          if ((initRuntimeContractEditor(), !editorFiles.hasOwnProperty(e))) return;
+          const t = getEditorValue();
+          (currentTab &&
+            editorFiles.hasOwnProperty(currentTab) &&
+            "Loading runtime contract from server..." !== t &&
+            (editorFiles[currentTab] = t),
+            (currentTab = e),
+            setEditorValue(editorFiles[e] || ""),
+            renderEditorFileTree());
+          const n = getEditorMeta(e),
+            o = document.getElementById("editor-file-title");
+          o && (o.textContent = e);
+          const r = document.getElementById("editor-breadcrumb");
+          r && (r.textContent = e);
+          const s = document.getElementById("editor-language-badge");
+          s && (s.textContent = n.lang);
+          const a = document.getElementById("editor-status-language");
+          a && (a.textContent = n.lang);
+          const i = document.getElementById("hash-tab-label");
+          (i && (i.textContent = e),
+            updateEditorStats(),
+            updateEditorCursorStatus(),
+            updateEditorHash(),
+            "infraveil.json" === e ? showRuntimeConfigPanel() : renderRuntimeConfigPanel());
+        }
+        function updateEditorStats() {
+          const e = document.getElementById("editor-line-count"),
+            t = document.getElementById("editor-file-count"),
+            n = Object.keys(editorFiles).length;
+          t && (t.textContent = n);
+          const o = document.getElementById("editor-status-files");
+          if ((o && (o.textContent = "INFRAVEIL.json"), !e))
+            return;
+          const r = getEditorValue(),
+            s = r ? r.split("\n").length : 0,
+            a = `${s} ${1 === s ? "line" : "lines"}`;
+          e.textContent = a;
+          const i = document.getElementById("editor-status-lines");
+          i && (i.textContent = a);
+        }
+        function updateEditorCursorStatus() {
+          let e = 1,
+            t = 1;
+          const n = document.getElementById("source-code-editor");
+          if (n) {
+            const o = n.selectionStart || 0,
+              r = n.value.slice(0, o).split("\n");
+            ((e = r.length), (t = r[r.length - 1].length + 1));
+          }
+          const o = `Ln ${e}, Col ${t}`,
+            r = document.getElementById("editor-selection-status");
+          r && (r.textContent = o);
+          const s = document.getElementById("editor-status-cursor");
+          s && (s.textContent = o);
+        }
+        function escapeCodeHtml(e) {
+          return String(e)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        }
+        function highlightEditorLine(e, t) {
+          let n = escapeCodeHtml(e);
+          return t.endsWith(".json")
+            ? ((n = n.replace(
+                /(&quot;[^&]*?&quot;)(\s*:)/g,
+                '<span class="tok-prop">$1</span>$2',
+              )),
+              (n = n.replace(
+                /:\s*(&quot;.*?&quot;)/g,
+                ': <span class="tok-str">$1</span>',
+              )),
+              (n = n.replace(
+                /\b(true|false|null)\b/g,
+                '<span class="tok-bool">$1</span>',
+              )),
+              (n = n.replace(
+                /\b(-?\d+(?:\.\d+)?)\b/g,
+                '<span class="tok-num">$1</span>',
+              )),
+              n)
+            : t.endsWith(".py")
+              ? ((n = n.replace(
+                  /(#.*)$/g,
+                  '<span class="tok-comment">$1</span>',
+                )),
+                (n = n.replace(
+                  /(&quot;.*?&quot;|&#39;.*?&#39;)/g,
+                  '<span class="tok-str">$1</span>',
+                )),
+                (n = n.replace(
+                  /\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|lambda|yield|async|await|True|False|None|raise|pass|break|continue|in|is|not|and|or)\b/g,
+                  '<span class="tok-key">$1</span>',
+                )),
+                (n = n.replace(
+                  /\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()/g,
+                  '<span class="tok-fn">$1</span>',
+                )),
+                (n = n.replace(
+                  /\b(-?\d+(?:\.\d+)?)\b/g,
+                  '<span class="tok-num">$1</span>',
+                )),
+                n)
+              : t.endsWith(".js")
+                ? ((n = n.replace(
+                    /(\/\/.*)$/g,
+                    '<span class="tok-comment">$1</span>',
+                  )),
+                  (n = n.replace(
+                    /(`.*?`|&quot;.*?&quot;|&#39;.*?&#39;)/g,
+                    '<span class="tok-str">$1</span>',
+                  )),
+                  (n = n.replace(
+                    /\b(const|let|var|function|return|if|else|for|while|try|catch|finally|async|await|new|class|extends|import|export|from|require|module|true|false|null|undefined)\b/g,
+                    '<span class="tok-key">$1</span>',
+                  )),
+                  (n = n.replace(
+                    /\b([A-Za-z_$][A-Za-z0-9_$]*)\s*(?=\()/g,
+                    '<span class="tok-fn">$1</span>',
+                  )),
+                  (n = n.replace(
+                    /\b(-?\d+(?:\.\d+)?)\b/g,
+                    '<span class="tok-num">$1</span>',
+                  )),
+                  n)
+                : n.replace(
+                    /(^\s*#.*$)/g,
+                    '<span class="tok-comment">$1</span>',
+                  );
+        }
+        function copyCurrentEditorFile() {
+          navigator.clipboard
+            .writeText(getEditorValue() || "")
+            .then(() => showToast(`${currentTab} copied`, "info"));
+        }
+        function showEditorInputModal({
+          title: e,
+          body: t,
+          label: n,
+          placeholder: o,
+          initialValue: r = "",
+          confirmText: s = "Create",
+          onConfirm: a,
+        }) {
+          const i = createModal(
+              `\n                <div class="flex items-start gap-3 mb-5">\n                    <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-400/20 flex items-center justify-center text-blue-300">\n                        <i data-lucide="folder-code" class="w-5 h-5"></i>\n                    </div>\n                    <div>\n                        <h3 class="text-lg text-white">${e}</h3>\n                        <p class="text-xs mt-1 leading-relaxed" style="color: var(--text-muted)">${t || "Use a safe relative path inside the workload package."}</p>\n                    </div>\n                </div>\n                <label class="block text-[10px] uppercase tracking-widest font-bold mb-2" style="color: var(--text-subtle)">${n}</label>\n                <input id="editor-modal-input" class="ink-input w-full rounded-lg px-4 py-3 text-sm font-mono-cli mb-4" placeholder="${o || ""}" value="${escapeCodeHtml(r)}">\n                <div class="rounded-lg border px-3 py-3 text-[11px] mb-5" style="border-color: var(--table-border); background: var(--nav-hover); color: var(--text-muted)">\n                    Paths are relative to the runtime package. Reserved folders like <code>.git</code>, <code>node_modules</code>, <code>venv</code>, and <code>logs</code> are blocked.\n                </div>\n                <div class="flex gap-3">\n                    <button id="editor-modal-cancel" class="btn-secondary flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest">Cancel</button>\n                    <button id="editor-modal-confirm" class="btn-primary flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest">${s}</button>\n                </div>\n            `,
+            ),
+            l = i.querySelector("#editor-modal-input"),
+            c = i.querySelector("#editor-modal-cancel"),
+            d = i.querySelector("#editor-modal-confirm"),
+            u = () => i.remove();
+          (c.addEventListener("click", u),
+            d.addEventListener("click", () => {
+              const e = normalizeEditorPath(l.value);
+              if (!e)
+                return showToast(
+                  'File path is required. Enter something like "server.js" or "service/worker.py".',
+                  "error",
+                );
+              (u(), a(e));
+            }),
+            l.addEventListener("keydown", (e) => {
+              ("Enter" === e.key && d.click(), "Escape" === e.key && u());
+            }),
+            setTimeout(() => l.focus(), 30));
+        }
+        function showEditorConfirmModal({
+          title: e,
+          body: t,
+          confirmText: n = "Delete",
+          danger: o = !0,
+          onConfirm: r,
+        }) {
+          const s = createModal(
+            `\n                <div class="p-6 sm:p-7">\n                    <div class="flex items-start gap-4 mb-6">\n                        <div class="w-11 h-11 rounded-2xl ${o ? "bg-red-500/10 border-red-400/25 text-red-300" : "bg-blue-500/10 border-blue-400/25 text-blue-300"} border flex items-center justify-center shrink-0">\n                            <i data-lucide="${o ? "trash-2" : "check-circle"}" class="w-5 h-5"></i>\n                        </div>\n                        <div class="min-w-0">\n                            <h3 class="text-lg leading-tight text-white font-semibold">${e}</h3>\n                            <p class="text-sm mt-3 leading-6" style="color: var(--text-muted)">${t}</p>\n                        </div>\n                    </div>\n                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-5 border-t" style="border-color: var(--table-border)">\n                        <button id="editor-confirm-cancel" class="btn-secondary min-h-[3rem] rounded-xl text-[10px] font-bold uppercase tracking-widest">Cancel</button>\n                        <button id="editor-confirm-ok" class="${o ? "btn-danger" : "btn-primary"} min-h-[3rem] rounded-xl text-[10px] font-bold uppercase tracking-widest">${n}</button>\n                    </div>\n                </div>\n            `,
+            "w-full max-w-lg mx-4",
+          );
+          (s
+            .querySelector("#editor-confirm-cancel")
+            .addEventListener("click", () => s.remove()),
+            s
+              .querySelector("#editor-confirm-ok")
+              .addEventListener("click", () => {
+                (s.remove(), r());
+              }));
+        }
+        function createEditorFile(e = "") {
+          startPendingEditorEntry("file", e);
+        }
+        function createEditorFolder(e = "") {
+          startPendingEditorEntry("folder", e);
+        }
+        function syncCurrentEditorFile() {
+          currentTab &&
+            editorFiles.hasOwnProperty(currentTab) &&
+            (editorFiles[currentTab] = getEditorValue());
+        }
+        const runtimeSetupController = window.InfraveilUI.runtimeSetup.createController({
+          document,
+          readEditorFiles: () => editorFiles,
+          readCurrentTab: () => currentTab,
+          isDemo: () => APP_STATE.demo_mode,
+          syncCurrentEditorFile,
+          switchEditorTab,
+          showRawRuntimeJson,
+          ensureManifestFile() {
+            editorFiles.hasOwnProperty("infraveil.json") || (editorFiles["infraveil.json"] = "");
+          },
+          applyDraftText(text) {
+            editorFiles["infraveil.json"] = text;
+            setEditorValue(editorFiles["infraveil.json"]);
+            updateEditorStats();
+            updateEditorHash();
+          },
+          showToast,
+          escapeCodeHtml,
+          refreshIcons: () => { window.lucide && lucide.createIcons(); },
+          requestSave: () => deployCode(),
+        });
+        function parseEditorJsonFile(e) { return runtimeSetupController.parseEditorJsonFile(e); }
+        function editorFileStem(e) { return runtimeSetupController.editorFileStem(e); }
+        function firstExistingEditorFile(e) { return runtimeSetupController.firstExistingEditorFile(e); }
+        function portFromEditorContent(e, t) { return runtimeSetupController.portFromEditorContent(e, t); }
+        function detectRuntimeServicesFromEditor() { return runtimeSetupController.detectRuntimeServicesFromEditor(); }
+        function buildGuidedRuntimeManifest() { return runtimeSetupController.buildGuidedRuntimeManifest(); }
+        function getRuntimeManifestDraft() { return runtimeSetupController.getRuntimeManifestDraft(); }
+        function commandInstallDefault(e) { return runtimeSetupController.commandInstallDefault(e); }
+        function commandBuildDefault(e) { return runtimeSetupController.commandBuildDefault(e); }
+        function normalizeRuntimeServiceForForm(e, t = 0) { return runtimeSetupController.normalizeRuntimeServiceForForm(e, t); }
+        function collectRuntimeConfigFromForm() { return runtimeSetupController.collectRuntimeConfigFromForm(); }
+        function applyRuntimeConfigForm({ stay = !0 } = {}) {
+          if (APP_STATE.demo_mode)
+            return showToast("Demo runtime contract is read-only. Create an account to apply runtime changes.", "info");
+          const e = collectRuntimeConfigFromForm();
+          if (!e.services.length) return showToast("Add at least one service.", "error");
+          editorFiles["infraveil.json"] = JSON.stringify(e, null, 2);
+          setEditorValue(editorFiles["infraveil.json"]);
+          renderRuntimeConfigPanel();
+          renderEditorFileTree();
+          updateEditorStats();
+          updateEditorHash();
+          showToast("Runtime configuration updated.", "success");
+          stay || showRawRuntimeJson();
+        }
+        function addRuntimeConfigService() {
+          if (APP_STATE.demo_mode)
+            return showToast("Demo runtime contract is read-only. Create an account to add services.", "info");
+          const e = collectRuntimeConfigFromForm();
+          e.services.push({
+            name: `service-${e.services.length + 1}`,
+            runtime: "node",
+            entrypoint: "server.js",
+            install: editorFiles.hasOwnProperty("package-lock.json") ? "npm ci" : "npm install",
+            build: "",
+            start: "npm start",
+            port: 18444 + e.services.length,
+          });
+          editorFiles["infraveil.json"] = JSON.stringify(e, null, 2);
+          setEditorValue(editorFiles["infraveil.json"]);
+          renderRuntimeConfigPanel();
+          updateEditorStats();
+          updateEditorHash();
+        }
+        function removeRuntimeConfigService(e) {
+          if (APP_STATE.demo_mode)
+            return showToast("Demo runtime contract is read-only. Create an account to remove services.", "info");
+          const t = collectRuntimeConfigFromForm();
+          t.services.splice(e, 1);
+          editorFiles["infraveil.json"] = JSON.stringify(t, null, 2);
+          setEditorValue(editorFiles["infraveil.json"]);
+          renderRuntimeConfigPanel();
+          updateEditorStats();
+          updateEditorHash();
+        }
+        function showRawRuntimeJson() {
+          const e = document.getElementById("runtime-config-panel");
+          e && e.classList.remove("active");
+          initRuntimeContractEditor();
+        }
+        function showRuntimeConfigPanel() {
+          // The field-based "Runtime Setup" form was removed in favor of the Guided wizard
+          // (default) + raw JSON (Manual). Any legacy caller just lands on the raw editor.
+          showRawRuntimeJson();
+        }
+        function renderRuntimeConfigPanel() {
+          // Form panel retired (Guided wizard is the default editing surface). Keep the overlay
+          // element empty + inactive so the raw JSON editor shows underneath.
+          const e = document.getElementById("runtime-config-panel");
+          if (e) { e.classList.remove("active"); e.innerHTML = ""; }
+        }
+        function maybeOfferRuntimeSetupGuide() { return runtimeSetupController.maybeOfferRuntimeSetupGuide(); }
+        function openRuntimeSetupGuide() { return runtimeSetupController.openRuntimeSetupGuide(); }
+        function openRuntimeWizard() { return runtimeSetupController.openRuntimeWizard(); }
+        function closeRuntimeWizard() { return runtimeSetupController.closeRuntimeWizard(); }
+        function pickRuntimeWizKind(id) { return runtimeSetupController.pickRuntimeWizKind(id); }
+        function runtimeWizNext() { return runtimeSetupController.runtimeWizNext(); }
+        function runtimeWizBack() { return runtimeSetupController.runtimeWizBack(); }
+        function renderRuntimeWizard() { return runtimeSetupController.renderRuntimeWizard(); }
+        function finishRuntimeWizard(deploy) { return runtimeSetupController.finishRuntimeWizard(deploy); }
+        function pruneEditorFolders() {
+          const e = new Set();
+          (Array.from(editorFolders).forEach((t) => {
+            const n = normalizeEditorPath(t);
+            n && e.add(n);
+          }),
+            Object.keys(editorFiles).forEach((t) => {
+              const n = t.split("/").slice(0, -1);
+              let o = "";
+              n.forEach((t) => {
+                ((o = o ? `${o}/${t}` : t), e.add(o));
+              });
+            }),
+            (editorFolders = e),
+            Object.keys(editorFiles).forEach((e) => {
+              (e && e.trim()) || delete editorFiles[e];
+            }));
+        }
+        function deleteCurrentEditorFile() {
+          return APP_STATE.demo_mode
+            ? showToast(
+                "Demo runtime package is read-only. Create an account to delete optional files.",
+                "info",
+              )
+            : null != currentTab && editorFiles.hasOwnProperty(currentTab)
+              ? void showEditorConfirmModal({
+                  title: "Delete File",
+                  body: `Remove ${escapeCodeHtml(currentTab)} from the runtime package. This is local to the editor until you Save & Deploy.`,
+                  confirmText: "Delete File",
+                  onConfirm() {
+                    (delete editorFiles[currentTab], pruneEditorFolders());
+                    const e = Object.keys(editorFiles).sort((e, t) =>
+                      e.localeCompare(t),
+                    );
+                    (e.length
+                      ? ((currentTab = e[0]),
+                        setEditorValue(editorFiles[currentTab] || ""))
+                      : ((currentTab = ""), setEditorValue("")),
+                      renderEditorFileTree(),
+                      updateEditorStats(),
+                      showToast("File removed from workload tree", "success"));
+                  },
+                })
+              : showToast("No file selected", "error");
+        }
+        function deleteEditorFolder(e) {
+          if (APP_STATE.demo_mode)
+            return showToast(
+              "Demo runtime package is read-only. Create an account to delete optional folders.",
+              "info",
+            );
+          const t = normalizeEditorPath(e);
+          if (!t) return showToast("No folder selected", "error");
+          const n = Object.keys(editorFiles).filter(
+              (e) => e === t || e.startsWith(`${t}/`),
+            ),
+            o = Array.from(editorFolders).filter(
+              (e) => e === t || e.startsWith(`${t}/`),
+            );
+          showEditorConfirmModal({
+            title: "Delete Folder",
+            body: `Remove ${escapeCodeHtml(t)}/ plus ${n.length} file${1 === n.length ? "" : "s"} and ${Math.max(0, o.length - 1)} nested folder${1 === Math.max(0, o.length - 1) ? "" : "s"} from the workload tree. This applies when you Save & Deploy.`,
+            confirmText: "Delete Folder",
+            onConfirm() {
+              if (
+                (n.forEach((e) => delete editorFiles[e]),
+                o.forEach((e) => editorFolders.delete(e)),
+                currentTab &&
+                  (currentTab === t || currentTab.startsWith(`${t}/`)))
+              ) {
+                const e = Object.keys(editorFiles).sort((e, t) =>
+                  e.localeCompare(t),
+                );
+                ((currentTab = e[0] || ""),
+                  setEditorValue(
+                    (currentTab && editorFiles[currentTab]) || "",
+                  ));
+              }
+              ((selectedEditorFolder === t ||
+                selectedEditorFolder.startsWith(`${t}/`)) &&
+                (selectedEditorFolder = ""),
+                pruneEditorFolders(),
+                renderEditorFileTree(),
+                updateEditorStats(),
+                showToast(`${t}/ removed from workload tree`, "success"));
+            },
+          });
+        }
+        async function importEditorFolder(e) {
+          if (APP_STATE.demo_mode)
+            return (
+              (e.target.value = ""),
+              showToast(
+                "Demo runtime package is read-only. Create an account to import optional package folders.",
+                "info",
+              )
+            );
+          const t = Array.from(e.target.files || []);
+          if (((e.target.value = ""), !t.length)) return;
+          let n = 0;
+          for (const e of t) {
+            const t = normalizeEditorPath(e.webkitRelativePath || e.name);
+            if (t)
+              if (e.size > 1048576)
+                showToast(`${t} skipped: 1MB editor limit`, "error");
+              else
+                try {
+                  ((editorFiles[t] = await e.text()), (n += 1));
+                } catch (e) {
+                  showToast(`${t} skipped: could not read file`, "error");
+                }
+          }
+          (renderEditorFileTree(),
+            updateEditorStats(),
+            showToast(
+              `Imported ${n} file${1 === n ? "" : "s"} with folder hierarchy`,
+              n ? "success" : "error",
+            ),
+            n && maybeOfferRuntimeSetupGuide());
+        }
+        async function sha256hex(e) {
+          const t = new TextEncoder().encode(e),
+            n = await crypto.subtle.digest("SHA-256", t);
+          return Array.from(new Uint8Array(n))
+            .map((e) => e.toString(16).padStart(2, "0"))
+            .join("");
+        }
+        let _hashDebounce = null;
+        async function updateEditorHash() {
+          const e = document.getElementById("editor-hash-display");
+          if (!e) return;
+          const t = getEditorValue();
+          if (!t || "Loading runtime contract from server..." === t)
+            return void (e.innerHTML =
+              '<span style="color: var(--text-subtle)">Start typing to compute...</span>');
+          const n = await sha256hex(t);
+          e.innerHTML = `<span style="color:#93c5fd;font-weight:600">${n.substring(0, 8)}</span>${n.substring(8)}`;
+        }
+        function copyEditorHash() {
+          const e = document.getElementById("editor-hash-display");
+          if (!e) return;
+          const t = e.textContent.trim();
+          !t ||
+            "—" === t ||
+            t.includes("compute") ||
+            t.includes("Deploy") ||
+            navigator.clipboard
+              .writeText(t)
+              .then(() => showToast("Hash copied to clipboard", "info"));
+        }

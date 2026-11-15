@@ -1,0 +1,709 @@
+        function downloadJsonFile(e, t) {
+          const n = new Blob([JSON.stringify(t, null, 2)], {
+              type: "application/json",
+            }),
+            o = URL.createObjectURL(n),
+            r = document.createElement("a");
+          ((r.href = o),
+            (r.download = e),
+            document.body.appendChild(r),
+            r.click(),
+            r.remove(),
+            URL.revokeObjectURL(o));
+        }
+        async function exportAuditEvidence() {
+          try {
+            const e = await fetchAPI(API.auditEvidence, !0);
+            if (!e) throw new Error("No audit evidence returned.");
+            downloadJsonFile(`infraveil-audit-${Date.now()}.json`, e);
+            showToast("Audit evidence exported.", "success");
+          } catch (e) {
+            showToast(e.message || "Could not export audit evidence.", "error");
+          }
+        }
+        async function exportProofPacket() {
+          try {
+            const e = await fetchAPI(API.proofPacket, !0);
+            if (!e) throw new Error("No proof packet returned.");
+            downloadJsonFile(`infraveil-proof-packet-${Date.now()}.json`, e);
+            showToast("Proof packet exported.", "success");
+          } catch (e) {
+            showToast(e.message || "Could not export proof packet.", "error");
+          }
+        }
+        async function exportFullCustomerData() {
+          try {
+            const e = await fetchAPI(API.exportData, !0);
+            if (!e) throw new Error("No customer data export returned.");
+            downloadJsonFile(`infraveil-full-data-export-${Date.now()}.json`, e);
+            showToast("Full customer data export downloaded.", "success");
+          } catch (e) {
+            showToast(e.message || "Could not export customer data.", "error");
+          }
+        }
+        async function runLauncherDoctor() {
+          if (lockRequiresBilling())
+            return showToast("Activate billing before running launcher doctor.", "error");
+          const e = async (e = "") => {
+            try {
+              const t = { "Content-Type": "application/json" };
+              APP_STATE.demo_mode || (t["X-TOTP-Auth"] = e);
+              const n = fleetSelectionState.currentLauncherHostId || launcherHostIdentity((window.__launcherHosts || [])[0]) || "";
+              const o = await fetch("/client/api/launcher/command", {
+                  method: "POST",
+                  headers: t,
+                  body: JSON.stringify({ command: "doctor", launcher_host_id: n }),
+                }),
+                r = await o.json();
+              if (!o.ok) throw new Error(r.error || "Doctor command failed.");
+              showToast("Launcher doctor queued. Check Runtime Logs and Audit export after the next sync.", "success");
+              updateDashboardData();
+            } catch (e) {
+              showToast(e.message || "Could not run launcher doctor.", "error");
+            }
+          };
+          APP_STATE.demo_mode
+            ? e("")
+            : showTotpPrompt("Run Launcher Doctor", async (t) => e(t));
+        }
+        function confirmDeleteAccount() {
+          (createModal(
+            '\n                <div class="p-6">\n                    <div class="flex items-center gap-3 mb-4 text-red-400">\n                        <i data-lucide="alert-triangle" class="w-6 h-6"></i>\n                        <h3 class="text-sm font-bold uppercase tracking-widest">Confirm Account Deletion</h3>\n                    </div>\n                    <p class="text-xs mb-4" style="color: var(--text-muted)">\n                        This action is <strong>permanent and cannot be undone</strong>. All your data, agents, logs, and configurations will be deleted.\n                    </p>\n                    <div class="mb-4">\n                        <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">\n                            Enter TOTP Code\n                        </label>\n                        <input type="text" id="delete-totp-input" maxlength="6" placeholder="000000"\n                            class="ink-input w-full rounded-lg px-4 py-3 text-sm font-mono-cli text-center tracking-widest">\n                    </div>\n                    <div class="flex gap-3">\n                        <button onclick="closeModal()" class="btn-secondary flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest">Cancel</button>\n                        <button onclick="deleteAccount()" class="btn-danger flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest">Delete Account</button>\n                    </div>\n                </div>\n            ',
+          ),
+            setTimeout(() => {
+              const e = document.getElementById("delete-totp-input");
+              e && e.focus();
+            }, 100));
+        }
+        async function deleteAccount() {
+          const e = document.getElementById("delete-totp-input").value.trim();
+          if (e && 6 === e.length)
+            try {
+              const t = await fetch("/client/api/delete-account", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-TOTP-Auth": e,
+                  },
+                  body: JSON.stringify({}),
+                }),
+                n = await t.json();
+              t.ok && n.success
+                ? (closeModal(),
+                  showToast("Account deleted. Goodbye!", "info"),
+                  setTimeout(() => {
+                    window.location.href = "/login";
+                  }, 1500))
+                : showToast(n.error || "Failed to delete account", "error");
+            } catch (e) {
+              showToast("Failed to delete account: " + e.message, "error");
+            }
+          else showToast("Please enter a valid 6-digit TOTP code", "error");
+        }
+        async function fetchRemediationSettings() {
+          let e = await fetchAPI(API.remSettings);
+          if (e && e.policy) {
+            const t = document.getElementById("remediation-lock-overlay"),
+              n = document.getElementById("rem-save-btn"),
+              o = APP_STATE.demo_mode || e.client?.demo_mode;
+            (lockRequiresBilling() && !o
+              ? (t.classList.remove("hidden"),
+                (n.disabled = !0),
+                n.classList.add("opacity-50", "cursor-not-allowed"))
+              : (t.classList.add("hidden"),
+                (n.disabled = !1),
+                n.classList.remove("opacity-50", "cursor-not-allowed")),
+              (document.getElementById("rem-engine-toggle").checked =
+                e.auto_remediation),
+              "off" !== e.policy.mode &&
+                (document.getElementById("rem-mode-select").value =
+                  e.policy.mode),
+              (document.getElementById("rem-endpoint-input").value =
+                e.provider?.endpoint || ""),
+              (document.getElementById("rem-model-input").value =
+                e.provider?.model || ""),
+              (document.getElementById("rem-api-key-input").value = ""),
+              (document.getElementById("rem-api-key-status").innerText = e
+                .provider?.api_key_configured
+                ? "Encrypted API key saved. Leave the field blank to keep it."
+                : "No encrypted API key saved yet."),
+              document.querySelectorAll(".rem-cat-check").forEach((t) => {
+                t.disabled ||
+                  (t.checked = e.policy.allowed_categories.includes(t.value));
+              }),
+              applyAssistantPolicyControls(e),
+              fetchRemediationActivity(),
+              fetchPendingProposals());
+          }
+        }
+        function saveRemediationSettings() {
+          if (lockRequiresBilling())
+            return void showToast(
+              "Activate billing before enabling remediation.",
+              "error",
+            );
+          const e = document.getElementById("rem-engine-toggle").checked,
+            t = document.getElementById("rem-mode-select").value,
+            n = Array.from(
+              document.querySelectorAll(".rem-cat-check:checked"),
+            ).map((e) => e.value),
+            o = document.getElementById("rem-endpoint-input").value.trim(),
+            r = document.getElementById("rem-model-input").value.trim(),
+            s = document.getElementById("rem-api-key-input").value,
+            a = parseInt(document.getElementById("rem-error-threshold")?.value || "3", 10),
+            i = parseInt(document.getElementById("rem-window-minutes")?.value || "10", 10),
+            l = !!document.getElementById("rem-doctor-required")?.checked,
+            c = readCheckedMap(".rem-perm-check"),
+            d = readCheckedMap(".rem-audit-check");
+          APP_STATE.demo_mode
+            ? saveRemediationSettingsDirect(e, t, n, o, r, s, "", !0, "", {
+                runtime_errors_before_llm: a,
+                activation_window_minutes: i,
+                doctor_receipts_required: l,
+                assistant_permissions: c,
+                audit: d,
+              })
+            : showTotpPrompt("Update Remediation Policy", async (u) => {
+                saveRemediationSettingsDirect(e, t, n, o, r, s, "", !1, u, {
+                  runtime_errors_before_llm: a,
+                  activation_window_minutes: i,
+                  doctor_receipts_required: l,
+                  assistant_permissions: c,
+                  audit: d,
+                });
+              });
+        }
+        async function saveRemediationSettingsDirect(
+          e,
+          t,
+          n,
+          o,
+          r,
+          s,
+          a,
+          i,
+          l,
+          c = {},
+        ) {
+          try {
+            const d = { "Content-Type": "application/json" };
+            !i && l && (d["X-TOTP-Auth"] = l);
+            let u = await fetch(API.remSettings, {
+                method: "POST",
+                headers: d,
+                body: JSON.stringify({
+                  auto_remediation: e,
+                  mode: t,
+                  allowed_categories: n,
+                  blocked_categories: ["auth", "crypto", "billing"],
+                  endpoint: o,
+                  model: r,
+                  api_key: s,
+                  system_prompt: a,
+                  ...c,
+                }),
+              }),
+              p = await u.json();
+            if (!u.ok) throw new Error(p.error || "Action denied");
+            showToast(
+              i
+                ? "Demo: AI Policy updated!"
+                : "AI Policy updated successfully!",
+              "info",
+            );
+            fetchRemediationSettings();
+          } catch (e) {
+            showToast(e.message, "error");
+          }
+        }
+        let remediationActivityLoaded = !1,
+          remediationActivityRequest = null,
+          pendingProposalsLoaded = !1,
+          pendingProposalsRequest = null;
+        async function fetchRemediationActivity(e = !0) {
+          const t = document.getElementById("remediation-activity-feed");
+          if (t)
+            return (
+              remediationActivityRequest ||
+              (e &&
+                !remediationActivityLoaded &&
+                ((t.innerHTML =
+                  '<div class="p-4 text-center text-xs text-gray-500"><i class="animate-spin mb-2" data-lucide="loader-2"></i> Loading remediation activity...</div>'),
+                window.lucide && lucide.createIcons()),
+              (remediationActivityRequest = (async () => {
+                try {
+                  const e = await fetchAPI(API.remActivity),
+                    n = Array.isArray(e?.activity) ? e.activity : [];
+                  if (0 === n.length)
+                    return (
+                      (t.innerHTML =
+                        '\n                            <div class="p-4 text-center text-xs border border-dashed rounded-xl" style="border-color: var(--table-border); color: var(--text-subtle)">\n                                No remediation jobs have run yet.\n                            </div>\n                        '),
+                      (remediationActivityLoaded = !0),
+                      void (window.lucide && lucide.createIcons())
+                    );
+                  ((t.innerHTML = n
+                    .map((e) => {
+                      const t = String(e.level || "INFO").toUpperCase(),
+                        n =
+                          "ERROR" === t
+                            ? {
+                                border: "rgba(248,113,113,0.25)",
+                                bg: "rgba(127,29,29,0.18)",
+                                text: "#fca5a5",
+                                icon: "triangle-alert",
+                              }
+                            : "WARN" === t
+                              ? {
+                                  border: "rgba(251,191,36,0.25)",
+                                  bg: "rgba(120,53,15,0.18)",
+                                  text: "#fcd34d",
+                                  icon: "shield-alert",
+                                }
+                              : "AUDIT" === t
+                                ? {
+                                    border: "rgba(96,165,250,0.25)",
+                                    bg: "rgba(30,58,138,0.18)",
+                                    text: "#93c5fd",
+                                    icon: "sparkles",
+                                  }
+                                : {
+                                    border: "rgba(52,211,153,0.25)",
+                                    bg: "rgba(6,78,59,0.18)",
+                                    text: "#6ee7b7",
+                                    icon: "shield-check",
+                                  };
+                      return `\n                            <div class="rounded-xl border px-4 py-3" style="border-color:${n.border}; background:${n.bg}">\n                                <div class="flex items-start justify-between gap-4">\n                                    <div class="min-w-0">\n                                        <div class="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold" style="color:${n.text}">\n                                            <i data-lucide="${n.icon}" class="w-3.5 h-3.5"></i>${t}\n                                        </div>\n                                        <div class="text-xs mt-1 break-words" style="color: var(--text-main)">${(e.message || "").replace(/</g, "&lt;")}</div>\n                                    </div>\n                                    <div class="text-[10px] font-mono-cli shrink-0" style="color: var(--text-subtle)">${e.time ? new Date(e.time).toLocaleString() : "-"}</div>\n                                </div>\n                            </div>\n                        `;
+                    })
+                    .join("")),
+                    (remediationActivityLoaded = !0),
+                    window.lucide && lucide.createIcons());
+                } catch (e) {
+                  remediationActivityLoaded ||
+                    (t.innerHTML =
+                      '\n                            <div class="p-4 text-center text-xs border border-dashed rounded-xl text-red-400" style="border-color: rgba(248,113,113,0.25)">\n                                Failed to load remediation activity.\n                            </div>\n                        ');
+                } finally {
+                  remediationActivityRequest = null;
+                }
+              })()),
+              remediationActivityRequest)
+            );
+        }
+        async function fetchPendingProposals(e = !0) {
+          const t = document.getElementById("remediation-feed");
+          if (t)
+            return (
+              pendingProposalsRequest ||
+              (e &&
+                !pendingProposalsLoaded &&
+                ((t.innerHTML =
+                  '<div class="p-8 text-center text-xs text-gray-500"><i class="animate-spin mb-2" data-lucide="loader-2"></i> Checking AI queue...</div>'),
+                window.lucide && lucide.createIcons()),
+              (pendingProposalsRequest = (async () => {
+                try {
+                  const e = await fetchAPI("/client/api/remediation/proposals");
+                  if (!e || !e.proposals || 0 === e.proposals.length)
+                    return (
+                      (t.innerHTML =
+                        '\n                            <div class="p-8 text-center text-xs border border-dashed rounded-xl flex flex-col items-center justify-center h-full" style="border-color: var(--table-border); color: var(--text-subtle)">\n                                <i data-lucide="shield-check" class="w-8 h-8 mb-3 opacity-50"></i>\n                                No proposals were returned. App health and telemetry freshness are checked separately.\n                            </div>\n                        '),
+                      (pendingProposalsLoaded = !0),
+                      void (window.lucide && lucide.createIcons())
+                    );
+                  ((t.innerHTML = ""),
+                    (pendingProposalsLoaded = !0),
+                    e.proposals.forEach((e) => {
+                      const n = document.createElement("div");
+                      const proposalId = String(e.id || "").replace(/[^a-zA-Z0-9_-]/g, "");
+                      const agentId = String(e.agent_id || "").replace(/[^a-zA-Z0-9_-]/g, "");
+                      n.className =
+                        "acrylic-panel p-5 rounded-xl border border-blue-500/30 mb-6 shadow-lg";
+                      let o = "";
+                      const r = String(e.status || "pending").toLowerCase(),
+                        s =
+                          "applied" === r
+                            ? `<button onclick="revertAIFix('${proposalId}', '${agentId}')" class="bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/30 text-amber-200 px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-2"><i data-lucide="rotate-ccw" class="w-4 h-4"></i> Revert</button>`
+                            : `<button onclick="declineAIFix('${proposalId}', '${agentId}')" class="bg-transparent hover:bg-white/5 border border-gray-600 text-gray-300 px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-2"><i data-lucide="x" class="w-4 h-4"></i> Decline</button>
+                                    <button onclick="applyAIFix('${proposalId}', '${agentId}')" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(37,99,235,0.4)]"><i data-lucide="check" class="w-4 h-4"></i> Authorize & Apply</button>`;
+                      (e.chat_history &&
+                        e.chat_history.length > 0 &&
+                        e.chat_history.forEach((e) => {
+                          "user" === e.role
+                            ? (o += `\n                                        <div class="flex gap-2 items-start mb-2">\n                                            <div class="w-5 h-5 rounded bg-gray-800 flex items-center justify-center shrink-0 text-[9px] text-gray-400">YOU</div>\n                                            <div class="bg-white/5 p-2 rounded-lg text-gray-300 w-full text-xs">${escapeHtml(e.content || "")}</div>\n                                        </div>\n                                    `)
+                            : "assistant" === e.role &&
+                              (o += `\n                                        <div class="flex gap-2 items-start mb-2">\n                                            <div class="w-5 h-5 rounded bg-blue-900 border border-blue-500/50 flex items-center justify-center shrink-0 text-[9px] text-blue-400"><i data-lucide="sparkles" class="w-3 h-3"></i></div>\n                                            <div class="bg-blue-500/10 border border-blue-500/20 p-2 rounded-lg text-blue-200 w-full text-xs">${escapeHtml(e.content || "")}</div>\n                                        </div>\n                                    `);
+                        }),
+                        (n.innerHTML = `\n                            <div class="flex justify-between items-center mb-4 border-b pb-3 border-white/5">\n                                <div class="text-sm font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2"><i data-lucide="sparkles" class="w-4 h-4"></i> AI Proposal: ${escapeHtml(e.location || "Unknown location")}</div>\n                                <div class="text-[10px] text-gray-500 font-mono-cli">${new Date(1e3 * e.timestamp).toLocaleString()}</div>\n                            </div>\n                            <div class="mb-5 p-4 rounded-lg bg-blue-500/5 border border-blue-500/20 text-sm text-blue-100 flex gap-3 items-start">\n                                <i data-lucide="info" class="w-5 h-5 text-blue-400 shrink-0 mt-0.5"></i>\n                                <div>\n                                    <div class="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-1">AI Explanation</div>\n                                    ${escapeHtml(e.description || "The AI system detected an anomaly and generated an automated patch to restore execution.")}\n                                </div>\n                            </div>\n                            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-5">\n                                <div>\n                                    <div class="text-[10px] uppercase text-red-400 mb-2 font-bold tracking-widest flex items-center gap-2"><i data-lucide="file-minus" class="w-3 h-3"></i> Original Code</div>\n                                    <pre class="bg-red-500/10 border border-red-500/20 text-red-300 text-xs p-4 rounded-lg custom-scroll max-h-96 overflow-y-auto">${escapeHtml(e.original_snippet || "")}</pre>\n                                </div>\n                                <div>\n                                    <div class="text-[10px] uppercase text-emerald-400 mb-2 font-bold tracking-widest flex items-center gap-2"><i data-lucide="file-plus" class="w-3 h-3"></i> Proposed Fix</div>\n                                    <pre class="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs p-4 rounded-lg custom-scroll max-h-96 overflow-y-auto">${escapeHtml(e.proposed_snippet || "")}</pre>\n                                </div>\n                            </div>\n                            <div class="mt-4 border-t border-white/5 pt-4 mb-4">\n                                <div class="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-3 flex items-center gap-2"><i data-lucide="message-square" class="w-3 h-3"></i> AI Discussion Thread</div>\n                                <div id="ai-chat-history-${proposalId}" class="space-y-2 mb-3 max-h-48 overflow-y-auto custom-scroll pr-2">\n                                    ${o}\n                                </div>\n                                <div class="flex gap-2">\n                                    <input type="text" id="ai-chat-input-${proposalId}" placeholder="E.g. Can you explain why you removed the try block?" class="ink-input flex-1 rounded-lg px-3 py-2 text-xs" onkeypress="if(event.key==='Enter') sendAIChat('${proposalId}', '${agentId}')">\n                                    <button onclick="sendAIChat('${proposalId}', '${agentId}')" class="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-none border border-white/10">Send</button>\n                                </div>\n                            </div>\n                            <div class="flex flex-col lg:flex-row justify-between lg:items-center gap-3 pt-3 border-t border-white/5">\n                                <span class="text-xs text-gray-500 font-mono-cli">Target Node: ${e.agent_id.substring(0, 8)} · ${escapeHtml(r.toUpperCase())}</span>\n                                <div class="flex flex-wrap gap-3">${s}</div>\n                            </div>\n                        `),
+                        t.appendChild(n));
+                    }),
+                    window.lucide && lucide.createIcons(),
+                    e.proposals.forEach((e) => {
+                      const proposalId = String(e.id || "").replace(/[^a-zA-Z0-9_-]/g, "");
+                      const t = document.getElementById(
+                        `ai-chat-history-${proposalId}`,
+                      );
+                      t && (t.scrollTop = t.scrollHeight);
+                    }));
+                } catch (e) {
+                  pendingProposalsLoaded ||
+                    (t.innerHTML = `<div class="p-8 text-center text-xs text-red-500 border border-red-500/20 rounded-xl bg-red-500/5">Failed to load proposals: ${escapeHtml(e.message || "Unknown error")}</div>`);
+                } finally {
+                  pendingProposalsRequest = null;
+                }
+              })()),
+              pendingProposalsRequest)
+            );
+        }
+        async function sendAIChat(e, t) {
+          const n = document.getElementById(`ai-chat-input-${e}`),
+            o = n.value.trim();
+          if (!o) return;
+          const r = document.getElementById(`ai-chat-history-${e}`);
+          ((r.innerHTML += `\n                <div class="flex gap-2 items-start mb-2">\n                    <div class="w-5 h-5 rounded bg-gray-800 flex items-center justify-center shrink-0 text-[9px] text-gray-400">YOU</div>\n                    <div class="bg-white/5 p-2 rounded-lg text-gray-300 w-full text-xs">${escapeHtml(o)}</div>\n                </div>\n            `),
+            (n.value = ""),
+            (r.scrollTop = r.scrollHeight));
+          const s = "load-" + Math.random().toString(36).substr(2, 9);
+          ((r.innerHTML += `\n                <div id="${s}" class="flex gap-2 items-start mb-2">\n                    <div class="w-5 h-5 rounded bg-blue-900/50 border border-blue-500/30 flex items-center justify-center shrink-0 text-[9px] text-blue-400"><i data-lucide="cpu" class="w-3 h-3"></i></div>\n                    <div class="bg-blue-500/5 border border-blue-500/10 p-2 rounded-lg text-blue-300 w-full animate-pulse text-xs">Awaiting LLM response...</div>\n                </div>\n            `),
+            lucide.createIcons(),
+            (r.scrollTop = r.scrollHeight));
+          const a = async (n = null) => {
+            const r = { "Content-Type": "application/json" };
+            return (
+              n && (r["X-TOTP-Auth"] = n),
+              fetch("/client/api/remediation/chat", {
+                method: "POST",
+                headers: r,
+                body: JSON.stringify({ fix_id: e, agent_id: t, message: o }),
+              })
+            );
+          };
+          try {
+            let e = await a(),
+              t = await e.json().catch(() => ({}));
+            if ((401 === e.status || 403 === e.status) && t.reauth)
+              return void showTotpPrompt(
+                "Continue AI Discussion",
+                async (e) => {
+                  try {
+                    let t = await a(e),
+                      n = await t.json().catch(() => ({}));
+                    if ((document.getElementById(s)?.remove(), t.ok)) {
+                      remediationChatUnlockedUntil = Date.now() + 6e5;
+                      const e = (n.reply || n.explanation || "").toString();
+                      ((r.innerHTML += `\n                                    <div class="flex gap-2 items-start mb-2">\n                                        <div class="w-5 h-5 rounded bg-blue-900 border border-blue-500/50 flex items-center justify-center shrink-0 text-[9px] text-blue-400"><i data-lucide="sparkles" class="w-3 h-3"></i></div>\n                                        <div class="bg-blue-500/10 border border-blue-500/20 p-2 rounded-lg text-blue-200 w-full text-xs">${escapeHtml(e)}</div>\n                                    </div>\n                                `),
+                        lucide.createIcons());
+                    } else
+                      (showToast(
+                        n.error || "Failed to get AI response",
+                        "error",
+                      ),
+                        (r.innerHTML += `\n                                    <div class="text-red-400 text-xs italic mb-2 border-l-2 border-red-500 pl-2 ml-7">System blocked: ${escapeHtml(n.error || "Context limit reached or connection failed.")}</div>\n                                `));
+                    r.scrollTop = r.scrollHeight;
+                  } catch (e) {
+                    (document.getElementById(s)?.remove(),
+                      showToast(e.message || "Network Error", "error"));
+                  }
+                },
+              );
+            if ((document.getElementById(s)?.remove(), e.ok)) {
+              const e = (t.reply || t.explanation || "").toString();
+              ((r.innerHTML += `\n                        <div class="flex gap-2 items-start mb-2">\n                            <div class="w-5 h-5 rounded bg-blue-900 border border-blue-500/50 flex items-center justify-center shrink-0 text-[9px] text-blue-400"><i data-lucide="sparkles" class="w-3 h-3"></i></div>\n                            <div class="bg-blue-500/10 border border-blue-500/20 p-2 rounded-lg text-blue-200 w-full text-xs">${escapeHtml(e)}</div>\n                        </div>\n                    `),
+                lucide.createIcons());
+            } else
+              (showToast(t.error || "Failed to get AI response", "error"),
+                (r.innerHTML += `\n                        <div class="text-red-400 text-xs italic mb-2 border-l-2 border-red-500 pl-2 ml-7">System blocked: ${escapeHtml(t.error || "Context limit reached or connection failed.")}</div>\n                    `));
+            r.scrollTop = r.scrollHeight;
+          } catch (e) {
+            (document.getElementById(s)?.remove(),
+              showToast(e.message || "Network Error", "error"));
+          }
+        }
+        function declineAIFix(e, t) {
+          showTotpPrompt("Decline AI Proposal", async (n) => {
+            try {
+              const o = await fetch("/client/api/remediation/decline", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-TOTP-Auth": n,
+                  },
+                  body: JSON.stringify({ fix_id: e, agent_id: t }),
+                }),
+                r = await o.json();
+              if (!o.ok || !r.success)
+                throw new Error(r.error || "Failed to decline");
+              (showToast("AI Proposal Dismissed", "info"),
+                fetchPendingProposals());
+            } catch (e) {
+              showToast(e.message || "Network error", "error");
+            }
+          });
+        }
+        function applyAIFix(e, t) {
+          APP_STATE.demo_mode
+            ? applyAIFixDirect(e, t, !0)
+            : showTotpPrompt("Authorize AI Package Modification", async (n) => {
+                applyAIFixDirect(e, t, !1, n);
+              });
+        }
+        async function applyAIFixDirect(e, t, n, o) {
+          try {
+            const r = { "Content-Type": "application/json" };
+            !n && o && (r["X-TOTP-Auth"] = o);
+            let s = await fetch("/client/api/remediation/apply", {
+                method: "POST",
+                headers: r,
+                body: JSON.stringify({ fix_id: e, agent_id: t }),
+              }),
+              a = await s.json();
+            if (!s.ok) throw new Error(a.error || "Action denied");
+            (showToast(
+              n ? "Demo: AI Fix Applied!" : "AI Fix Applied Successfully!",
+              "info",
+            ),
+              fetchPendingProposals());
+          } catch (e) {
+            showToast(e.message, "error");
+          }
+        }
+        function revertAIFix(e, t) {
+          APP_STATE.demo_mode
+            ? showToast("Demo mode keeps optional package edits read-only.", "info")
+            : showTotpPrompt("Revert AI Package Modification", async (n) => {
+                try {
+                  const o = await fetch("/client/api/remediation/revert", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-TOTP-Auth": n,
+                      },
+                      body: JSON.stringify({ fix_id: e, agent_id: t }),
+                    }),
+                    r = await o.json().catch(() => ({}));
+                  if (!o.ok || !r.success)
+                    throw new Error(r.error || "Revert denied");
+                  showToast("AI fix reverted and workload restart queued.", "success");
+                  fetchPendingProposals();
+                  updateDashboardData();
+                } catch (e) {
+                  showToast(e.message || "Revert failed", "error");
+                }
+              });
+        }
+        function createAgentNode() {
+          showTotpPrompt("Provision New Agent Node", async (e) => {
+            try {
+              let t = await fetch("/client/api/agent/create", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-TOTP-Auth": e,
+                },
+                body: JSON.stringify({
+                  name: "Node-" + Math.floor(1e3 * Math.random()),
+                }),
+              });
+              const n = await t.json().catch(() => ({}));
+              if (!t.ok || !n.success)
+                throw new Error(n.error || "TOTP Invalid or Access Denied");
+              (showToast("Node Provisioned Successfully!", "info"),
+                await updateDashboardData());
+            } catch (e) {
+              showToast(e.message, "error");
+            }
+          });
+        }
+        function requestDeleteNode(e) {
+          if (fleetSelectionState.selectedWorkloadIds.size) return deleteSelectedWorkloads();
+          showTotpPrompt("Terminate & Purge Node", async (t) => {
+            try {
+              if (
+                !(
+                  await fetch("/client/api/agent/delete", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "X-TOTP-Auth": t,
+                    },
+                    body: JSON.stringify({ agent_id: e }),
+                  })
+                ).ok
+              )
+                throw new Error("TOTP Invalid or Access Denied");
+              (showToast("Node Purged Permanently!", "info"),
+                updateDashboardData());
+            } catch (e) {
+              showToast(e.message, "error");
+            }
+          });
+        }
+        function triggerNodeEdit(e, t, n) {
+          showEditNodePrompt(e, t, n, async (t, n, o) => {
+            try {
+              if (
+                !(
+                  await fetch("/client/api/agent/update", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "X-TOTP-Auth": o,
+                    },
+                    body: JSON.stringify({ agent_id: e, name: t, type: n }),
+                  })
+                ).ok
+              )
+                throw new Error("Action denied");
+              (showToast("Node details updated!", "info"),
+                updateDashboardData());
+            } catch (e) {
+              showToast(e.message, "error");
+            }
+          });
+        }
+        function sendNodeCommand(e, t) {
+          if (fleetSelectionState.selectedWorkloadIds.size) return sendSelectedNodeCommand(t);
+          if (APP_STATE.demo_mode) {
+            const n = document.querySelector(
+              `[data-agent-id="${e}"] .agent-status`,
+            );
+            return (
+              n &&
+                ("restart" === t
+                  ? ((n.innerText = "RESTARTING..."),
+                    (n.className = "agent-status text-amber-400"))
+                  : "stop" === t
+                    ? ((n.innerText = "STOPPING..."),
+                      (n.className = "agent-status text-red-400"))
+                    : "maintain" === t &&
+                      ((n.innerText = "MAINTENANCE..."),
+                      (n.className = "agent-status text-blue-400"))),
+              void fetch("/client/api/agent/command", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ agent_id: e, command: t }),
+              })
+                .then((e) => e.json())
+                .then((e) => {
+                  e.success
+                    ? (showToast(`Demo: Command ${t} dispatched!`, "info"),
+                      updateDashboardData())
+                    : showToast(e.error || "Failed", "error");
+                })
+                .catch((e) => showToast(e.message, "error"))
+            );
+          }
+          showTotpPrompt(
+            `Send ${t.toUpperCase()} signal to node`,
+            async (n) => {
+              try {
+                if (
+                  !(
+                    await fetch("/client/api/agent/command", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-TOTP-Auth": n,
+                      },
+                      body: JSON.stringify({ agent_id: e, command: t }),
+                    })
+                  ).ok
+                )
+                  throw new Error("Action denied");
+                (showToast(`Command ${t} dispatched!`, "info"),
+                  updateDashboardData());
+              } catch (e) {
+                showToast(e.message, "error");
+              }
+            },
+          );
+        }
+        function sendLauncherCommand(e) {
+          if (fleetSelectionState.selectedLauncherHostIds.size) return sendSelectedLauncherCommand(e);
+          const t =
+              fleetSelectionState.currentLauncherHostId ||
+              launcherHostIdentity(window.__launcherHosts?.[0]) ||
+              "",
+            n = {
+              restart: "Restart launcher",
+              stop: "Kill launcher",
+              "restart-agents": "Restart all APIs on this launcher",
+              "stop-agents": "Kill all APIs on this launcher",
+              "capacity-diagnostic": "Run capacity diagnostic",
+              "clear-workspace": "Clear local launcher workspace",
+            };
+          if (APP_STATE.demo_mode) {
+            const o = document.getElementById("launcher-status-text"),
+              r = document.getElementById("launcher-status-dot");
+            return (
+              o &&
+                r &&
+                ("restart" === e
+                  ? ((o.innerText = "RESTARTING..."),
+                    (r.className =
+                      "operator-status-dot bg-amber-500"))
+                  : "stop" === e
+                    ? ((o.innerText = "STOPPING..."),
+                      (r.className =
+                        "operator-status-dot bg-red-500"))
+                    : "capacity-diagnostic" === e
+                      ? ((o.innerText = "DIAGNOSING..."),
+                        (r.className =
+                          "operator-status-dot bg-blue-500"))
+                    : "clear-workspace" === e &&
+                      ((o.innerText = "RESETTING WORKSPACE..."),
+                      (r.className =
+                        "operator-status-dot bg-blue-500"))),
+              void fetch("/client/api/launcher/command", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ command: e, launcher_host_id: t }),
+              })
+                .then((e) => e.json())
+                .then((t) => {
+                  t.success
+                    ? (showToast(
+                      "capacity-diagnostic" === e
+                        ? `Demo: capacity audit started for ${capacityAuditHostName((window.__launcherHosts || []).find((e) => launcherHostIdentity(e) === launcherHostIdentity(t.launcher_host_id || fleetSelectionState.currentLauncherHostId)) || { name: "selected server" })}. Open Capacity Audit for the full report.`
+                        : `Demo: ${n[e] || e} dispatched`,
+                      "info",
+                    ),
+                      "capacity-diagnostic" === e && setTimeout(() => switchView("capacity-audit"), 250),
+                      "restart" === e &&
+                        (demoTourMilestones.launcherRestartSentAt = Date.now()),
+                      markLauncherCommandPending([t.launcher_host_id || fleetSelectionState.currentLauncherHostId || t], e),
+                      updateDashboardData())
+                    : showToast(t.error || "Failed", "error");
+                })
+                .catch((e) => showToast(e.message, "error"))
+            );
+          }
+          showTotpPrompt(
+            n[e] || `Send ${e.toUpperCase()} signal to launcher host`,
+            async (o) => {
+              try {
+                if (
+                  !(
+                    await fetch("/client/api/launcher/command", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-TOTP-Auth": o,
+                      },
+                      body: JSON.stringify({ command: e, launcher_host_id: t }),
+                    })
+                  ).ok
+                )
+                  throw new Error("Action denied");
+                (showToast(
+                  "capacity-diagnostic" === e
+                    ? `Capacity audit started for ${capacityAuditHostName((window.__launcherHosts || []).find((e) => launcherHostIdentity(e) === launcherHostIdentity(t)) || { name: "selected server" })}. Open Capacity Audit for the full report.`
+                    : `${n[e] || e} dispatched`,
+                  "info",
+                ),
+                  markLauncherCommandPending([t], e),
+                  "capacity-diagnostic" === e && setTimeout(() => switchView("capacity-audit"), 250),
+                  updateDashboardData());
+              } catch (e) {
+                showToast(e.message, "error");
+              }
+            },
+          );
+        }

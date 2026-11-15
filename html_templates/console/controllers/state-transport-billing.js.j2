@@ -1,0 +1,804 @@
+        const fleetSelection = InfraveilUI.fleetSelection.createController({
+          document,
+          storage: {
+            getItem(key) { return sessionStorage.getItem(key); },
+            setItem(key, value) { return sessionStorage.setItem(key, value); },
+            removeItem(key) { return sessionStorage.removeItem(key); },
+          },
+          workspace: () => APP_STATE,
+          inventory: () => window.__launcherHosts || [],
+          updateWorkloads: () => updateWorkloadBulkActions(),
+        });
+        const fleetSelectionState = fleetSelection.state;
+        let currentAgentId = null,
+          agentNames = {},
+          clearedConsoleIds = new Set(),
+          clearedNetworkIds = new Set(),
+          expandedConsoleIds = new Set(),
+          expandedNetworkIds = new Set(),
+          consoleClearedNoticeActive = !1,
+          networkClearedNoticeActive = !1,
+          _consoleLogs = [],
+          _appLogs = [],
+          _appLogsMeta = null,
+          appLogsRefreshPromise = null,
+          appLogsRefreshQueued = !1,
+          expandedAppLogIds = new Set(),
+          lastAppLogsRenderSignature = "",
+          lastDeploymentsSignature = "",
+          remediationChatUnlockedUntil = 0,
+          _pipelineLogs = [],
+          _opsState = null,
+          expandedPipelineLogIds = new Set(),
+          _internalNetworkLogs = [],
+          expandedInternalNetworkIds = new Set(),
+          internalNetworkClearedNoticeActive = !1,
+          johnnySecurityEvents = [],
+          johnnyConfidenceScore = 0,
+          johnnyProofStartedAt = Date.now(),
+          johnnyProofSessionActive = !1,
+          johnnyProofSkipped = !1,
+          globalAssistantHistory = [],
+          pendingAssistantToolCalls = [],
+          latestCommandReceipts = [],
+          pendingAssistantCommandSummaries = [],
+          _latestIntegrations = null;
+        const API = {
+          status: "/client/api/status?compact=1",
+          operations: "/client/api/operations?compact=1",
+          info: "/client/api/info?compact=1",
+          revision: "/client/api/revision",
+          fleetResources: "/client/api/fleet/resources",
+          appLogs: "/client/api/app_logs",
+          consoleLogs: "/client/api/console",
+          network: "/client/api/network_logs",
+          internalNetwork: "/client/api/internal_network_logs",
+          internalNetworkClear: "/client/api/internal_network_logs/clear",
+          pipelineLogs: "/client/api/security/pipeline_logs",
+          pipelineLogsClear: "/client/api/security/pipeline_logs/clear",
+          telemetry: "/client/api/telemetry",
+          feedback: "/client/api/feedback",
+          securitySettings: "/client/api/settings/security",
+          pin: "/client/api/settings/pin",
+          resetTotp: "/client/api/settings/reset-totp",
+          resetTotpEmailRequest:
+            "/client/api/settings/reset-totp-email-request",
+          support: "/client/api/support",
+          integrations: "/client/api/integrations",
+          integrationsTest: "/client/api/integrations/test",
+          exportData: "/client/api/export-data",
+          remSettings: "/client/api/remediation/settings",
+          remProposals: "/client/api/remediation/proposals",
+          remActivity: "/client/api/remediation/activity",
+          assistantChat: "/client/api/assistant/chat",
+          assistantChatStream: "/client/api/assistant/chat/stream",
+          billingCheckout: "/client/api/billing/checkout-session",
+          billingPortal: "/client/api/billing/portal-session",
+          billingSync: "/client/api/billing/sync",
+          auditEvidence: "/client/api/audit/evidence",
+          proofPacket: "/client/api/proof-packet",
+          releaseManifest: "/client/api/release-manifest",
+        };
+        let dashboardPollingInterval = null,
+          dashboardDrainTimer = null,
+          dashboardDrainFailures = 0,
+          dashboardRefreshInFlight = !1,
+          dashboardRefreshPromise = null,
+          dashboardRefreshQueuedAll = !1,
+          dashboardRefreshQueuedSections = new Set(),
+          dashboardRefreshQueuedReason = "",
+          operationsRefreshPromise = null,
+          dashboardRevisionPollInFlight = !1,
+          dashboardRevisionApplyInFlight = !1,
+          dashboardRevision = 0,
+          dashboardRevisionEpoch = "",
+          pendingDashboardRevision = 0,
+          pendingDashboardEpoch = "",
+          dashboardRevisionFailures = 0,
+          dashboardLastFullRefreshAt = 0,
+          dashboardLastAncillaryRefreshAt = 0,
+          dashboardLastSecurityRefreshAt = 0,
+          pendingDashboardSections = new Set(),
+          dashboardPollCounter = 0,
+          lastIncidentRenderSignature = "",
+          lastStatusPageRenderSignature = "",
+          lastServiceCatalogRenderSignature = "",
+          _lastTrackedView = "",
+          _activeActionPin = "",
+          _securitySettingsDirty = !1,
+          _integrationsDirty = !1,
+          _securityPolicyDirty = !1;
+        // Quiet fetches must still handle terminal access responses.
+        const dashboardPassivePaths = new Set([
+          "/client/api/status", "/client/api/operations", "/client/api/revision", "/client/api/ui-version",
+        ]);
+        const dashboardAccess = window.ivDashboardAccess = {
+          paused: false, status: 0, epoch: 0, requests: new Map(), retry: null,
+        };
+        function dashboardPausedResponse() {
+          return new Response(JSON.stringify({ error: "Workspace refresh is paused", refresh_paused: true }), {
+            status: dashboardAccess.status || 402, headers: { "Content-Type": "application/json" },
+          });
+        }
+        function pauseDashboardForAccess(status) {
+          const changed = !dashboardAccess.paused;
+          dashboardAccess.paused = true;
+          dashboardAccess.status = status;
+          dashboardAccess.epoch += 1;
+          clearTimeout(dashboardPollingInterval);
+          clearTimeout(dashboardDrainTimer);
+          dashboardPollingInterval = dashboardDrainTimer = null;
+          clearInterval(johnnyRefreshInterval);
+          johnnyRefreshInterval = null;
+          pendingDashboardSections.clear();
+          pendingDashboardRevision = 0;
+          dashboardRefreshQueuedAll = false;
+          dashboardRefreshQueuedSections.clear();
+          dashboardRefreshQueuedReason = "";
+          dashboardAccess.requests.forEach((entry) => entry.controller.abort());
+          dashboardAccess.requests.clear();
+          if (status === 401 || status === 403) redirectToLoginOnSessionExpiry();
+          if (status === 402 || status === 423) {
+            APP_STATE.workspace_locked = true;
+            APP_STATE.payment_required = status === 402;
+            const title = document.getElementById("workspace-lock-title");
+            const message = document.getElementById("workspace-lock-message");
+            if (title) title.textContent = status === 402 ? "Billing activation required" : "Workspace locked";
+            if (message) message.textContent = status === 402
+              ? "Background refresh is paused. Open billing, then retry access after activation."
+              : "Background refresh is paused. Contact your workspace administrator, then retry after access is restored.";
+            applyWorkspaceState();
+          }
+          if (changed) window.dispatchEvent(new Event("infraveil:access-paused"));
+        }
+        function dashboardFetch(input, init = {}) {
+          const raw = typeof input === "string" ? input : input?.url || "";
+          const url = new URL(raw, window.location.href);
+          const method = String(init.method || input?.method || "GET").toUpperCase();
+          if (url.origin !== window.location.origin || !url.pathname.startsWith("/client/api/"))
+            return __nativeFetch(input, init);
+          const passive = method === "GET" && dashboardPassivePaths.has(url.pathname);
+          if (passive && dashboardAccess.paused) return Promise.resolve(dashboardPausedResponse());
+          const epoch = dashboardAccess.epoch;
+          const observe = (response) => {
+            if (epoch !== dashboardAccess.epoch && method === "GET")
+              throw new DOMException("Workspace access changed during this read", "AbortError");
+            if (epoch === dashboardAccess.epoch &&
+                ([402, 423].includes(response.status) || (passive && [401, 403].includes(response.status))))
+              pauseDashboardForAccess(response.status);
+            return response;
+          };
+          if (!passive) return __nativeFetch(input, init).then(observe);
+          // Dedupe only concurrent background GETs, never actions or different scopes.
+          url.searchParams.delete("_ts");
+          url.searchParams.delete("_");
+          url.searchParams.sort();
+          const key = JSON.stringify([url.href, [...new Headers(init.headers || input?.headers || {}).entries()].sort(), init.credentials || "same-origin"]);
+          const existing = dashboardAccess.requests.get(key);
+          if (existing) return waitForDashboardRead(existing, init.signal || input?.signal);
+          const controller = new AbortController();
+          const entry = { controller, promise: null, readers: 0 };
+          entry.promise = Promise.resolve().then(() => __nativeFetch(input, { ...init, signal: controller.signal }))
+            .then((response) => {
+              // Do not abort the body of the response that caused the lock.
+              if (dashboardAccess.requests.get(key) === entry) dashboardAccess.requests.delete(key);
+              return observe(response);
+            }).finally(() => {
+              if (dashboardAccess.requests.get(key) === entry) dashboardAccess.requests.delete(key);
+            });
+          dashboardAccess.requests.set(key, entry);
+          return waitForDashboardRead(entry, init.signal || input?.signal);
+        }
+        function waitForDashboardRead(entry, signal) {
+          entry.readers += 1;
+          return new Promise((resolve, reject) => {
+            let settled = false;
+            const finish = (error, response) => {
+              if (settled) return;
+              settled = true;
+              signal?.removeEventListener("abort", abort);
+              entry.readers -= 1;
+              if (error && !entry.readers) entry.controller.abort();
+              if (error) reject(error);
+              else { try { resolve(response.clone()); } catch (error) { reject(error); } }
+            };
+            const abort = () => finish(new DOMException("Request aborted", "AbortError"));
+            entry.promise.then((response) => finish(null, response), (error) => finish(error));
+            if (signal?.aborted) abort();
+            else signal?.addEventListener("abort", abort, { once: true });
+          });
+        }
+        function retryDashboardAccess() {
+          if (dashboardAccess.retry) return dashboardAccess.retry;
+          const button = document.getElementById("workspace-access-retry");
+          if (button) button.disabled = true;
+          const epoch = dashboardAccess.epoch;
+          // Probe an actually gated endpoint, not merely a successful billing sync.
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 12000);
+          const request = (async () => {
+            try {
+              const response = await __nativeFetch(freshUrl(API.status), {
+                cache: "no-store", credentials: "same-origin", signal: controller.signal,
+              });
+              if ([401, 403].includes(response.status)) { redirectToLoginOnSessionExpiry(); return false; }
+              if ([402, 423].includes(response.status)) pauseDashboardForAccess(response.status);
+              if (!response.ok) throw new Error("Workspace access is still unavailable. Try again after it is restored.");
+              const payload = await response.json();
+              if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Invalid access-check response.");
+              if (epoch !== dashboardAccess.epoch) return false;
+              dashboardAccess.paused = false;
+              dashboardAccess.status = 0;
+              dashboardAccess.epoch += 1;
+              APP_STATE.payment_required = APP_STATE.workspace_locked = false;
+              dashboardDrainFailures = dashboardRevisionFailures = 0;
+              dashboardRevision = 0;
+              dashboardRevisionEpoch = pendingDashboardEpoch = "";
+              applyWorkspaceState();
+              window.dispatchEvent(new Event("infraveil:access-resumed"));
+              await updateDashboardData({ reason: "access-restored", force: true });
+              startDashboardPolling();
+              return !dashboardAccess.paused;
+            } catch (error) {
+              showToast(error.message || "Could not check workspace access.", "error");
+              return false;
+            } finally {
+              clearTimeout(timeout);
+              if (button) button.disabled = false;
+            }
+          })();
+          dashboardAccess.retry = request.finally(() => { dashboardAccess.retry = null; });
+          return dashboardAccess.retry;
+        }
+        function scheduleDashboardDrain(delay) {
+          if (dashboardAccess.paused || dashboardDrainTimer !== null) return;
+          dashboardDrainTimer = setTimeout(() => {
+            dashboardDrainTimer = null;
+            drainDashboardSections();
+          }, delay);
+        }
+        function humanizeTelemetryKey(e) {
+          return String(e || "-")
+            .replace(/[-_/]+/g, " ")
+            .replace(/\b\w/g, (e) => e.toUpperCase());
+        }
+        function setLatestCommandReceipts(e) {
+          ((latestCommandReceipts = Array.isArray(e) ? e : []),
+            syncAssistantCommandChips(),
+            flushPendingAssistantCommandSummaries());
+        }
+        function getCommandReceipt(e) {
+          return (
+            (latestCommandReceipts || []).find(
+              (t) => t && t.command_id === e,
+            ) || null
+          );
+        }
+        function queueAssistantCommandSummary(e, t) {
+          const n = [
+            ...new Set(
+              (e || []).map((e) => String(e || "").trim()).filter(Boolean),
+            ),
+          ];
+          n.length &&
+            (pendingAssistantCommandSummaries.push({
+              commandIds: n,
+              toolCount: t || n.length,
+              announced: !1,
+            }),
+            flushPendingAssistantCommandSummaries());
+        }
+        function flushPendingAssistantCommandSummaries() {
+          Array.isArray(pendingAssistantCommandSummaries) &&
+            pendingAssistantCommandSummaries.length &&
+            (pendingAssistantCommandSummaries =
+              pendingAssistantCommandSummaries.filter((e) => {
+                if (!e || e.announced) return !1;
+                const t = e.commandIds.map(getCommandReceipt).filter(Boolean);
+                if (t.length !== e.commandIds.length) return !0;
+                if (
+                  !t.every((e) =>
+                    ["completed", "failed", "cancelled"].includes(
+                      String(e.status || "").toLowerCase(),
+                    ),
+                  )
+                )
+                  return !0;
+                const n = t.filter((e) =>
+                  ["failed", "cancelled"].includes(
+                    String(e.status || "").toLowerCase(),
+                  ),
+                );
+                if (n.length) {
+                  const t = n.find((e) => e.error || e.notes);
+                  appendAssistantMessage(
+                    "assistant",
+                    `Tool call${1 === e.toolCount ? "" : "s"} finished with ${n.length} failure${1 === n.length ? "" : "s"}${t ? `: ${t.error || t.notes}` : "."}`,
+                  );
+                } else
+                  appendAssistantMessage(
+                    "assistant",
+                    `Tool call${1 === e.toolCount ? "" : "s"} completed successfully.`,
+                  );
+                return !1;
+              }));
+        }
+        function formatBillingDate(e) {
+          if (!e) return "";
+          const t = "number" == typeof e ? new Date(1e3 * e) : new Date(e);
+          return Number.isNaN(t.getTime()) ? "" : t.toLocaleString();
+        }
+        async function syncBillingStateFromUrlIfNeeded() {
+          const e = new URLSearchParams(window.location.search),
+            t = e.get("billing"),
+            n = e.get("session_id") || "";
+          if (t || n)
+            try {
+              const e = await freshFetch(API.billingSync, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ session_id: n }),
+                }),
+                o = await e.json().catch(() => ({}));
+              if (!e.ok || !o.success)
+                throw new Error(o.error || "Billing sync failed.");
+              ("success" === t
+                ? showToast(
+                    "Billing is active. Your workspace has been refreshed.",
+                    "success",
+                  )
+                : "managed" === t
+                  ? showToast("Billing settings updated.", "success")
+                  : "cancelled" === t &&
+                    showToast(
+                      "Checkout was cancelled. Nothing was charged.",
+                      "info",
+                    ),
+                await retryDashboardAccess());
+            } catch (e) {
+              showToast(e.message || "Could not sync billing state.", "error");
+            } finally {
+              const e = new URL(window.location.href);
+              (e.searchParams.delete("billing"),
+                e.searchParams.delete("session_id"),
+                window.history.replaceState({}, "", e.toString()));
+            }
+        }
+        async function startBillingCheckout() {
+          try {
+            showPaymentProcessorLoading();
+            const e = await fetch(API.billingCheckout, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  success_path: "/dashboard?billing=success",
+                  cancel_path: "/dashboard?billing=cancelled",
+                  include_setup_fee: !0,
+                }),
+              }),
+              t = await e.json().catch(() => ({}));
+            if (!e.ok || !t.success || !t.checkout_url)
+              throw new Error(t.error || "Could not start checkout.");
+            window.location.href = t.checkout_url;
+          } catch (e) {
+            closeModal();
+            showToast(e.message || "Could not start checkout.", "error");
+          }
+        }
+        async function openBillingPortal() {
+          try {
+            const e = String(APP_STATE.payment_status || "").toLowerCase();
+            if (!["paid", "trialing", "past_due", "canceled"].includes(e))
+              return startBillingCheckout();
+            const t = await fetch(API.billingPortal, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  return_path: "/dashboard?billing=managed",
+                }),
+              }),
+              n = await t.json().catch(() => ({}));
+            if (!t.ok || !n.success || !n.url)
+              throw new Error(n.error || "Could not open billing management.");
+            window.location.href = n.url;
+          } catch (e) {
+            showToast(
+              e.message || "Could not open billing management.",
+              "error",
+            );
+          }
+        }
+        async function openCapacityPurchase(e) {
+          const t = String(e || "").toLowerCase(),
+            n = "launcher" === t,
+            o = n ? APP_STATE.billing?.launcher_addon_unit_amount : APP_STATE.billing?.api_addon_unit_amount,
+            r = n ? "Buy Launcher Slots" : "Buy API Slots",
+            s = n
+              ? "Each slot adds recurring monthly launcher capacity to this workspace."
+              : "Each slot adds recurring monthly API backend capacity to this workspace.";
+          if (!["launcher", "api"].includes(t) || typeof o !== "number" || !Number.isFinite(o) || o < 0) {
+            showToast("Current capacity pricing is unavailable. Refresh Billing before continuing.", "error");
+            return;
+          }
+          closeModal();
+          createModal(
+            `\n                <div class="p-6">\n                    <h3 class="text-white text-sm font-semibold">${r}</h3>\n                    <p class="text-xs text-gray-400 mt-2">${s}</p>\n                    <div class="mt-5">\n                        <label class="text-[10px] uppercase tracking-widest text-gray-500">Quantity</label>\n                        <input id="capacity-purchase-qty" type="number" min="1" max="25" value="1" class="ink-input rounded-lg px-3 py-3 text-sm w-full mt-2" />\n                    </div>\n                    <div id="capacity-purchase-total" class="text-sm text-white mt-4">$${o.toFixed(2)}/month recurring</div>\n                    <p class="text-[11px] text-gray-500 mt-2 leading-relaxed">Capacity remains available while the recurring add-on is active.</p>\n                    <div class="flex justify-end gap-3 mt-6">\n                        <button class="px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:bg-white/5 transition-colors" onclick="closeModal()">Cancel</button>\n                        <button id="capacity-purchase-confirm" class="btn-primary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Continue to Checkout</button>\n                    </div>\n                </div>\n            `,
+          );
+          const a = document.getElementById("capacity-purchase-qty"),
+            i = document.getElementById("capacity-purchase-total"),
+            l = document.getElementById("capacity-purchase-confirm"),
+            c = () => {
+              const quantity = Number(a?.value || 1),
+                e = Number.isFinite(quantity) ? Math.max(1, Math.min(25, Math.trunc(quantity))) : 1;
+              return (
+                a && (a.value = String(e)),
+                i && (i.textContent = `$${(e * o).toFixed(2)}/month recurring`),
+                e
+              );
+            };
+          (a && a.addEventListener("input", c),
+            c(),
+            l &&
+              (l.onclick = async () => {
+                const e = c();
+                try {
+                  showPaymentProcessorLoading();
+                  const n = await fetch(
+                      "/client/api/billing/addon-checkout-session",
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          kind: t,
+                          quantity: e,
+                          success_path: "/dashboard?billing=success",
+                          cancel_path: "/dashboard?billing=cancelled",
+                        }),
+                      },
+                    ),
+                    o = await n.json().catch(() => ({}));
+                  if (!n.ok || !o.success || !o.checkout_url)
+                    throw new Error(
+                      o.error || "Could not start add-on checkout.",
+                    );
+                  window.location.href = o.checkout_url;
+                } catch (e) {
+                  closeModal();
+                  showToast(
+                    e.message || "Could not start add-on checkout.",
+                    "error",
+                  );
+                }
+              }));
+        }
+        function openInvoiceBillingPath() {
+          (switchView("support"),
+            setTimeout(() => {
+              const e = document.getElementById("support-summary"),
+                t = document.getElementById("support-description"),
+                n = document.getElementById("support-urgency"),
+                o = document.getElementById("support-category"),
+                r = document.getElementById("support-contact-method");
+              (e && !e.value && (e.value = "Invoice / ACH billing request"),
+                t &&
+                  !t.value &&
+                  (t.value =
+                    "We would like to activate Professional billing through invoice / ACH instead of immediate card checkout."),
+                n && (n.value = "normal"),
+                o && (o.value = "billing"),
+                r && (r.value = "email_and_dashboard"));
+            }, 40),
+            showToast(
+              "Billing support draft is ready. Send it when you are happy with the details.",
+              "info",
+            ));
+        }
+        function provisionApiFromBilling() {
+          createAgentNode();
+        }
+        function provisionLauncherFromBilling() {
+          const e = async (e = "") => {
+            const t = Number(
+                (APP_STATE.billing || {}).launcher_host_count || 0,
+              ),
+              n = `Launcher-${t + 1}`;
+            try {
+              const o = { "Content-Type": "application/json" };
+              APP_STATE.demo_mode || (o["X-TOTP-Auth"] = e);
+              const r = await fetch("/client/api/launcher-host/create", {
+                  method: "POST",
+                  headers: o,
+                  body: JSON.stringify({
+                    name: n,
+                    region: "global",
+                    labels: "",
+                    max_apis: 25,
+                    weight: 100,
+                  }),
+                }),
+                s = await r.json().catch(() => ({}));
+              if (!r.ok || !s.success)
+                throw new Error(
+                  s.error || "Could not provision launcher host.",
+                );
+              (showToast(
+                t >= 2
+                  ? "Launcher host provisioned. Billing add-on updated automatically."
+                  : "Launcher host provisioned.",
+                "success",
+              ),
+                await updateDashboardData(),
+                switchView("billing"));
+            } catch (e) {
+              showToast(
+                e.message || "Could not provision launcher host.",
+                "error",
+              );
+            }
+          };
+          if (APP_STATE.demo_mode) return e();
+          showTotpPrompt("Provision launcher host", async (t) => e(t));
+        }
+        function commandReceiptBadge(e) {
+          if (!e || !e.status) return "";
+          const t = String(e.status).toLowerCase();
+          return `<span class="justify-self-start md:justify-self-end px-3 py-1 rounded-full border text-[9px] uppercase tracking-widest ${"completed" === t ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/20" : "failed" === t ? "text-red-300 bg-red-500/10 border-red-500/20" : "acknowledged" === t ? "text-blue-300 bg-blue-500/10 border-blue-500/20" : "text-amber-200 bg-amber-500/10 border-amber-500/20"}">${escapeHtml(t)}</span>`;
+        }
+        function syncAssistantCommandChips() {
+          document
+            .querySelectorAll("[data-assistant-command-ids]")
+            .forEach((e) => {
+              const t = String(
+                e.getAttribute("data-assistant-command-ids") || "",
+              )
+                .split(",")
+                .map((e) => e.trim())
+                .filter(Boolean);
+              if (!t.length) return;
+              const n = t.map(getCommandReceipt).filter(Boolean);
+              if (!n.length) return;
+              const o = { failed: 4, acknowledged: 3, completed: 2, queued: 1 };
+              n.sort(
+                (e, t) =>
+                  (o[String(t.status || "").toLowerCase()] || 0) -
+                  (o[String(e.status || "").toLowerCase()] || 0),
+              );
+              const r = n[0],
+                s = e.querySelector("[data-assistant-command-status]"),
+                a = e.querySelector("[data-assistant-command-note]"),
+                i = e.querySelector("[data-assistant-command-details]");
+              if (
+                (s &&
+                  (s.textContent = String(r.status || "queued").toUpperCase()),
+                a)
+              ) {
+                const e = r.error || r.notes || "";
+                a.textContent =
+                  e ||
+                  `${n.length} tracked command${1 === n.length ? "" : "s"}.`;
+              }
+              if (i) {
+                const e = [
+                  `<span class="text-[10px] text-zinc-500"><span class="text-zinc-400">Status</span>: ${escapeCodeHtml(String(r.status || "queued"))}</span>`,
+                  `<span class="text-[10px] text-zinc-500"><span class="text-zinc-400">Command Id${1 === n.length ? "" : "s"}</span>: ${escapeCodeHtml(n.map((e) => e.command_id).join(", "))}</span>`,
+                ];
+                (r.launcher_host_id &&
+                  e.push(
+                    `<span class="text-[10px] text-zinc-500"><span class="text-zinc-400">Launcher Host Id</span>: ${escapeCodeHtml(r.launcher_host_id)}</span>`,
+                  ),
+                  r.agent_id &&
+                    e.push(
+                      `<span class="text-[10px] text-zinc-500"><span class="text-zinc-400">Agent Id</span>: ${escapeCodeHtml(r.agent_id)}</span>`,
+                    ),
+                  (i.innerHTML = e.join(
+                    '<span class="text-zinc-700 mx-1">·</span>',
+                  )));
+              }
+              e.classList.remove(
+                "border-emerald-500/20",
+                "border-red-500/20",
+                "border-amber-400/20",
+                "border-blue-500/20",
+                "bg-emerald-500/[0.06]",
+                "bg-red-500/[0.06]",
+                "bg-amber-500/[0.06]",
+                "bg-blue-500/[0.06]",
+              );
+              const l = String(r.status || "").toLowerCase();
+              "completed" === l
+                ? e.classList.add(
+                    "border-emerald-500/20",
+                    "bg-emerald-500/[0.06]",
+                  )
+                : "failed" === l
+                  ? e.classList.add("border-red-500/20", "bg-red-500/[0.06]")
+                  : "acknowledged" === l
+                    ? e.classList.add(
+                        "border-blue-500/20",
+                        "bg-blue-500/[0.06]",
+                      )
+                    : e.classList.add(
+                        "border-amber-400/20",
+                        "bg-amber-500/[0.06]",
+                      );
+            });
+        }
+        function renderTelemetryList(e, t, n) {
+          const o = document.getElementById(e);
+          o &&
+            (Array.isArray(t) && 0 !== t.length
+              ? (o.innerHTML = t
+                  .map(
+                    (e) =>
+                      `\n                <div class="rounded-lg border px-3 py-2 flex items-center justify-between gap-3" style="border-color: var(--table-border); background: rgba(255,255,255,0.02)">\n                    <span style="color: var(--text-main)">${humanizeTelemetryKey(e.name)}</span>\n                    <span class="font-mono-cli text-[11px]" style="color: var(--text-subtle)">${e.count}</span>\n                </div>\n            `,
+                  )
+                  .join(""))
+              : (o.innerHTML = `<div class="text-[11px]" style="color: var(--text-muted)">${n}</div>`));
+        }
+        async function trackDashboardEvent(e, t = "", n = "", o = {}) {
+          try {
+            await fetch(API.telemetry, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                event_type: e,
+                view: t,
+                action: n,
+                metadata: o,
+              }),
+            });
+          } catch (e) {}
+        }
+        const __nativeFetch = window.fetch.bind(window);
+        function setFeedbackSentiment(e) {
+          return feedbackController.setSentiment(e);
+        }
+        function setCheckedByValue(e, t, n) {
+          document.querySelectorAll(e).forEach((e) => {
+            e.value === t && (e.checked = !!n);
+          });
+        }
+        function readCheckedMap(e) {
+          const t = {};
+          return (
+            document.querySelectorAll(e).forEach((e) => {
+              t[e.value] = !!e.checked;
+            }),
+            t
+          );
+        }
+        function applyAssistantPolicyControls(e) {
+          const t = e?.policy || {},
+            n = t.activation_threshold || {},
+            o = t.assistant_permissions || {},
+            r = t.audit || {};
+          const s = document.getElementById("rem-error-threshold"),
+            a = document.getElementById("rem-window-minutes"),
+            i = document.getElementById("rem-doctor-required");
+          (s && (s.value = String(n.runtime_errors || 3)),
+            a && (a.value = String(n.window_minutes || 10)),
+            i && (i.checked = n.doctor_receipts_required !== !1),
+            document.querySelectorAll(".rem-perm-check").forEach((e) => {
+              e.checked = !!o[e.value];
+            }),
+            document.querySelectorAll(".rem-audit-check").forEach((e) => {
+              e.checked = r[e.value] !== !1;
+            }));
+        }
+        function applyRemediationSettingsData(e) {
+          if (!e || !e.policy) return;
+          const t = document.getElementById("remediation-lock-overlay"),
+            n = document.getElementById("rem-save-btn"),
+            o = APP_STATE.demo_mode || e.client?.demo_mode;
+          (lockRequiresBilling() && !o
+            ? (t.classList.remove("hidden"),
+              (n.disabled = !0),
+              n.classList.add("opacity-50", "cursor-not-allowed"))
+            : (t.classList.add("hidden"),
+              (n.disabled = !1),
+              n.classList.remove("opacity-50", "cursor-not-allowed")),
+            (document.getElementById("rem-engine-toggle").checked =
+              e.auto_remediation),
+            "off" !== e.policy.mode &&
+              (document.getElementById("rem-mode-select").value =
+                e.policy.mode),
+            (document.getElementById("rem-endpoint-input").value =
+              e.provider?.endpoint || ""),
+            (document.getElementById("rem-model-input").value =
+              e.provider?.model || ""),
+            (document.getElementById("rem-api-key-input").value = ""),
+            (document.getElementById("rem-api-key-status").innerText = e
+              .provider?.api_key_configured
+              ? "Encrypted API key saved. Leave the field blank to keep it."
+              : "No encrypted API key saved yet."),
+            document.querySelectorAll(".rem-cat-check").forEach((t) => {
+              t.disabled ||
+                (t.checked = e.policy.allowed_categories.includes(t.value));
+            }),
+            applyAssistantPolicyControls(e));
+        }
+        function renderRemediationActivityData(e) {
+          const t = document.getElementById("remediation-activity-feed");
+          if (!t) return;
+          const n = Array.isArray(e?.activity) ? e.activity : [];
+          if (0 === n.length)
+            return (
+              (t.innerHTML =
+                '\n                    <div class="p-4 text-center text-xs border border-dashed rounded-xl" style="border-color: var(--table-border); color: var(--text-subtle)">\n                        No remediation jobs have run yet.\n                    </div>\n                '),
+              void (window.lucide && lucide.createIcons())
+            );
+          ((t.innerHTML = n
+            .map((e) => {
+              const t = String(e.level || "INFO").toUpperCase(),
+                n =
+                  "ERROR" === t
+                    ? {
+                        border: "rgba(248,113,113,0.25)",
+                        bg: "rgba(127,29,29,0.18)",
+                        text: "#fca5a5",
+                        icon: "triangle-alert",
+                      }
+                    : "WARN" === t
+                      ? {
+                          border: "rgba(251,191,36,0.25)",
+                          bg: "rgba(120,53,15,0.18)",
+                          text: "#fcd34d",
+                          icon: "shield-alert",
+                        }
+                      : "AUDIT" === t
+                        ? {
+                            border: "rgba(96,165,250,0.25)",
+                            bg: "rgba(30,58,138,0.18)",
+                            text: "#93c5fd",
+                            icon: "sparkles",
+                          }
+                        : {
+                            border: "rgba(52,211,153,0.25)",
+                            bg: "rgba(6,78,59,0.18)",
+                            text: "#6ee7b7",
+                            icon: "shield-check",
+                          };
+              return `\n                    <div class="rounded-xl border px-4 py-3" style="border-color:${n.border}; background:${n.bg}">\n                        <div class="flex items-start justify-between gap-4">\n                            <div class="min-w-0">\n                                <div class="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold" style="color:${n.text}">\n                                    <i data-lucide="${n.icon}" class="w-3.5 h-3.5"></i>${t}\n                                </div>\n                                <div class="text-xs mt-1 break-words" style="color: var(--text-main)">${(e.message || "").replace(/</g, "&lt;")}</div>\n                            </div>\n                            <div class="text-[10px] font-mono-cli shrink-0" style="color: var(--text-subtle)">${e.time ? new Date(e.time).toLocaleString() : "-"}</div>\n                        </div>\n                    </div>\n                `;
+            })
+            .join("")),
+            window.lucide && lucide.createIcons());
+        }
+        function getCurrentViewId() {
+          const e = document.querySelector(".view-section.active");
+          return e ? e.id.replace("view-", "") : "overview";
+        }
+        function activeElementIsEditable() {
+          const e = document.activeElement;
+          if (!e) return !1;
+          const t = String(e.tagName || "").toLowerCase();
+          return (
+            "input" === t ||
+            "textarea" === t ||
+            "select" === t ||
+            !!e.isContentEditable ||
+            !!e.closest?.("textarea, input, select")
+          );
+        }
+        function activeElementInView(e) {
+          const t = document.activeElement;
+          return !!(t && t.closest?.(`#view-${e}`));
+        }
+        function shouldPreserveActiveView(e) {
+          return getCurrentViewId() === e && activeElementInView(e) && activeElementIsEditable();
+        }
+        function renderStatusSubView(e, t, n = !1) {
+          if (!t) return;
+          const o = e || getCurrentViewId();
+          if (!n && shouldPreserveActiveView(o)) return;
+          "runtime-evidence" === o
+            ? renderRuntimeEvidence(t)
+            : "capacity-audit" === o
+              ? renderCapacityAudit(t)
+              : "cache-queue" === o
+                ? renderCacheQueue(t)
+                : "process-supervisor" === o
+                  ? renderProcessSupervisor(t)
+                  : "gateway-routes" === o
+                    ? renderGatewayRoutes(t)
+                    : "trust-receipts" === o && renderTrustReceipts(t);
+        }

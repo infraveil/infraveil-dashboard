@@ -1,0 +1,273 @@
+<div
+            id="view-docs"
+            class="view-section hidden max-w-4xl mx-auto space-y-8 pb-10"
+          >
+            <div class="mb-8">
+              <h2 class="text-xl font-light" style="color: var(--text-main)">
+                Infraveil Development Guide
+              </h2>
+              <p class="text-sm mt-2" style="color: var(--text-muted)">
+                Understanding the workspace execution environment.
+              </p>
+            </div>
+            <div class="acrylic-panel p-8 rounded-2xl space-y-6">
+              <div class="doc-section">
+                <h3>1. Running Long-Lived Services</h3>
+                <p>
+                  Infraveil launchers supervise long-running services through
+                  a runtime contract. The service command should keep running
+                  like a web server, worker, or monitoring process. If it exits
+                  cleanly when it was expected to stay alive, the launcher treats
+                  that as a supervised process exit and records it for review.
+                </p>
+                <p>To fix this, wrap your logic in a continuous loop:</p>
+                <pre>
+import time
+
+def main():
+    print("Agent started successfully!")
+    
+    # Run indefinitely
+    while True:
+        do_work()
+        time.sleep(60) # Sleep for 60 seconds</pre
+                >
+              </div>
+              <hr style="border-color: var(--table-border)" />
+              <div class="doc-section">
+                <h3>2. Runtime Manifest & Environment</h3>
+                <p>
+                  <code>infraveil.json</code> is the runtime contract. It tells
+                  the agent exactly which supervised services to install, build,
+                  start, route, watch, and recover across Node, Go, Rust, Java,
+                  Python, or any command-line service.
+                </p>
+                <p>
+                  In process mode, the agent extracts the package into a
+                  controlled workspace, starts the services from the manifest,
+                  and places the Infraveil gateway in front of them so logs,
+                  request telemetry, and policy enforcement still work across
+                  languages.
+                </p>
+                <p>
+                  <code>config.json</code> and manifest <code>env</code> values
+                  are injected as environment variables. Secret references such
+                  as <code>infraveil:secret:DATABASE_URL</code> are reserved for
+                  managed secret injection.
+                </p>
+                <pre>
+{
+  "mode": "process",
+  "gateway": { "listen": 18443 },
+  "services": [
+    {
+      "name": "node-api",
+      "runtime": "node",
+      "start": "node server.js",
+      "port": 3001
+    }
+  ],
+  "routes": [{ "path": "/*", "service": "node-api" }],
+  "persistent_paths": [
+    { "path": "data", "type": "dir" },
+    { "path": "data/app.sqlite", "type": "file" }
+  ]
+}</pre
+                >
+                <pre>
+import os
+
+def load_config():
+    # Retrieve configuration directly from OS memory
+    return {
+        "api_key": os.environ.get("api_key", "default_val"),
+        "timeout": int(os.environ.get("timeout", 30)),
+        "debug": os.environ.get("debug") == "True"
+    }</pre
+                >
+              </div>
+              <hr style="border-color: var(--table-border)" />
+              <div class="doc-section">
+                  <h3>3. Application Output & Logging</h3>
+                <p>
+                  Infraveil intercepts standard output without special library
+                  imports. In Python memory mode, <code>print()</code> and
+                  tracebacks are captured directly. In process mode, stdout,
+                  stderr, and process exits are emitted as generic
+                  <code>[PROCESS_EVENT]</code> envelopes with service, stream,
+                  runtime, exit code, and raw message. These are separated from
+                  launcher and agent control evidence on the dedicated
+                  <b>App Logs</b> page.
+                </p>
+              </div>
+              <hr style="border-color: var(--table-border)" />
+              <div class="doc-section">
+                <h3>4. Security Pipelines</h3>
+                <p>
+                  The Security tab now includes a pipeline builder. This is
+                  where you define what the agent should observe, enrich, score,
+                  signal, and do next.
+                </p>
+                <p>
+                  <b>What To Capture</b> is the request data you want to keep,
+                  label, count, or enrich. Use it for things like
+                  <code>/</code> versus <code>/settings</code>, payload shape,
+                  country, tenant, feature flag, user-agent family, or session
+                  fingerprint.
+                </p>
+                <p>
+                  <b>What To Do</b> is what happens after inspection. Use it to
+                  log, score, slow, deceive, block, call your own tool, or hand
+                  off to a custom module.
+                </p>
+                <p>
+                  <b>Fast mental model:</b> capture first, act second. If you
+                  want to see something in the live dashboard later, it needs to
+                  be recorded by your capture side or emitted as a custom
+                  signal.
+                </p>
+                <p>
+                  <b>Simple example:</b> if you want to know whether visitors
+                  hit <code>/</code>, <code>/settings</code>, or
+                  <code>/api/*</code>, add <code>observe_request</code>,
+                  <code>tag_route</code>, and <code>count_dimension</code> with
+                  dimensions like <code>path</code>, <code>method</code>, and
+                  <code>route_group</code>.
+                </p>
+                <pre>
+{
+  "telemetry_dimensions": ["path", "method", "country", "route_group", "feature_flag"],
+  "telemetry_pipeline": [
+    { "stage": "observe_request" },
+    { "stage": "tag_route", "config": { "map": { "/": "index", "/settings": "settings" } } },
+    { "stage": "count_dimension", "config": { "dimensions": ["path", "method", "country"] } }
+  ],
+  "response_pipeline": [
+    { "stage": "risk_score", "config": { "weights": { "scanner": 20, "honeypot": 80 } } },
+    { "stage": "block_request", "config": { "threshold": 90 } }
+  ]
+}</pre
+                >
+                <p><b>Where custom pipeline logs show up:</b></p>
+                <p>
+                  1. <b>Pipeline Analytics</b>: this is the main place to
+                  inspect request-by-request execution plus the rolled-up
+                  analytics summary for your live pipeline output.
+                </p>
+                <p>
+                  2. <b>Network Trace</b>: open any request row and look at
+                  <b>Pipeline Telemetry</b>. That is the raw per-request output
+                  from your capture and action stages.
+                </p>
+                <p>
+                  3. <b>Security Event Log</b>: use response stages like
+                  <code>log_event</code> or actions like block/tarpit/deception
+                  when you want a request to create visible security events too.
+                </p>
+                <p><b>How to make your own visible fields:</b></p>
+                <p>
+                  1. Add the field name to <code>Fields To Track</code> if you
+                  want it treated like a first-class dimension.
+                </p>
+                <p>
+                  2. Use stage config or module output to write values into
+                  telemetry <code>dimensions</code>, custom telemetry keys, or
+                  <code>signals</code>.
+                </p>
+                <p>
+                  3. Save the builder, generate traffic, then check the live
+                  cards and expanded request telemetry. Your custom keys will
+                  show up there if they are actually being emitted.
+                </p>
+                <p>
+                  <b>Rule of thumb:</b> if a request hits your app but you
+                  cannot see a value later, the pipeline probably never captured
+                  it. Add or adjust a capture stage before trying to debug the
+                  action stage.
+                </p>
+              </div>
+              <hr style="border-color: var(--table-border)" />
+              <div class="doc-section">
+                <h3>5. Custom Defense Modules & Tool Contracts</h3>
+                <p>
+                  If the built-in stages are not enough, define your own modules
+                  and connected tools. Modules describe your runtime logic and
+                  any dashboard metadata you want to attach. Connected tools
+                  describe internal webhooks or services your pipeline can call.
+                </p>
+                <p>
+                  This is the \"do anything\" layer. You can model SIEM
+                  exporters, route classifiers, feature mappers, ticket
+                  creators, fraud scorers, deception engines, or
+                  company-specific trust systems without waiting for a product
+                  update.
+                </p>
+                <p><b>Custom module workflow:</b></p>
+                <p>1. Give the module a name and trigger family.</p>
+                <p>
+                  2. Put your runtime schema in <code>Schema JSON</code>. This
+                  is where you define what the module expects.
+                </p>
+                <p>
+                  3. Put any dashboard-facing metadata in
+                  <code>Dashboard/UI contract JSON</code> if you want the module
+                  to describe how it should be presented later.
+                </p>
+                <p>
+                  4. Use module output to emit custom telemetry fields or custom
+                  signals so the live dashboard has something real to display.
+                </p>
+                <p><b>Connected tool workflow:</b></p>
+                <p>1. Register a tool under <b>Connected Tools</b>.</p>
+                <p>
+                  2. Give it an input contract with an <code>endpoint</code> and
+                  optional method/body shape.
+                </p>
+                <p>
+                  3. Call it from a pipeline stage like
+                  <code>call_tool</code> or from your analysis layer.
+                </p>
+                <p>
+                  4. Inspect the request row in <b>Network Trace</b> to verify
+                  the tool call and emitted telemetry.
+                </p>
+              </div>
+              <hr style="border-color: var(--table-border)" />
+              <div class="doc-section">
+                <h3>6. Adaptive Analysis Engine</h3>
+                <p>
+                  The adaptive engine reads your actual telemetry, security
+                  events, and honeypot captures, then drafts pipeline or module
+                  suggestions. It is not a chat model. It works from the request
+                  stream, captured events, and your configured tool contracts.
+                </p>
+                <p>Its configuration is fully customizable:</p>
+                <pre>
+{
+  "enabled": true,
+  "mode": "draft_pipelines",
+  "sources": ["network_trace", "security_events", "honeypot_captures"],
+  "allowed_tools": ["suggest_pipeline_stage", "suggest_module", "suggest_honeypot_route"],
+  "objectives": ["identify_top_routes", "detect_attack_patterns", "recommend_custom_modules"],
+  "custom_tools": [
+    {
+      "name": "route-intent-classifier",
+      "kind": "analysis",
+      "purpose": "Group paths into product intent buckets",
+      "input_contract": {
+        "endpoint": "https://ops.example.internal/classify-route",
+        "method": "POST"
+      }
+    }
+  ]
+}</pre
+                >
+                <p>
+                  The output shows up in the Security Pipeline tab under
+                  <b>Adaptive Output</b> so you can see what the engine inferred
+                  from real traffic and immediately promote suggestions into the
+                  live stack.
+                </p>
+              </div>
+            </div>
+          </div>

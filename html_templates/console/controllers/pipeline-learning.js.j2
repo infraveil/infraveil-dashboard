@@ -1,0 +1,890 @@
+        function renderLearningEngine() {
+          const e = _learningEngine || {},
+            t = (e, t) => {
+              const n = document.getElementById(e);
+              n && (n.value = t);
+            },
+            n = (e, t) => {
+              const n = document.getElementById(e);
+              n && (n.checked = !!t);
+            };
+          (n("sec-learn-enabled", e.enabled),
+            t("sec-learn-mode", e.mode || "recommend"),
+            t("sec-learn-tools", (e.allowed_tools || []).join(", ")),
+            t("sec-learn-sources", (e.sources || []).join(", ")),
+            t("sec-learn-objectives", (e.objectives || []).join(", ")),
+            n("sec-learn-autoapply", e.auto_apply_safe_suggestions),
+            t("sec-learn-notes", e.notes || ""),
+            renderLearningValueChips(
+              "sec-learn-tools-quick",
+              "sec-learn-tools",
+              ANALYSIS_TOOL_OPTIONS,
+            ),
+            renderLearningValueChips(
+              "sec-learn-sources-quick",
+              "sec-learn-sources",
+              ANALYSIS_SOURCE_OPTIONS,
+            ),
+            renderLearningValueChips(
+              "sec-learn-objectives-quick",
+              "sec-learn-objectives",
+              ANALYSIS_OBJECTIVE_OPTIONS,
+            ));
+        }
+        function renderLearningValueChips(e, t, n) {
+          const o = document.getElementById(e),
+            r = document.getElementById(t);
+          if (!o || !r) return;
+          const s = new Set(
+            (r.value || "")
+              .split(",")
+              .map((e) => e.trim())
+              .filter(Boolean),
+          );
+          o.innerHTML = n
+            .map((e) => {
+              const n = s.has(e);
+              return `<button type="button" onclick="toggleLearningValue('${t}', '${e.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 rounded-lg text-[10px] font-mono-cli border transition-colors ${n ? "text-blue-300" : "text-gray-400"}" style="border-color:${n ? "rgba(59,130,246,0.35)" : "var(--table-border)"};background:${n ? "rgba(59,130,246,0.12)" : "var(--nav-hover)"}">${e}</button>`;
+            })
+            .join("");
+        }
+        function toggleLearningValue(e, t) {
+          const n = document.getElementById(e);
+          if (!n) return;
+          const o = (n.value || "")
+              .split(",")
+              .map((e) => e.trim())
+              .filter(Boolean),
+            r = new Set(o);
+          (r.has(t) ? r.delete(t) : r.add(t),
+            (n.value = Array.from(r).join(", ")),
+            renderLearningEngine());
+        }
+        function _hasDimension(e) {
+          return (_telemetryDimensions || [])
+            .map((e) => e.toLowerCase())
+            .includes(e.toLowerCase());
+        }
+        function _hasStageInPipeline(e) {
+          return [
+            ...(_telemetryPipeline || []),
+            ...(_responsePipeline || []),
+          ].some((t) => (t.stage || t.id) === e);
+        }
+        function _hasObjective(e) {
+          return (_learningEngine?.objectives || [])
+            .map((e) => e.toLowerCase())
+            .includes(e.toLowerCase());
+        }
+        function _renderMetricCard(e, t, n, o, r = "text-blue-400") {
+          const icon = String(e || "activity").replace(/[^a-zA-Z0-9_-]/g, "");
+          const tone = String(r || "text-blue-400").replace(/[^a-zA-Z0-9_:/-]/g, "");
+          return `<div class="rounded-xl border px-4 py-3" style="border-color: var(--table-border); background: var(--nav-hover)">
+                <div class="flex items-center gap-2 mb-1">
+                    <i data-lucide="${icon}" class="w-3.5 h-3.5 ${tone}"></i>
+                    <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">${escapeHtml(t)}</div>
+                </div>
+                <div class="text-xl font-mono-cli" style="color: var(--text-main)">${escapeHtml(n)}</div>
+                ${o ? `<div class="text-[9px] mt-1" style="color: var(--text-subtle)">${escapeHtml(o)}</div>` : ""}
+            </div>`;
+        }
+        function _renderSimpleListCard(e, t, n, o, r = "text-blue-400") {
+          if (!o || o.length === 0) return "";
+          const icon = String(e || "list").replace(/[^a-zA-Z0-9_-]/g, "");
+          const tone = String(r || "text-blue-400").replace(/[^a-zA-Z0-9_:/-]/g, "");
+          return `<div class="rounded-2xl border p-5" style="border-color: var(--table-border); background: var(--nav-hover)">
+                <div class="flex items-center justify-between mb-4 gap-3">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <i data-lucide="${icon}" class="w-4 h-4 ${tone}"></i>
+                        <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">${escapeHtml(t)}</div>
+                    </div>
+                    ${n ? `<div class="text-[9px] font-mono-cli text-right" style="color: var(--text-subtle)">${escapeHtml(n)}</div>` : ""}
+                </div>
+                <div class="space-y-2">
+                    ${o.map((item) => `
+                        <div class="flex items-center justify-between gap-3 rounded-lg px-3 py-2" style="background: var(--input-bg)">
+                            <span class="text-[10px] truncate" style="color: var(--text-main)">${escapeHtml(item.label)}</span>
+                            <span class="text-[9px] font-mono-cli shrink-0" style="color: var(--text-muted)">${escapeHtml(item.value)}</span>
+                        </div>
+                    `).join("")}
+                </div>
+            </div>`;
+        }
+        function _renderConfiguredStagesCard(e) {
+          const o =
+              e && e.pipeline && e.pipeline.configured_stages
+                ? e.pipeline.configured_stages
+                : {},
+            r = Array.isArray(o.telemetry) ? o.telemetry : [],
+            s = Array.isArray(o.response) ? o.response : [],
+            a = [];
+          return (
+            r
+              .slice(0, 4)
+              .forEach((e) =>
+                a.push({ label: `Capture: ${e.name || e.stage}`, value: "on" }),
+              ),
+            s
+              .slice(0, 4)
+              .forEach((e) =>
+                a.push({ label: `Action: ${e.name || e.stage}`, value: "on" }),
+              ),
+            r.length > 4 &&
+              a.push({
+                label: `${r.length - 4} more capture step${r.length - 4 == 1 ? "" : "s"}`,
+                value: "active",
+              }),
+            s.length > 4 &&
+              a.push({
+                label: `${s.length - 4} more action step${s.length - 4 == 1 ? "" : "s"}`,
+                value: "active",
+              }),
+            0 === a.length &&
+              a.push({
+                label: "Nothing enabled yet",
+                value: "use Quick Builder",
+              }),
+            _renderSimpleListCard(
+              "sliders-horizontal",
+              "Current Setup",
+              `${r.length} capture / ${s.length} action`,
+              a,
+              "text-cyan-400",
+            )
+          );
+        }
+        function _renderFieldsCard(e) {
+          const t = Array.isArray(e.telemetry_dimensions)
+              ? e.telemetry_dimensions
+              : [],
+            n = e.telemetry_examples || {},
+            o = t
+              .slice(0, 8)
+              .map((e) => ({
+                label: e,
+                value: void 0 === n[e] ? "tracked" : String(n[e]).slice(0, 22),
+              }));
+          return o.length
+            ? _renderSimpleListCard(
+                "list-filter",
+                "Tracked Fields",
+                `${o.length} visible`,
+                o,
+                "text-emerald-400",
+              )
+            : "";
+        }
+        function _renderCustomDimensionCards(e) {
+          return e && 0 !== e.length
+            ? e
+                .slice(0, 6)
+                .map((e) =>
+                  _renderSimpleListCard(
+                    "bar-chart-3",
+                    e.name,
+                    `${e.total || 0} values seen`,
+                    (e.values || [])
+                      .slice(0, 5)
+                      .map((e) => ({ label: e.value, value: e.count })),
+                    "text-blue-400",
+                  ),
+                )
+                .join("")
+            : "";
+        }
+        function _renderCustomSignalsCard(e) {
+          return e && 0 !== e.length
+            ? _renderSimpleListCard(
+                "radio-tower",
+                "Custom Signals",
+                `${e.length} active`,
+                e
+                  .slice(0, 6)
+                  .map((e) => ({
+                    label: e.name,
+                    value: e.latest
+                      ? `${e.count} / ${String(e.latest).slice(0, 18)}`
+                      : `${e.count} hits`,
+                  })),
+                "text-violet-400",
+              )
+            : "";
+        }
+        function _renderStackActivityCard(e) {
+          return e && 0 !== e.length
+            ? _renderSimpleListCard(
+                "layers-3",
+                "Stack request outcomes",
+                "Most common final outcome per stack",
+                e
+                  .slice(0, 6)
+                  .map((e) => ({
+                    label: e.name,
+                    value: e.top_decision
+                      ? `${e.count} requests · top ${e.top_decision.replace(":", " ")}`
+                      : `${e.count} req`,
+                  })),
+                "text-indigo-400",
+              )
+            : "";
+        }
+        function _renderTrafficFlowCard(e) {
+          if (!e || e.length === 0) return "";
+          const t = Math.max(...e.map((item) => Number(item.count) || 0), 1);
+          return `<div class="rounded-2xl border p-5" style="border-color: var(--table-border); background: var(--nav-hover)">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="route" class="w-4 h-4 text-blue-400"></i>
+                        <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Traffic Flow</div>
+                    </div>
+                    <div class="text-[9px] font-mono-cli" style="color: var(--text-subtle)">${e.length} busiest paths</div>
+                </div>
+                <div class="space-y-2">
+                    ${e.slice(0, 6).map((item) => {
+                      const count = Number(item.count) || 0;
+                      return `<div class="flex items-center gap-3">
+                            <span class="font-mono-cli text-[10px] text-blue-300 w-32 truncate shrink-0">${escapeHtml(item.path)}</span>
+                            <div class="flex-1 h-2 rounded-full bg-gray-800"><div class="h-2 rounded-full bg-blue-500/60" style="width:${Math.max(4, (count / t) * 100)}%"></div></div>
+                            <span class="font-mono-cli text-[10px] w-8 text-right" style="color:var(--text-muted)">${count}</span>
+                        </div>`;
+                    }).join("")}
+                </div>
+            </div>`;
+        }
+        function _renderRiskSummaryCard(e) {
+          const t = e.decisions || {},
+            n = e.risk_bands || {},
+            o = [];
+          return (
+            Object.entries(t).forEach(([e, t]) =>
+              o.push({ label: `Decision: ${e}`, value: t }),
+            ),
+            Object.entries(n).forEach(([e, t]) =>
+              o.push({ label: `Risk: ${e}`, value: t }),
+            ),
+            _hasStageInPipeline("block_request") &&
+              !("block" in t) &&
+              o.push({
+                label: "Block rule active",
+                value: "no requests crossed threshold yet",
+              }),
+            o.length
+              ? _renderSimpleListCard(
+                  "shield-check",
+                  "Outcome Summary",
+                  "live request decisions",
+                  o.slice(0, 8),
+                  "text-amber-400",
+                )
+              : ""
+          );
+        }
+        function _renderEventSummaryCard(e) {
+          const t = [];
+          return (
+            (e.event_types || [])
+              .slice(0, 6)
+              .forEach((e) => t.push({ label: e.type, value: e.count })),
+            0 === t.length && 0 === (e.suspicious_routes || []).length
+              ? ""
+              : ((e.suspicious_routes || [])
+                  .slice(0, 4)
+                  .forEach((e) =>
+                    t.push({ label: e.path, value: `${e.count} probes` }),
+                  ),
+                _renderSimpleListCard(
+                  "triangle-alert",
+                  "Security Watch",
+                  "what stood out recently",
+                  t.slice(0, 8),
+                  "text-red-400",
+                ))
+          );
+        }
+        function _renderMethodsCard(e) {
+          if (!e || 0 === e.length) return "";
+          const t = e
+            .slice(0, 6)
+            .map((e) => ({ label: e.method, value: e.count }));
+          return _renderSimpleListCard(
+            "repeat",
+            "Request Methods",
+            `${t.length} method types`,
+            t,
+            "text-amber-400",
+          );
+        }
+        function _renderCountriesCard(e) {
+          return e && 0 !== e.length
+            ? _renderSimpleListCard(
+                "globe",
+                "Countries",
+                `${e.length} seen`,
+                e
+                  .slice(0, 6)
+                  .map((e) => ({ label: e.country, value: e.count })),
+                "text-emerald-400",
+              )
+            : "";
+        }
+        function _renderHotIPsCard(e) {
+          if (!e || 0 === e.length) return "";
+          const t = e
+            .filter(
+              (e) =>
+                e.ip && "(unknown)" !== e.ip && !String(e.ip).includes("BYOC"),
+            )
+            .slice(0, 6)
+            .map((e) => ({ label: e.ip, value: `${e.count} req` }));
+          return t.length
+            ? _renderSimpleListCard(
+                "network",
+                "Top Source IPs",
+                `${t.length} shown`,
+                t,
+                "text-purple-400",
+              )
+            : "";
+        }
+        function _renderFingerprintsCard(e) {
+          return e && 0 !== e.length
+            ? _renderSimpleListCard(
+                "fingerprint",
+                "Session Fingerprints",
+                `${e.length} seen`,
+                e
+                  .slice(0, 5)
+                  .map((e) => ({ label: e.fingerprint, value: e.count })),
+                "text-cyan-400",
+              )
+            : "";
+        }
+        function _renderPatternDetectionsCard(e) {
+          return e && 0 !== e.length
+            ? _renderSimpleListCard(
+                "scan-search",
+                "Pattern Detections",
+                `${e.reduce((e, t) => e + (t.count || 0), 0)} total`,
+                e.slice(0, 6).map((e) => ({ label: e.kind, value: e.count })),
+                "text-rose-400",
+              )
+            : "";
+        }
+        function renderLearningInsights() {
+          const e = document.getElementById("sec-learning-suggestions"),
+            t = document.getElementById("pipeline-analytics-status"),
+            n = document.getElementById("pipeline-analytics-summary"),
+            o = document.getElementById("pipeline-analytics-cards"),
+            applied = _securityInsights?.summary?.pipeline,
+            appliedKnown = Array.isArray(applied?.configured_stages?.telemetry) && Array.isArray(applied?.configured_stages?.response),
+            r = applied?.configured_stages?.telemetry?.length || 0,
+            s = applied?.configured_stages?.response?.length || 0,
+            a = Number(applied?.custom_module_count || 0);
+          if (!_securityInsights)
+            return (
+              t &&
+                (t.innerHTML =
+                  "Load analytics to see what the current pipeline is capturing and deciding."),
+              n && (n.innerHTML = ""),
+              o &&
+                (o.innerHTML =
+                  '<div class="text-xs" style="color: var(--text-subtle)">No live pipeline analytics yet.</div>'),
+              void (
+                e &&
+                (e.innerHTML =
+                  '<div class="rounded-xl border border-dashed px-4 py-6 text-xs text-center" style="border-color: var(--table-border); color: var(--text-subtle)">No suggestions loaded yet.</div>')
+              )
+            );
+          const i = _securityInsights.summary || {},
+            l = 0 === r && 0 === s && 0 === a;
+          (t &&
+            (t.innerHTML = !appliedKnown
+              ? "Applied pipeline configuration is unavailable. Observed request outcomes are shown below."
+              : l ? "No capture or action stages are enabled in the applied pipeline. Gateway security policies can still handle requests."
+              : `Applied configuration: ${r} capture stage(s), ${s} action stage(s), ${a} configured module(s). These are saved settings, not an unsaved editor draft. Live request outcomes are shown below.`),
+            n &&
+              (n.innerHTML = [
+                _renderMetricCard(
+                  "activity",
+                  "Requests Seen",
+                  i.network_events || 0,
+                  "captured from live traffic",
+                ),
+                _renderMetricCard(
+                  "shield",
+                  "Security Hits",
+                  i.security_events || 0,
+                  "blocks, traps, limits",
+                ),
+                _renderMetricCard(
+                  "bug",
+                  "Trap Hits",
+                  i.trap_requests || 0,
+                  "requests matched trap routes",
+                ),
+                _renderMetricCard(
+                  "layers-3",
+                  "Pipeline Stacks",
+                  (i.pipeline && i.pipeline.stack_count) || 1,
+                  "stacks executing",
+                ),
+              ].join("")));
+          const c = [
+            _renderConfiguredStagesCard(i),
+            _renderFieldsCard(i),
+            _renderStackActivityCard(i.stack_activity),
+            _renderTrafficFlowCard(i.top_routes),
+            _renderCustomSignalsCard(i.custom_signals),
+            _renderRiskSummaryCard(i),
+            _renderEventSummaryCard(i),
+            _renderMethodsCard(i.top_methods),
+            _renderCountriesCard(i.top_countries),
+            _renderHotIPsCard(i.hot_ips),
+            _renderFingerprintsCard(i.fingerprints),
+            _renderPatternDetectionsCard(i.pattern_detections),
+            _renderCustomDimensionCards(i.custom_dimensions),
+          ]
+            .flat()
+            .filter((e) => e && "" !== String(e).trim());
+          o &&
+            ((o.className = c.length
+              ? "grid grid-cols-1 lg:grid-cols-2 gap-4"
+              : "space-y-4"),
+            (o.innerHTML = c.length
+              ? c.join("")
+              : '<div class="text-xs" style="color: var(--text-subtle)">Traffic is coming in, but there are no visible capture fields yet. Add a capture step like Page Flow or Count Dimension to make the live analytics more useful.</div>'));
+          const d = _securityInsights.suggestions || [];
+          (e &&
+            (d.length
+              ? (e.innerHTML = `<div class="text-[10px] uppercase tracking-widest font-bold px-1" style="color: var(--text-subtle)">Suggested Additions (Not Active)</div>${d
+                  .map((e) => {
+                    const t =
+                        "warn" === e.severity
+                          ? "rgba(245,158,11,0.25)"
+                          : "rgba(59,130,246,0.25)",
+                      n = e.tool || "suggestion",
+                      o = e.suggested_stage
+                        ? `<button onclick="applySuggestedStage('${e.suggested_stage}')" class="btn-secondary px-2.5 py-1.5 rounded text-[9px] font-bold uppercase tracking-widest">Add</button>`
+                        : "";
+                    return `<div class="rounded-xl border p-4 space-y-3" style="border-color:${t}; background: var(--nav-hover)">\n                        <div class="flex items-start justify-between gap-3">\n                            <div>\n                                <div class="text-[10px] uppercase tracking-widest font-bold text-blue-300">${n}</div>\n                                <div class="text-sm mt-1" style="color: var(--text-main)">${e.title}</div>\n                            </div>\n                            ${o}\n                        </div>\n                        <div class="text-xs" style="color: var(--text-muted)">${e.detail}</div>\n                    </div>`;
+                  })
+                  .join("")}`)
+              : (e.innerHTML =
+                  '<div class="rounded-xl border border-dashed px-4 py-6 text-xs text-center" style="border-color: var(--table-border); color: var(--text-subtle)">No suggested additions right now. Your current setup covers what the analysis layer is seeing.</div>')),
+            lucide.createIcons());
+        }
+        async function fetchPipelineInsights() {
+          try {
+            const e = await fetch("/client/api/security/insights");
+            if (!e.ok) throw new Error();
+            _securityInsights = await e.json();
+          } catch (e) {
+            _securityInsights = null;
+          }
+          renderLearningInsights();
+        }
+        async function refreshPipelineAnalytics() {
+          await Promise.all([fetchPipelineInsights(), fetchPipelineLogs()]);
+        }
+        function applySuggestedStage(e) {
+          const t = SECURITY_STAGE_LIBRARY.find((t) => t.id === e);
+          if (!t) return;
+          addPipelineStage(
+            "Response" === t.category || "Extensibility" === t.category
+              ? "response"
+              : "telemetry",
+            e,
+          );
+        }
+        function renderPipelineBuilder() {
+          if (shouldPreserveActiveView("pipelines")) return;
+          (persistActivePipelineStackFromEditor(),
+            renderPipelineStackManager(),
+            renderPipelineCatalog(),
+            renderPipelineList(
+              "sec-telemetry-pipeline",
+              _telemetryPipeline,
+              "telemetry",
+            ),
+            renderPipelineList(
+              "sec-response-pipeline",
+              _responsePipeline,
+              "response",
+            ),
+            renderCustomDefenseModules(),
+            renderLearningEngine(),
+            renderLearningTools());
+          const e = document.getElementById("sec-telemetry-dimensions");
+          (e && (e.value = (_telemetryDimensions || []).join(", ")),
+            renderLearningInsights(),
+            lucide.createIcons());
+        }
+        function parseJsonField(e, t) {
+          const n = (e || "").trim();
+          if (!n) return {};
+          try {
+            return JSON.parse(n);
+          } catch (e) {
+            throw new Error(`${t} must be valid JSON`);
+          }
+        }
+        function validatePipelineBeforeSave() {
+          const errors = [];
+          const stacks = Array.isArray(_pipelineStacks) && _pipelineStacks.length
+            ? _pipelineStacks : [{ name: "Current stack", telemetry_pipeline: _telemetryPipeline, response_pipeline: _responsePipeline }];
+          stacks.forEach((stack) => {
+            const telemetry = Array.isArray(stack.telemetry_pipeline) ? stack.telemetry_pipeline : [];
+            const response = Array.isArray(stack.response_pipeline) ? stack.response_pipeline : [];
+            [[telemetry, "telemetry", "Capture"], [response, "response", "Action"]].forEach(([stages, kind, label]) => stages.forEach((stage, index) => {
+              if (!stage || typeof stage !== "object" || Array.isArray(stage)) { errors.push(`${stack.name || "Stack"} · ${label} step ${index + 1} must be a stage object.`); return; }
+              const issues = [...(validateStageConfigShape(stage, kind).errors || []),
+                ...getPipelineStageWarnings(stage, kind, index, stages, telemetry, response).filter((warning) => /depends on|running before/i.test(warning))];
+              issues.forEach((issue) => errors.push(`${stack.name || "Stack"} · ${label} step ${index + 1} (${stage.name || stage.stage}): ${issue}`));
+            }));
+            if (stack.target_mode === "agents" && !(stack.target_agent_ids || []).length) errors.push(`${stack.name || "Stack"}: choose at least one target app.`);
+            if (stack.target_mode === "launcher_hosts" && !(stack.target_launcher_host_ids || []).length) errors.push(`${stack.name || "Stack"}: choose at least one target server.`);
+          });
+          return errors;
+        }
+        function pipelineDraftSnapshot() {
+          const controls = [...(document.getElementById("view-pipelines")?.querySelectorAll("input,select,textarea") || [])].map((control) => ({ id: control.id || "", value: control.value, checked: !!control.checked }));
+          return JSON.stringify({ stacks: _pipelineStacks, telemetry: _telemetryPipeline, response: _responsePipeline, modules: _customDefenseModules, learning: _learningEngine, controls });
+        }
+        async function savePipelineBuilder() {
+          if (window.ivDashboardAccess?.paused || APP_STATE.payment_required || APP_STATE.workspace_locked)
+            return showToast("Resolve workspace access before saving a pipeline.", "error");
+          persistActivePipelineStackFromEditor();
+          const validationErrors = validatePipelineBeforeSave();
+          if (validationErrors.length) return showToast(validationErrors[0], "error");
+          const reviewedDraft = pipelineDraftSnapshot();
+          if (!APP_STATE.demo_mode) {
+            const targets = (_pipelineStacks || []).map((stack) => `${stack.name || "Stack"}: ${stack.target_mode === "agents" ? `${(stack.target_agent_ids || []).length} named apps` : stack.target_mode === "launcher_hosts" ? `${(stack.target_launcher_host_ids || []).length} named servers` : "every app in this workspace"}`).join("\n") || "Current stack: every app in this workspace";
+            if (!(await ivConfirm(`Apply the reviewed pipeline configuration to these targets?\n\n${targets}\n\nCapture and action stages can change live gateway decisions.`, { title: "Review pipeline targets", confirmText: "Continue to approval" }))) return;
+            if (window.ivDashboardAccess?.paused || APP_STATE.payment_required || APP_STATE.workspace_locked) return;
+          }
+          APP_STATE.demo_mode
+            ? showToast("Demo validation passed. Saving requires your own workspace.", "info")
+            : showTotpPrompt(
+                "Update Security Pipelines & Adaptive Engine",
+                async (e) => {
+                  try {
+                    if (window.ivDashboardAccess?.paused || APP_STATE.payment_required || APP_STATE.workspace_locked) throw new Error("Workspace access changed. Review the pipeline again.");
+                    if (pipelineDraftSnapshot() !== reviewedDraft) throw new Error("The pipeline draft or targets changed after review. Review and approve the new configuration.");
+                    const t = validatePipelineBeforeSave();
+                    if (t.length) throw new Error(t[0]);
+                    const n = _telemetryPipeline.map((e, t) => ({
+                        ...e,
+                        order: t + 1,
+                        config: parseJsonField(
+                          e.config_json || "{}",
+                          `${e.name || e.stage} config`,
+                        ),
+                      })),
+                      o = _responsePipeline.map((e, t) => ({
+                        ...e,
+                        order: t + 1,
+                        config: parseJsonField(
+                          e.config_json || "{}",
+                          `${e.name || e.stage} config`,
+                        ),
+                      })),
+                      r = _customDefenseModules.map((e, t) => ({
+                        ...e,
+                        schema: parseJsonField(
+                          e.schema_json || "{}",
+                          `Custom module ${t + 1} schema`,
+                        ),
+                        ui_contract: parseJsonField(
+                          e.ui_contract_json || "{}",
+                          `Custom module ${t + 1} UI contract`,
+                        ),
+                      }));
+                    persistActivePipelineStackFromEditor();
+                    const s = (_learningEngine.custom_tools || []).map(
+                        (e, t) => ({
+                          ...e,
+                          input_contract: parseJsonField(
+                            e.input_contract_json || "{}",
+                            `Learning tool ${t + 1} input contract`,
+                          ),
+                          output_contract: parseJsonField(
+                            e.output_contract_json || "{}",
+                            `Learning tool ${t + 1} output contract`,
+                          ),
+                        }),
+                      ),
+                      a = (_pipelineStacks || [])
+                        .slice()
+                        .sort((e, t) => (e.order || 9999) - (t.order || 9999))
+                        .map((e, t) => {
+                          const n =
+                            "launcher_hosts" === e.target_mode
+                              ? (window.__launcherAgents || [])
+                                  .filter((t) =>
+                                    (e.target_launcher_host_ids || []).includes(
+                                      t.launcher_host_id,
+                                    ),
+                                  )
+                                  .map((e) => e.agent_id)
+                              : e.target_agent_ids || [];
+                          return {
+                            ...e,
+                            order: t + 1,
+                            target_agent_ids: n,
+                            telemetry_pipeline: Array.isArray(
+                              e.telemetry_pipeline,
+                            )
+                              ? e.telemetry_pipeline.map((t, n) => ({
+                                  ...t,
+                                  order: n + 1,
+                                  config: parseJsonField(
+                                    t.config_json || "{}",
+                                    `${e.name} telemetry stage ${n + 1} config`,
+                                  ),
+                                }))
+                              : [],
+                            response_pipeline: Array.isArray(
+                              e.response_pipeline,
+                            )
+                              ? e.response_pipeline.map((t, n) => ({
+                                  ...t,
+                                  order: n + 1,
+                                  config: parseJsonField(
+                                    t.config_json || "{}",
+                                    `${e.name} response stage ${n + 1} config`,
+                                  ),
+                                }))
+                              : [],
+                            custom_defense_modules: Array.isArray(
+                              e.custom_defense_modules,
+                            )
+                              ? e.custom_defense_modules.map((t, n) => ({
+                                  ...t,
+                                  schema: parseJsonField(
+                                    t.schema_json || "{}",
+                                    `${e.name} module ${n + 1} schema`,
+                                  ),
+                                  ui_contract: parseJsonField(
+                                    t.ui_contract_json || "{}",
+                                    `${e.name} module ${n + 1} UI contract`,
+                                  ),
+                                }))
+                              : [],
+                          };
+                        }),
+                      i = a[0] || {},
+                      l = {
+                        telemetry_dimensions:
+                          i.telemetry_dimensions ||
+                          (
+                            document.getElementById("sec-telemetry-dimensions")
+                              .value || ""
+                          )
+                            .split(",")
+                            .map((e) => e.trim())
+                            .filter(Boolean),
+                        telemetry_pipeline: i.telemetry_pipeline || n,
+                        response_pipeline: i.response_pipeline || o,
+                        custom_defense_modules: i.custom_defense_modules || r,
+                        pipeline_stacks: a,
+                        learning_engine: {
+                          enabled:
+                            document.getElementById("sec-learn-enabled")
+                              .checked,
+                          mode: document.getElementById("sec-learn-mode").value,
+                          allowed_tools: (
+                            document.getElementById("sec-learn-tools").value ||
+                            ""
+                          )
+                            .split(",")
+                            .map((e) => e.trim())
+                            .filter(Boolean),
+                          sources: (
+                            document.getElementById("sec-learn-sources")
+                              .value || ""
+                          )
+                            .split(",")
+                            .map((e) => e.trim())
+                            .filter(Boolean),
+                          objectives: (
+                            document.getElementById("sec-learn-objectives")
+                              .value || ""
+                          )
+                            .split(",")
+                            .map((e) => e.trim())
+                            .filter(Boolean),
+                          auto_apply_safe_suggestions: document.getElementById(
+                            "sec-learn-autoapply",
+                          ).checked,
+                          notes:
+                            document.getElementById("sec-learn-notes").value ||
+                            "",
+                          custom_tools: s,
+                        },
+                      },
+                      c = await fetch("/client/api/security/global", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          "X-TOTP-Auth": e,
+                        },
+                        body: JSON.stringify(l),
+                      });
+                    if (!c.ok) {
+                      const e = await c.json().catch(() => ({}));
+                      throw new Error(
+                        e.error || "Failed to save pipeline builder",
+                      );
+                    }
+                    window.ivPipelineDraftDirty = pipelineDraftSnapshot() !== reviewedDraft;
+                    (showToast(window.ivPipelineDraftDirty ? "Reviewed pipeline saved. Your newer local draft changes are still unsaved." : "Reviewed pipeline saved. Verify the runtime's applied decisions and receipt.", "info"),
+                      await fetchSecuritySettings(),
+                      await fetchPipelineInsights());
+                  } catch (e) {
+                    showToast(
+                      e.message || "Failed to save pipeline builder",
+                      "error",
+                    );
+                  }
+                },
+              );
+        }
+        async function exportPipelineStack() {
+          try {
+            const e = await fetch("/client/api/security/pipeline-stack");
+            if (!e.ok) throw new Error("Failed to export stack");
+            const t = await e.json(),
+              n = new Blob([JSON.stringify(t, null, 2)], {
+                type: "application/json",
+              }),
+              o = URL.createObjectURL(n),
+              r = document.createElement("a");
+            ((r.href = o),
+              (r.download = `infraveil-pipeline-stack-${new Date().toISOString().replace(/[:.]/g, "-")}.json`),
+              document.body.appendChild(r),
+              r.click(),
+              r.remove(),
+              URL.revokeObjectURL(o),
+              showToast("Pipeline stack exported.", "info"));
+          } catch (e) {
+            showToast(e.message || "Failed to export pipeline stack", "error");
+          }
+        }
+        function triggerPipelineImport() {
+          const e = document.getElementById("sec-pipeline-import");
+          e && e.click();
+        }
+        async function resetPipelineBuilderToDefault() {
+          if (!(await ivConfirm("Replace the local pipeline draft with defaults? Nothing will be applied to your servers until you review and save.", { title: "Reset draft", confirmText: "Reset draft" }))) return;
+          ensurePipelineStateFromPolicy(JSON.parse(JSON.stringify(DEFAULT_PIPELINE_STACK)), true);
+          window.ivPipelineDraftDirty = true;
+          renderPipelineBuilder();
+          showToast("Local draft reset to defaults. Review targets and save deliberately to apply.", "info");
+        }
+        async function clearInternalNetworkLogs() {
+          if (APP_STATE.demo_mode) {
+            try {
+              const e = await fetch(API.internalNetworkClear, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
+              });
+              if (!e.ok) {
+                const t = await e.json().catch(() => ({}));
+                throw new Error(
+                  t.error || `Failed to clear internal trace (${e.status})`,
+                );
+              }
+            } catch (e) {
+              return void showToast(
+                e.message || "Failed to clear internal trace",
+                "error",
+              );
+            }
+            ((_internalNetworkLogs = []),
+              expandedInternalNetworkIds.clear(),
+              (internalNetworkClearedNoticeActive = !0));
+            const e = document.getElementById("internal-network-feed");
+            return (
+              e &&
+                (e.innerHTML =
+                  '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)"><i data-lucide="check-circle" class="w-6 h-6 mx-auto mb-2 text-emerald-500"></i> Demo: Internal trace cleared.</div>'),
+              lucide.createIcons(),
+              showToast("Demo: Internal trace cleared!", "info"),
+              void setTimeout(() => {
+                ((internalNetworkClearedNoticeActive = !1),
+                  updateDashboardData());
+              }, 2e3)
+            );
+          }
+          showTotpPrompt("Clear internal trace", async (e) => {
+            const t = document.getElementById("internal-network-feed");
+            t &&
+              (t.innerHTML =
+                '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)">Clearing internal trace...</div>');
+            try {
+              const n = await fetch(API.internalNetworkClear, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-TOTP-Auth": e,
+                },
+                body: JSON.stringify({}),
+              });
+              if (!n.ok) {
+                const e = await n.json().catch(() => ({}));
+                throw new Error(
+                  e.error || `Failed to clear internal trace (${n.status})`,
+                );
+              }
+              ((_internalNetworkLogs = []),
+                expandedInternalNetworkIds.clear(),
+                (internalNetworkClearedNoticeActive = !0),
+                t &&
+                  (t.innerHTML =
+                    '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)"><i data-lucide="check-circle" class="w-6 h-6 mx-auto mb-2 text-emerald-500"></i> Internal trace cleared.</div>'),
+                lucide.createIcons());
+            } catch (e) {
+              (t &&
+                (t.innerHTML =
+                  '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)">Internal trace clear failed.</div>'),
+                showToast(
+                  e.message || "Failed to clear internal trace",
+                  "error",
+                ));
+            }
+          });
+        }
+        async function handlePipelineImport(event) {
+          const file = event.target.files && event.target.files[0];
+          if (!file) return;
+          try {
+            if (file.size > 1024 * 1024) throw new Error("Pipeline files must be at most 1 MiB.");
+            const parsed = JSON.parse(await file.text());
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Import a pipeline object, not an array or scalar.");
+            const candidate = parsed.stack || parsed.global || parsed;
+            if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) throw new Error("The imported stack must be an object.");
+            if (!Array.isArray(candidate.pipeline_stacks) && !Array.isArray(candidate.telemetry_pipeline) && !Array.isArray(candidate.response_pipeline)) throw new Error("The file must contain pipeline_stacks or capture/action pipeline arrays.");
+            const stacks = candidate.pipeline_stacks || [candidate];
+            if (stacks.length > 100) throw new Error("Import at most 100 stacks at a time.");
+            stacks.forEach((stack) => {
+              if (!stack || typeof stack !== "object" || Array.isArray(stack)) throw new Error("Each stack must be an object.");
+              if (stack.id && !/^[A-Za-z0-9:_-]{1,100}$/.test(String(stack.id))) throw new Error("Stack IDs may contain only letters, digits, colon, underscore and dash.");
+              ["telemetry_pipeline", "response_pipeline"].forEach((key) => {
+                if (stack[key] !== undefined && !Array.isArray(stack[key])) throw new Error(`${key} must be an array.`);
+                if ((stack[key] || []).length > 200) throw new Error("Import at most 200 stages per pipeline.");
+                (stack[key] || []).forEach((stage) => { if (!stage || typeof stage !== "object" || Array.isArray(stage) || !SECURITY_STAGE_LIBRARY.some((known) => known.id === stage.stage)) throw new Error("Each imported stage must name a supported builder stage."); });
+              });
+            });
+            if (!(await ivConfirm("Replace the local draft with this imported pipeline? Review stages and targets before explicitly saving. Importing does not apply live policy.", { title: "Import draft", confirmText: "Import draft" }))) return;
+            ensurePipelineStateFromPolicy(candidate, true);
+            window.ivPipelineDraftDirty = true;
+            const errors = validatePipelineBeforeSave();
+            renderPipelineBuilder();
+            showToast(errors.length ? `Imported local draft needs review: ${errors[0]}` : "Imported into the local draft. Review targets and save deliberately to apply.", errors.length ? "error" : "info");
+          } catch (error) {
+            showToast(error.message || "Invalid pipeline file.", "error");
+          } finally {
+            event.target.value = "";
+          }
+        }

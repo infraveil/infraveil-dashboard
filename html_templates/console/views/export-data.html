@@ -1,0 +1,38 @@
+<div
+            id="view-export-data"
+            class="view-section hidden max-w-7xl mx-auto space-y-6"
+          >
+            <div class="acrylic-panel rounded-2xl overflow-hidden">
+              <div class="p-8 space-y-6">
+                <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+                  <div>
+                    <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Export Data</div>
+                    <h2 class="text-2xl text-white mt-2">Export workspace data</h2>
+                    <p class="text-sm mt-2 max-w-4xl leading-relaxed" style="color: var(--text-muted)">Download retained workspace configuration, runtime reports, logs, traffic records, and action history as a sanitized JSON bundle. Review the included data and redactions below.</p>
+                  </div>
+                  <button onclick="exportFullCustomerData()" class="btn-primary px-6 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+                    <i data-lucide="download" class="w-4 h-4"></i> Download Full Export
+                  </button>
+                </div>
+              </div>
+              <div class="p-8 space-y-6 border-t border-white/10">
+                <div class="grid lg:grid-cols-3 gap-4">
+                  <div class="rounded-xl border border-white/10 bg-white/[0.03] p-6">
+                    <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Included</div>
+                    <div class="text-lg text-white mt-2">Workspace and runtime data</div>
+                    <p class="text-xs mt-2 leading-relaxed" style="color: var(--text-muted)">Agents, launcher hosts, status payloads, operations payloads, console logs, request trace, control trace, security events, pipeline logs, remediation state, command receipts, telemetry state, runtime contract metadata, and optional package file metadata with SHA-256 hashes.</p>
+                  </div>
+                  <div class="rounded-xl border border-white/10 bg-white/[0.03] p-6">
+                    <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Redacted</div>
+                    <div class="text-lg text-white mt-2">Credential material</div>
+                    <p class="text-xs mt-2 leading-relaxed" style="color: var(--text-muted)">Password hashes, TOTP seeds, machine tokens, encryption keys, API keys, webhook secrets, private keys, CSRF values, passkey credential material, processor references, and implementation source are not exported as usable secrets or product internals.</p>
+                  </div>
+                  <div class="rounded-xl border border-white/10 bg-white/[0.03] p-6">
+                    <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Format</div>
+                    <div class="text-lg text-white mt-2">Single JSON bundle</div>
+                    <p class="text-xs mt-2 leading-relaxed" style="color: var(--text-muted)">The export is designed for portability, support escalation, compliance review, customer inspection, and account exit. Runtime contracts and optional package files are represented by metadata and hashes instead of private application source.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>

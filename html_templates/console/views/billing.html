@@ -1,0 +1,496 @@
+<div
+            id="view-billing"
+            class="view-section hidden max-w-5xl mx-auto space-y-6"
+          >
+            <div
+              class="acrylic-panel rounded-2xl p-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6"
+            >
+              <div>
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Billing & Usage
+                </div>
+                <h2 id="billing-hero-title" class="text-2xl text-white mt-2">
+                  Activate the workspace when you are ready
+                </h2>
+                <p
+                  id="billing-hero-copy"
+                  class="text-sm mt-2 max-w-2xl"
+                  style="color: var(--text-muted)"
+                >
+                  Usage is shown for visibility only. Infraveil is not limiting
+                  requests, nodes, logs, or security events from this panel.
+                  Professional includes up to 2 launcher hosts; multi-host scale
+                  beyond that adds $19/month.
+                </p>
+              </div>
+              <div
+                id="billing-hero-actions"
+                class="flex flex-col sm:flex-row gap-3"
+              >
+                <button
+                  id="billing-primary-action"
+                  onclick="startBillingCheckout()"
+                  class="btn-primary px-6 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Buy Professional
+                </button>
+                <button
+                  id="billing-secondary-action"
+                  onclick="openInvoiceBillingPath()"
+                  class="btn-secondary px-6 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Invoice / ACH
+                </button>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div
+                class="acrylic-panel p-6 rounded-2xl flex flex-col justify-between h-40 min-w-0"
+              >
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Current Period Activity
+                </div>
+                <div>
+                  <div
+                    id="billing-period-requests"
+                    class="text-3xl font-mono-cli"
+                    style="color: var(--text-main)"
+                  >
+                    0
+                  </div>
+                  <div class="text-xs mt-1" style="color: var(--text-muted)">
+                    Requests observed, not capped
+                  </div>
+                </div>
+              </div>
+              <div
+                class="acrylic-panel p-6 rounded-2xl flex flex-col justify-between h-40 min-w-0"
+              >
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Active Plan
+                </div>
+                <div>
+                  <div
+                    id="billing-plan-type"
+                    class="text-2xl md:text-3xl font-mono-cli break-words leading-tight"
+                    style="color: var(--text-main)"
+                  >
+                    Loading...
+                  </div>
+                  <div
+                    id="billing-plan-meta"
+                    class="text-xs mt-1"
+                    style="color: var(--text-muted)"
+                  >
+                    Service Tier • 2 launcher hosts included
+                  </div>
+                </div>
+              </div>
+              <div
+                class="acrylic-panel p-6 rounded-2xl flex flex-col justify-between h-40 min-w-0"
+              >
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Workspace Status
+                </div>
+                <div class="flex items-center gap-3">
+                  <div
+                    id="billing-status-icon-wrap"
+                    class="p-2 rounded bg-emerald-500/10 border border-emerald-500/20"
+                  >
+                    <i
+                      id="billing-status-icon"
+                      data-lucide="shield-check"
+                      class="w-6 h-6 text-emerald-500"
+                    ></i>
+                  </div>
+                  <div>
+                    <div
+                      id="billing-workspace-status"
+                      class="text-sm font-bold"
+                      style="color: var(--text-main)"
+                    >
+                      Account Secured
+                    </div>
+                    <div
+                      id="billing-workspace-meta"
+                      class="text-xs"
+                      style="color: var(--text-muted)"
+                    >
+                      TOTP Active
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
+                class="acrylic-panel p-6 rounded-2xl flex flex-col justify-between h-40 min-w-0"
+              >
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Workspace Expiry
+                </div>
+                <div class="space-y-1">
+                  <div
+                    id="billing-expiry-date"
+                    class="text-lg md:text-2xl font-mono-cli leading-snug break-words"
+                    style="color: var(--text-main)"
+                  >
+                    Loading...
+                  </div>
+                  <div
+                    id="billing-expiry-meta"
+                    class="text-xs"
+                    style="color: var(--text-muted)"
+                  >
+                    Checking current expiry window
+                  </div>
+                  <div
+                    id="billing-expiry-state"
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Pending
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div
+              class="acrylic-panel rounded-2xl p-6 border border-blue-500/20"
+            >
+              <div
+                class="text-[10px] uppercase tracking-widest font-bold text-blue-300"
+              >
+                There Is No Catch
+              </div>
+              <div class="grid md:grid-cols-3 gap-4 mt-5">
+                <div
+                  class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4"
+                >
+                  <div class="text-xs" style="color: var(--text-muted)">
+                    Professional
+                  </div>
+                  <div class="text-2xl font-mono-cli text-white mt-1">
+                    $99/mo
+                  </div>
+                </div>
+                <div
+                  class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4"
+                >
+                  <div class="text-xs" style="color: var(--text-muted)">
+                    Startup APIs
+                  </div>
+                  <div class="text-2xl font-mono-cli text-white mt-1">5</div>
+                </div>
+                <div
+                  class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4"
+                >
+                  <div class="text-xs" style="color: var(--text-muted)">
+                    Artificial Usage Limits
+                  </div>
+                  <div class="text-2xl font-mono-cli text-white mt-1">0</div>
+                </div>
+              </div>
+              <p class="text-sm mt-5" style="color: var(--text-muted)">
+                Usage metrics are visible so teams can understand load. They are
+                not hidden throttles, request meters, log caps, or monitoring
+                penalties.
+              </p>
+              <p class="text-sm mt-3" style="color: var(--text-muted)">
+                Connected-server capacity is one scale breakpoint: 2
+                launcher hosts are included in Professional, and every launcher
+                host beyond that adds $19/month.
+              </p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div id="billing-usage-panel" class="acrylic-panel p-6 rounded-2xl">
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold mb-5"
+                  style="color: var(--text-subtle)"
+                >
+                  Usage Breakdown
+                </div>
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between text-sm">
+                    <span style="color: var(--text-muted)"
+                      >Network requests</span
+                    ><span
+                      id="billing-usage-network"
+                      class="font-mono-cli text-white"
+                      >0</span
+                    >
+                  </div>
+                  <div class="flex items-center justify-between text-sm">
+                    <span style="color: var(--text-muted)"
+                      >Console log entries</span
+                    ><span
+                      id="billing-usage-console"
+                      class="font-mono-cli text-white"
+                      >0</span
+                    >
+                  </div>
+                  <div class="flex items-center justify-between text-sm">
+                    <span style="color: var(--text-muted)">Security events</span
+                    ><span
+                      id="billing-usage-security"
+                      class="font-mono-cli text-white"
+                      >0</span
+                    >
+                  </div>
+                  <div class="flex items-center justify-between text-sm">
+                    <span style="color: var(--text-muted)">Active nodes</span
+                    ><span
+                      id="billing-usage-nodes"
+                      class="font-mono-cli text-white"
+                      >0</span
+                    >
+                  </div>
+                </div>
+              </div>
+              <div class="acrylic-panel p-6 rounded-2xl">
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold mb-5"
+                  style="color: var(--text-subtle)"
+                >
+                  Payment Paths
+                </div>
+                <div class="grid gap-3">
+                  <div
+                    class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
+                  >
+                    <div class="text-sm font-semibold text-white">Card</div>
+                    <div class="text-xs mt-1" style="color: var(--text-muted)">
+                      Fast activation for Professional.
+                    </div>
+                  </div>
+                  <div
+                    class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
+                  >
+                    <div class="text-sm font-semibold text-white">
+                      ACH / Bank Transfer
+                    </div>
+                    <div class="text-xs mt-1" style="color: var(--text-muted)">
+                      Available for larger or annual agreements.
+                    </div>
+                  </div>
+                  <div
+                    class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
+                  >
+                    <div class="text-sm font-semibold text-white">
+                      Invoice / Procurement
+                    </div>
+                    <div class="text-xs mt-1" style="color: var(--text-muted)">
+                      Available without switching to a different plan.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="billing-scale-panel" class="acrylic-panel rounded-2xl p-6">
+              <div
+                class="flex flex-col md:flex-row md:items-start md:justify-between gap-6"
+              >
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Scale Capacity
+                  </div>
+                  <h3 class="text-lg text-white mt-2">
+                    Buy more launcher and API capacity
+                  </h3>
+                  <p
+                    class="text-sm mt-2 max-w-2xl"
+                    style="color: var(--text-muted)"
+                  >
+                    Launcher and API scale are tracked here so billing stays
+                    transparent. Provisioning still happens in the actual
+                    launcher and API surfaces, not from the billing page.
+                  </p>
+                </div>
+                <div class="grid sm:grid-cols-1 gap-3 min-w-0">
+                  <button
+                    onclick="openBillingPortal()"
+                    class="btn-secondary px-5 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                  >
+                    Manage Billing
+                  </button>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                <div
+                  class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4"
+                >
+                  <div class="text-xs" style="color: var(--text-muted)">
+                    Launcher Capacity
+                  </div>
+                  <div
+                    id="billing-launcher-capacity"
+                    class="text-2xl font-mono-cli text-white mt-1"
+                  >
+                    0 / 2 capacity
+                  </div>
+                  <div
+                    id="billing-launcher-capacity-meta"
+                    class="text-xs mt-2"
+                    style="color: var(--text-muted)"
+                  >
+                    Additional launcher hosts are recurring $19/month capacity.
+                  </div>
+                  <button
+                    onclick="openCapacityPurchase('launcher')"
+                    class="mt-4 btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                  >
+                    Buy Launcher Slots
+                  </button>
+                </div>
+                <div
+                  class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4"
+                >
+                  <div class="text-xs" style="color: var(--text-muted)">
+                    API Capacity
+                  </div>
+                  <div
+                    id="billing-api-capacity"
+                    class="text-2xl font-mono-cli text-white mt-1"
+                  >
+                    0 / 5 capacity
+                  </div>
+                  <div
+                    id="billing-api-capacity-meta"
+                    class="text-xs mt-2"
+                    style="color: var(--text-muted)"
+                  >
+                    Additional API backends are recurring $9/month capacity
+                    beyond the 5 included APIs.
+                  </div>
+                  <button
+                    onclick="openCapacityPurchase('api')"
+                    class="mt-4 btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                  >
+                    Buy API Slots
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div id="billing-diagnostics-panel" class="acrylic-panel rounded-2xl p-6">
+              <div class="flex flex-col gap-5">
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Billing Diagnostics
+                  </div>
+                  <h3 class="text-lg text-white mt-2">
+                    What the workspace is actually connected to
+                  </h3>
+                  <p
+                    class="text-sm mt-2 max-w-3xl"
+                    style="color: var(--text-muted)"
+                  >
+                    This shows the exact Stripe catalog state the current
+                    workspace can see. If a product is missing here, the app
+                    cannot bill against it with the active Stripe keys.
+                  </p>
+                </div>
+                <div
+                  class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4"
+                >
+                  <div
+                    class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4"
+                  >
+                    <div class="text-xs" style="color: var(--text-muted)">
+                      Professional
+                    </div>
+                    <div
+                      id="billing-diag-professional-state"
+                      class="text-lg font-mono-cli text-white mt-1"
+                    >
+                      Checking…
+                    </div>
+                    <div
+                      id="billing-diag-professional-meta"
+                      class="text-xs mt-2"
+                      style="color: var(--text-muted)"
+                    >
+                      Catalog status
+                    </div>
+                  </div>
+                  <div
+                    class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4"
+                  >
+                    <div class="text-xs" style="color: var(--text-muted)">
+                      Launcher Add-On
+                    </div>
+                    <div
+                      id="billing-diag-launcher-state"
+                      class="text-lg font-mono-cli text-white mt-1"
+                    >
+                      Checking…
+                    </div>
+                    <div
+                      id="billing-diag-launcher-meta"
+                      class="text-xs mt-2"
+                      style="color: var(--text-muted)"
+                    >
+                      Catalog status
+                    </div>
+                  </div>
+                  <div
+                    class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4"
+                  >
+                    <div class="text-xs" style="color: var(--text-muted)">
+                      API Add-On
+                    </div>
+                    <div
+                      id="billing-diag-api-state"
+                      class="text-lg font-mono-cli text-white mt-1"
+                    >
+                      Checking…
+                    </div>
+                    <div
+                      id="billing-diag-api-meta"
+                      class="text-xs mt-2"
+                      style="color: var(--text-muted)"
+                    >
+                      Catalog status
+                    </div>
+                  </div>
+                  <div
+                    class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4"
+                  >
+                    <div class="text-xs" style="color: var(--text-muted)">
+                      Billing Portal
+                    </div>
+                    <div
+                      id="billing-diag-portal-state"
+                      class="text-lg font-mono-cli text-white mt-1"
+                    >
+                      Checking…
+                    </div>
+                    <div
+                      id="billing-diag-portal-meta"
+                      class="text-xs mt-2"
+                      style="color: var(--text-muted)"
+                    >
+                      Access status
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>

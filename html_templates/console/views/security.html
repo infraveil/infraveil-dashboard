@@ -1,0 +1,1360 @@
+<div
+            id="view-security"
+            class="view-section hidden max-w-7xl mx-auto pb-8"
+          >
+            <div class="flex flex-wrap gap-4 justify-between items-end mb-6">
+              <div>
+                <h2 class="text-xl font-light" style="color: var(--text-main)">
+                  Security Policy
+                </h2>
+                <p class="text-sm mt-1" style="color: var(--text-muted)">
+                  Configure protection for traffic routed through the managed gateway.
+                  Activity follows the fleet selection; the policy target determines where edits apply.
+                </p>
+              </div>
+              <div class="flex flex-wrap items-center gap-3 max-w-full">
+                <div class="flex flex-wrap items-center gap-2">
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold shrink-0"
+                    style="color: var(--text-subtle)"
+                  >
+                    Policy target
+                  </div>
+                  <select
+                    id="sec-scope-select"
+                    aria-label="Security policy target"
+                    title="Policy edits apply to this target. Activity follows the fleet selection in the top bar."
+                    onchange="onSecurityScopeChange()"
+                    class="ink-input rounded-lg px-3 py-2 text-xs font-bold w-48"
+                  >
+                    <option value="global">All apps — workspace policy</option>
+                  </select>
+                </div>
+                <div
+                  id="sec-inherit-toggle-wrap"
+                  class="hidden flex items-center gap-2"
+                >
+                  <span
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                    >Use workspace settings</span
+                  >
+                  <label class="toggle-switch toggle-switch-sm"
+                    ><input
+                      type="checkbox"
+                      id="sec-inherit-toggle"
+                      aria-label="Use workspace security settings for this app"
+                      title="Turn off to customize this app. While enabled, saves retain the inherited workspace policy."
+                      checked="checked"
+                      onchange="onSecurityInheritChange()" /><span
+                      class="toggle-track"
+                    ></span
+                  ></label>
+                </div>
+              </div>
+            </div>
+            <div class="acrylic-panel rounded-2xl overflow-hidden mb-6">
+              <div
+                class="flex border-b"
+                style="border-color: var(--table-border)"
+              >
+                <button
+                  onclick="switchSecTab('overview')"
+                  id="sec-tab-overview"
+                  class="sec-tab active flex-1 px-6 py-3.5 text-[10px] uppercase tracking-widest font-bold text-center transition-colors"
+                  style="
+                    color: var(--text-main);
+                    background: var(--nav-active-bg);
+                    border-bottom: 2px solid var(--accent);
+                  "
+                >
+                  <i
+                    data-lucide="activity"
+                    class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"
+                  ></i
+                  >Threat Overview
+                </button>
+                <button
+                  onclick="switchSecTab('ratelimit')"
+                  id="sec-tab-ratelimit"
+                  class="sec-tab flex-1 px-6 py-3.5 text-[10px] uppercase tracking-widest font-bold text-center transition-colors"
+                  style="color: var(--text-muted)"
+                >
+                  <i
+                    data-lucide="gauge"
+                    class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"
+                  ></i
+                  >Rate Limiting
+                </button>
+                <button
+                  onclick="switchSecTab('firewall')"
+                  id="sec-tab-firewall"
+                  class="sec-tab flex-1 px-6 py-3.5 text-[10px] uppercase tracking-widest font-bold text-center transition-colors"
+                  style="color: var(--text-muted)"
+                >
+                  <i
+                    data-lucide="flame"
+                    class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"
+                  ></i
+                  >Firewall
+                </button>
+                <button
+                  onclick="switchSecTab('geo')"
+                  id="sec-tab-geo"
+                  class="sec-tab flex-1 px-6 py-3.5 text-[10px] uppercase tracking-widest font-bold text-center transition-colors"
+                  style="color: var(--text-muted)"
+                >
+                  <i
+                    data-lucide="globe"
+                    class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"
+                  ></i
+                  >Geo-Blocking
+                </button>
+                <button
+                  onclick="switchSecTab('honeypot')"
+                  id="sec-tab-honeypot"
+                  class="sec-tab flex-1 px-6 py-3.5 text-[10px] uppercase tracking-widest font-bold text-center transition-colors"
+                  style="color: var(--text-muted)"
+                >
+                  <i
+                    data-lucide="bug"
+                    class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"
+                  ></i
+                  >Honeypot
+                </button>
+                <button
+                  onclick="switchSecTab('events')"
+                  id="sec-tab-events"
+                  class="sec-tab flex-1 px-6 py-3.5 text-[10px] uppercase tracking-widest font-bold text-center transition-colors"
+                  style="color: var(--text-muted)"
+                >
+                  <i
+                    data-lucide="scroll-text"
+                    class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"
+                  ></i
+                  >Event Log
+                </button>
+              </div>
+            </div>
+            <div id="sec-panel-overview" class="sec-panel space-y-6">
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div class="acrylic-panel p-5 rounded-2xl">
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold mb-3"
+                    style="color: var(--text-subtle)"
+                  >
+                    Security activity
+                  </div>
+                  <div
+                    class="text-2xl font-mono-cli"
+                    id="sec-threat-level"
+                    style="color: var(--text-main)"
+                  >
+                    Awaiting report
+                  </div>
+                  <div class="w-full h-1.5 rounded-full mt-3 bg-gray-800">
+                    <div
+                      id="sec-threat-bar"
+                      class="h-1.5 rounded-full bg-emerald-500 transition-all"
+                      style="width: 15%"
+                    ></div>
+                  </div>
+                  <div
+                    class="text-[10px] mt-2"
+                    style="color: var(--text-subtle)"
+                  >
+                    Time-bounded fleet or selected-workload activity
+                  </div>
+                </div>
+                <div class="acrylic-panel p-5 rounded-2xl">
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold mb-3"
+                    style="color: var(--text-subtle)"
+                  >
+                    Denied · recent window
+                  </div>
+                  <div
+                    class="text-2xl font-mono-cli text-red-400"
+                    id="sec-ov-blocked"
+                  >
+                    0
+                  </div>
+                  <div
+                    class="text-[10px] mt-1"
+                    style="color: var(--text-subtle)"
+                  >
+                    requests denied
+                  </div>
+                </div>
+                <div class="acrylic-panel p-5 rounded-2xl">
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold mb-3"
+                    style="color: var(--text-subtle)"
+                  >
+                    Active Rules
+                  </div>
+                  <div
+                    class="text-2xl font-mono-cli text-blue-400"
+                    id="sec-ov-rules"
+                  >
+                    0
+                  </div>
+                  <div
+                    class="text-[10px] mt-1"
+                    style="color: var(--text-subtle)"
+                  >
+                    firewall, geo &amp; honeypot rules in effect
+                  </div>
+                </div>
+                <div class="acrylic-panel p-5 rounded-2xl">
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold mb-3"
+                    style="color: var(--text-subtle)"
+                  >
+                    Policy Mode
+                  </div>
+                  <div
+                    class="text-2xl font-mono-cli"
+                    id="sec-ov-mode"
+                    style="color: var(--text-main)"
+                  >
+                    Permissive
+                  </div>
+                  <div
+                    class="text-[10px] mt-1"
+                    style="color: var(--text-subtle)"
+                  >
+                    enforcement status
+                  </div>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="acrylic-panel p-6 rounded-2xl col-span-2">
+                  <div class="flex justify-between items-center mb-4">
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold"
+                      style="color: var(--text-subtle)"
+                    >
+                      Requests · last 15 minutes
+                    </div>
+                    <div
+                      class="flex gap-3 text-[9px] uppercase tracking-widest font-mono-cli"
+                    >
+                      <span class="flex items-center gap-1.5"
+                        ><span class="w-2 h-2 rounded-full bg-blue-500"></span
+                        ><span style="color: var(--text-muted)"
+                          >Observed</span
+                        ></span
+                      >
+                      <span class="flex items-center gap-1.5"
+                        ><span class="w-2 h-2 rounded-full bg-red-500"></span
+                        ><span style="color: var(--text-muted)"
+                          >Blocked</span
+                        ></span
+                      >
+                      <span class="flex items-center gap-1.5"
+                        ><span class="w-2 h-2 rounded-full bg-amber-500"></span
+                        ><span style="color: var(--text-muted)"
+                          >Flagged</span
+                        ></span
+                      >
+                    </div>
+                  </div>
+                  <div
+                    id="sec-traffic-chart"
+                    class="h-44 flex items-end gap-[3px] w-full border-b pb-1"
+                    style="border-color: var(--table-border)"
+                  ></div>
+                  <div
+                    class="flex justify-between text-[9px] uppercase tracking-widest mt-2 font-mono-cli"
+                    style="color: var(--text-subtle)"
+                  >
+                    <span>15 min ago</span><span>7 min ago</span><span>Now</span>
+                  </div>
+                </div>
+                <div class="acrylic-panel p-6 rounded-2xl">
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold mb-4"
+                    style="color: var(--text-subtle)"
+                  >
+                    Top Threat Sources
+                  </div>
+                  <div id="sec-top-threats" class="space-y-3">
+                    <div
+                      class="text-xs text-center py-6"
+                      style="color: var(--text-subtle)"
+                    >
+                      No threats detected
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="acrylic-panel p-6 rounded-2xl">
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold mb-1"
+                  style="color: var(--text-subtle)"
+                >
+                  Attack Pattern Classification
+                </div>
+                <div class="text-xs mb-4" style="color: var(--text-muted)">
+                  Detected attack attempts grouped by technique.
+                </div>
+                <div
+                  id="sec-attack-patterns"
+                  class="grid grid-cols-2 lg:grid-cols-5 gap-3"
+                >
+                  <div
+                    class="p-3 rounded-xl text-center"
+                    style="
+                      background: var(--nav-hover);
+                      border: 1px solid var(--table-border);
+                    "
+                  >
+                    <div
+                      class="text-xl font-mono-cli text-red-400"
+                      id="sec-pat-bruteforce"
+                    >
+                      0
+                    </div>
+                    <div
+                      class="text-[9px] uppercase tracking-widest mt-1"
+                      style="color: var(--text-subtle)"
+                    >
+                      Brute Force
+                    </div>
+                  </div>
+                  <div
+                    class="p-3 rounded-xl text-center"
+                    style="
+                      background: var(--nav-hover);
+                      border: 1px solid var(--table-border);
+                    "
+                  >
+                    <div
+                      class="text-xl font-mono-cli text-amber-400"
+                      id="sec-pat-scanning"
+                    >
+                      0
+                    </div>
+                    <div
+                      class="text-[9px] uppercase tracking-widest mt-1"
+                      style="color: var(--text-subtle)"
+                    >
+                      Port Scanning
+                    </div>
+                  </div>
+                  <div
+                    class="p-3 rounded-xl text-center"
+                    style="
+                      background: var(--nav-hover);
+                      border: 1px solid var(--table-border);
+                    "
+                  >
+                    <div
+                      class="text-xl font-mono-cli text-purple-400"
+                      id="sec-pat-injection"
+                    >
+                      0
+                    </div>
+                    <div
+                      class="text-[9px] uppercase tracking-widest mt-1"
+                      style="color: var(--text-subtle)"
+                    >
+                      Injection
+                    </div>
+                  </div>
+                  <div
+                    class="p-3 rounded-xl text-center"
+                    style="
+                      background: var(--nav-hover);
+                      border: 1px solid var(--table-border);
+                    "
+                  >
+                    <div
+                      class="text-xl font-mono-cli text-cyan-400"
+                      id="sec-pat-ddos"
+                    >
+                      0
+                    </div>
+                    <div
+                      class="text-[9px] uppercase tracking-widest mt-1"
+                      style="color: var(--text-subtle)"
+                    >
+                      DDoS / Flood
+                    </div>
+                  </div>
+                  <div
+                    class="p-3 rounded-xl text-center"
+                    style="
+                      background: var(--nav-hover);
+                      border: 1px solid var(--table-border);
+                    "
+                  >
+                    <div
+                      class="text-xl font-mono-cli text-orange-400"
+                      id="sec-pat-enumeration"
+                    >
+                      0
+                    </div>
+                    <div
+                      class="text-[9px] uppercase tracking-widest mt-1"
+                      style="color: var(--text-subtle)"
+                    >
+                      Enumeration
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="sec-panel-ratelimit" class="sec-panel hidden space-y-6">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="acrylic-panel p-6 rounded-2xl space-y-6">
+                  <div
+                    class="flex items-center justify-between border-b pb-4"
+                    style="border-color: var(--table-border)"
+                  >
+                    <div>
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: var(--text-subtle)"
+                      >
+                        Rate Limiting Engine
+                      </div>
+                      <div
+                        class="text-[10px] mt-1"
+                        style="color: var(--text-subtle)"
+                      >
+                        Throttle inbound requests per source IP
+                      </div>
+                    </div>
+                    <label class="toggle-switch"
+                      ><input type="checkbox" id="sec-rl-enabled" /><span
+                        class="toggle-track"
+                      ></span
+                    ></label>
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                      >Requests / Minute</label
+                    >
+                    <div class="flex items-center gap-3">
+                      <input
+                        type="range"
+                        id="sec-rl-rpm"
+                        min="10"
+                        max="1000"
+                        step="10"
+                        value="120"
+                        class="flex-1 accent-blue-500 h-1"
+                        oninput="
+                          document.getElementById(
+                            'sec-rl-rpm-val',
+                          ).textContent = this.value
+                        "
+                      />
+                      <span
+                        id="sec-rl-rpm-val"
+                        class="font-mono-cli text-sm text-blue-400 w-12 text-right"
+                        >120</span
+                      >
+                    </div>
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                      >Burst Allowance</label
+                    >
+                    <div class="flex items-center gap-3">
+                      <input
+                        type="range"
+                        id="sec-rl-burst"
+                        min="5"
+                        max="200"
+                        step="5"
+                        value="30"
+                        class="flex-1 accent-blue-500 h-1"
+                        oninput="
+                          document.getElementById(
+                            'sec-rl-burst-val',
+                          ).textContent = this.value
+                        "
+                      />
+                      <span
+                        id="sec-rl-burst-val"
+                        class="font-mono-cli text-sm text-blue-400 w-12 text-right"
+                        >30</span
+                      >
+                    </div>
+                    <p
+                      class="text-[10px] mt-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Max requests allowed in a single burst before throttling.
+                    </p>
+                  </div>
+                  <div
+                    class="pt-2 border-t"
+                    style="border-color: var(--table-border)"
+                  >
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-3"
+                      style="color: var(--text-subtle)"
+                    >
+                      Advanced Filters
+                    </div>
+                    <div class="space-y-4">
+                      <div>
+                        <label
+                          class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                          style="color: var(--text-subtle)"
+                          >Max Body Size (bytes)</label
+                        >
+                        <input
+                          type="number"
+                          id="sec-max-body-bytes"
+                          value="262144"
+                          min="1024"
+                          max="104857600"
+                          class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli"
+                        />
+                      </div>
+                      <div>
+                        <label
+                          class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                          style="color: var(--text-subtle)"
+                          >Blocked Methods</label
+                        >
+                        <input
+                          id="sec-blocked-methods"
+                          value="TRACE, TRACK, CONNECT"
+                          class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli"
+                          placeholder="TRACE, TRACK, CONNECT"
+                        />
+                      </div>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Enforcement Mode</label>
+                          <select id="sec-rl-enforcement" class="ink-input w-full rounded-lg px-3 py-2 text-sm font-bold">
+                            <option value="enforce">Enforce</option>
+                            <option value="observe">Observe only</option>
+                            <option value="disabled">Disabled</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Burst Multiplier</label>
+                          <input id="sec-rl-burst-multiplier" type="number" min="1" max="10" step="0.1" value="1" class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli" />
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Exempt Paths</label>
+                        <textarea id="sec-rl-exempt-paths" rows="2" class="ink-input w-full rounded-lg px-3 py-2.5 text-xs font-mono-cli" placeholder="/healthz&#10;/readyz"></textarea>
+                      </div>
+                      <div>
+                        <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Whitelisted Paths</label>
+                        <textarea id="sec-rl-whitelisted-paths" rows="2" class="ink-input w-full rounded-lg px-3 py-2.5 text-xs font-mono-cli" placeholder="/public/*"></textarea>
+                      </div>
+                      <div>
+                        <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Bypass IPs / CIDRs</label>
+                        <textarea id="sec-rl-bypass-ips" rows="2" class="ink-input w-full rounded-lg px-3 py-2.5 text-xs font-mono-cli" placeholder="127.0.0.1&#10;10.0.0.0/8"></textarea>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="acrylic-panel p-6 rounded-2xl space-y-6">
+                  <div
+                    class="flex items-center justify-between border-b pb-4"
+                    style="border-color: var(--table-border)"
+                  >
+                    <div>
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: var(--text-subtle)"
+                      >
+                        Auto-Block Escalation
+                      </div>
+                      <div
+                        class="text-[10px] mt-1"
+                        style="color: var(--text-subtle)"
+                      >
+                        Automatically ban IPs that exceed thresholds
+                      </div>
+                    </div>
+                    <label class="toggle-switch"
+                      ><input type="checkbox" id="sec-ab-enabled" /><span
+                        class="toggle-track"
+                      ></span
+                    ></label>
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                      >Violation Threshold (requests)</label
+                    >
+                    <input
+                      type="number"
+                      id="sec-ab-threshold"
+                      value="50"
+                      min="5"
+                      max="10000"
+                      class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                      >Detection Window (seconds)</label
+                    >
+                    <input
+                      type="number"
+                      id="sec-ab-window"
+                      value="60"
+                      min="10"
+                      max="3600"
+                      class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                      >Ban Duration (minutes)</label
+                    >
+                    <div class="flex items-center gap-3">
+                      <input
+                        type="range"
+                        id="sec-ab-duration"
+                        min="5"
+                        max="1440"
+                        step="5"
+                        value="30"
+                        class="flex-1 accent-blue-500 h-1"
+                        oninput="
+                          document.getElementById(
+                            'sec-ab-dur-val',
+                          ).textContent =
+                            this.value >= 60
+                              ? Math.floor(this.value / 60) +
+                                'h ' +
+                                (this.value % 60) +
+                                'm'
+                              : this.value + 'm'
+                        "
+                      />
+                      <span
+                        id="sec-ab-dur-val"
+                        class="font-mono-cli text-sm text-blue-400 w-20 text-right"
+                        >30m</span
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex justify-end">
+                <button
+                  id="sec-save-btn"
+                  onclick="saveSecuritySettings()"
+                  class="btn-primary px-8 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2"
+                >
+                  <i data-lucide="save" class="w-4 h-4"></i> Save Rate Limit
+                  Policy
+                </button>
+              </div>
+            </div>
+            <div id="sec-panel-firewall" class="sec-panel hidden space-y-6">
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-2">
+                <div class="acrylic-panel p-5 rounded-2xl">
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                    style="color: var(--text-subtle)"
+                  >
+                    Blocked IPs
+                  </div>
+                  <div
+                    class="text-3xl font-mono-cli text-red-400"
+                    id="sec-stat-blocked"
+                  >
+                    0
+                  </div>
+                </div>
+                <div class="acrylic-panel p-5 rounded-2xl">
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                    style="color: var(--text-subtle)"
+                  >
+                    Whitelisted IPs
+                  </div>
+                  <div
+                    class="text-3xl font-mono-cli text-emerald-400"
+                    id="sec-stat-whitelisted"
+                  >
+                    0
+                  </div>
+                </div>
+                <div class="acrylic-panel p-5 rounded-2xl">
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                    style="color: var(--text-subtle)"
+                  >
+                    Auto-Blocked (24h)
+                  </div>
+                  <div
+                    class="text-3xl font-mono-cli text-amber-400"
+                    id="sec-stat-autoblocked"
+                  >
+                    0
+                  </div>
+                </div>
+              </div>
+              <div class="acrylic-panel rounded-lg overflow-hidden">
+                <div class="p-5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-4" style="border-color: var(--table-border)">
+                  <div>
+                    <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Web Application Firewall</div>
+                    <div class="text-xs mt-1" style="color: var(--text-muted)">Managed request inspection plus workspace-specific rules. Raw request bodies are never retained.</div>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <span id="sec-waf-revision" class="text-[10px] font-mono-cli" style="color: var(--text-subtle)">not compiled</span>
+                    <label class="toggle-switch"><input type="checkbox" id="sec-waf-enabled" /><span class="toggle-track"></span></label>
+                  </div>
+                </div>
+                <div class="p-5 space-y-5">
+                  <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div>
+                      <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Mode</label>
+                      <select id="sec-waf-mode" class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-bold">
+                        <option value="off">Off</option>
+                        <option value="simulate">Simulate</option>
+                        <option value="enforce">Enforce</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Sensitivity</label>
+                      <select id="sec-waf-sensitivity" class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-bold">
+                        <option value="low">Low</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Block Threshold</label>
+                      <input id="sec-waf-threshold" type="number" min="1" max="100" value="60" class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli" />
+                    </div>
+                    <div>
+                      <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Managed Package</label>
+                      <input id="sec-waf-package" readonly class="ink-input w-full rounded-lg px-3 py-2.5 text-xs font-mono-cli" />
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Inspect Body Bytes</label>
+                      <input id="sec-waf-inspection-bytes" type="number" min="0" max="16777216" value="262144" class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli" />
+                    </div>
+                    <div>
+                      <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Uninspected Body</label>
+                      <select id="sec-waf-uninspected-action" class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-bold">
+                        <option value="block">Block</option>
+                        <option value="log">Log and allow</option>
+                        <option value="allow">Allow</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Decode Rounds</label>
+                      <input id="sec-waf-decode-rounds" type="number" min="0" max="3" value="2" class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli" />
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Custom Rules</label>
+                      <textarea id="sec-waf-custom-rules" rows="9" spellcheck="false" class="ink-input w-full rounded-lg px-3 py-2.5 text-xs font-mono-cli custom-scroll" placeholder='[{"id":"protect-admin","target":"path","operator":"prefix","value":"/admin","action":"block","score":100}]'></textarea>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Rule Exclusions</label>
+                      <textarea id="sec-waf-exclusions" rows="9" spellcheck="false" class="ink-input w-full rounded-lg px-3 py-2.5 text-xs font-mono-cli custom-scroll" placeholder='[{"rule_ids":["managed-rule-id"],"path_prefix":"/trusted-callback","methods":["POST"]}]'></textarea>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color: var(--text-subtle)">Control-Plane Exempt Paths</label>
+                    <textarea id="sec-waf-control-paths" rows="2" class="ink-input w-full rounded-lg px-3 py-2.5 text-xs font-mono-cli" placeholder="/agent/heartbeat"></textarea>
+                  </div>
+                  <div class="flex justify-end">
+                    <button onclick="saveSecuritySettings()" class="btn-primary px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2"><i data-lucide="save" class="w-4 h-4"></i> Save WAF Policy</button>
+                  </div>
+                </div>
+              </div>
+              <div class="acrylic-panel rounded-2xl overflow-hidden">
+                <div
+                  class="p-5 border-b flex items-center justify-between"
+                  style="border-color: var(--table-border)"
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    IP Access Control Rules
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <button
+                      onclick="promptBlockIp()"
+                      class="btn-danger px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                    >
+                      <i data-lucide="shield-off" class="w-3.5 h-3.5"></i> Block
+                      IP
+                    </button>
+                    <button
+                      onclick="promptWhitelistIp()"
+                      class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                    >
+                      <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+                      Whitelist IP
+                    </button>
+                  </div>
+                </div>
+                <div class="max-h-72 overflow-y-auto custom-scroll">
+                  <table class="w-full text-left">
+                    <thead>
+                      <tr
+                        style="
+                          background: var(--nav-hover);
+                          border-bottom: 1px solid var(--table-border);
+                        "
+                      >
+                        <th
+                          class="px-5 py-2.5 text-[10px] uppercase tracking-widest font-bold"
+                          style="color: var(--text-subtle)"
+                        >
+                          IP Address
+                        </th>
+                        <th
+                          class="px-5 py-2.5 text-[10px] uppercase tracking-widest font-bold"
+                          style="color: var(--text-subtle)"
+                        >
+                          Status
+                        </th>
+                        <th
+                          class="px-5 py-2.5 text-[10px] uppercase tracking-widest font-bold"
+                          style="color: var(--text-subtle)"
+                        >
+                          Scope
+                        </th>
+                        <th
+                          class="px-5 py-2.5 text-[10px] uppercase tracking-widest font-bold"
+                          style="color: var(--text-subtle)"
+                        >
+                          Reason
+                        </th>
+                        <th
+                          class="px-5 py-2.5 text-[10px] uppercase tracking-widest font-bold"
+                          style="color: var(--text-subtle)"
+                        >
+                          Added
+                        </th>
+                        <th
+                          class="px-5 py-2.5 text-[10px] uppercase tracking-widest font-bold text-right"
+                          style="color: var(--text-subtle)"
+                        >
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody id="sec-ip-tbody">
+                      <tr>
+                        <td
+                          colspan="6"
+                          class="px-5 py-8 text-center text-xs"
+                          style="color: var(--text-subtle)"
+                        >
+                          <div class="flex flex-col items-center gap-2">
+                            <i
+                              data-lucide="shield-check"
+                              class="w-6 h-6 opacity-40"
+                            ></i
+                            >No IP rules. All traffic permitted.
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="acrylic-panel rounded-2xl p-5">
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold mb-3"
+                  style="color: var(--text-subtle)"
+                >
+                  Whitelisted IPs (bypass all rules)
+                </div>
+                <div id="sec-whitelist-tags" class="flex flex-wrap gap-2">
+                  <div
+                    class="text-xs px-3 py-1.5 rounded-lg"
+                    style="
+                      color: var(--text-subtle);
+                      border: 1px dashed var(--table-border);
+                    "
+                  >
+                    No whitelisted IPs
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="sec-panel-geo" class="sec-panel hidden space-y-6">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="acrylic-panel p-6 rounded-2xl space-y-5">
+                  <div
+                    class="flex items-center justify-between border-b pb-4"
+                    style="border-color: var(--table-border)"
+                  >
+                    <div>
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: var(--text-subtle)"
+                      >
+                        Geo-Blocking Engine
+                      </div>
+                      <div
+                        class="text-[10px] mt-1"
+                        style="color: var(--text-subtle)"
+                      >
+                        Block or allow traffic by country/region
+                      </div>
+                      <p class="text-xs" style="color: var(--text-muted); line-height: 1.6; margin-top: 8px">
+                        Country checks require traffic through a trusted Cloudflare ingress.
+                        Direct traffic has an unknown country; an Australia-only blocklist
+                        will not block an unknown country. Client-supplied country headers are not trusted.
+                      </p>
+                    </div>
+                    <label class="toggle-switch"
+                      ><input type="checkbox" id="sec-geo-enabled" /><span
+                        class="toggle-track"
+                      ></span
+                    ></label>
+                  </div>
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Mode
+                    </div>
+                    <select
+                      id="sec-geo-mode"
+                      class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-bold"
+                    >
+                      <option value="blocklist">
+                        Blocklist — Block selected, allow rest
+                      </option>
+                      <option value="allowlist">
+                        Allowlist — Allow selected, block rest
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Countries
+                    </div>
+                    <div
+                      class="ink-input rounded-lg p-3 max-h-48 overflow-y-auto custom-scroll space-y-1"
+                      id="sec-geo-country-list"
+                    ></div>
+                  </div>
+                  <button
+                    onclick="saveGeoSettings()"
+                    class="btn-primary w-full py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest flex justify-center items-center gap-2"
+                  >
+                    <i data-lucide="save" class="w-4 h-4"></i> Save Geo Policy
+                  </button>
+                </div>
+                <div class="space-y-6">
+                  <div class="acrylic-panel p-6 rounded-2xl">
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-4"
+                      style="color: var(--text-subtle)"
+                    >
+                      Traffic by Region
+                    </div>
+                    <div id="sec-geo-breakdown" class="space-y-2">
+                      <div
+                        class="text-xs text-center py-4"
+                        style="color: var(--text-subtle)"
+                      >
+                        No regional data yet
+                      </div>
+                    </div>
+                  </div>
+                  <div class="acrylic-panel p-6 rounded-2xl">
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-3"
+                      style="color: var(--text-subtle)"
+                    >
+                      Blocked Regions
+                    </div>
+                    <div id="sec-geo-blocked-tags" class="flex flex-wrap gap-2">
+                      <div
+                        class="text-xs px-3 py-1.5 rounded-lg"
+                        style="
+                          color: var(--text-subtle);
+                          border: 1px dashed var(--table-border);
+                        "
+                      >
+                        None configured
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="sec-panel-honeypot" class="sec-panel hidden space-y-6">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="acrylic-panel p-6 rounded-2xl space-y-5">
+                  <div
+                    class="flex items-center justify-between border-b pb-4"
+                    style="border-color: var(--table-border)"
+                  >
+                    <div>
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: var(--text-subtle)"
+                      >
+                        Honeypot Traps
+                      </div>
+                      <div
+                        class="text-[10px] mt-1"
+                        style="color: var(--text-subtle)"
+                      >
+                        Decoy endpoints that look valuable to attackers. Anyone
+                        who touches one is snooping — you get alerted and can
+                        auto-respond. Use the switch to turn this on.
+                      </div>
+                    </div>
+                    <label class="toggle-switch"
+                      ><input type="checkbox" id="sec-hp-enabled" /><span
+                        class="toggle-track"
+                      ></span
+                    ></label>
+                  </div>
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Trap Endpoints
+                    </div>
+                    <div
+                      class="text-[10px] mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Pre-filled with paths attackers commonly probe. Edit or add
+                      your own.
+                    </div>
+                    <div class="space-y-2" id="sec-hp-routes">
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="text-[10px] font-mono-cli px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20"
+                          >GET</span
+                        >
+                        <input
+                          class="sec-hp-route ink-input flex-1 rounded px-3 py-1.5 text-xs font-mono-cli"
+                          value="/admin/phpmyadmin"
+                          placeholder="/path"
+                        />
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="text-[10px] font-mono-cli px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20"
+                          >GET</span
+                        >
+                        <input
+                          class="sec-hp-route ink-input flex-1 rounded px-3 py-1.5 text-xs font-mono-cli"
+                          value="/.env"
+                          placeholder="/path"
+                        />
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="text-[10px] font-mono-cli px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20"
+                          >GET</span
+                        >
+                        <input
+                          class="sec-hp-route ink-input flex-1 rounded px-3 py-1.5 text-xs font-mono-cli"
+                          value="/wp-login.php"
+                          placeholder="/path"
+                        />
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="text-[10px] font-mono-cli px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                          >POST</span
+                        >
+                        <input
+                          class="sec-hp-route ink-input flex-1 rounded px-3 py-1.5 text-xs font-mono-cli"
+                          value="/api/v1/debug"
+                          placeholder="/path"
+                        />
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="text-[10px] font-mono-cli px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                          >POST</span
+                        >
+                        <input
+                          class="sec-hp-route ink-input flex-1 rounded px-3 py-1.5 text-xs font-mono-cli"
+                          value="/xmlrpc.php"
+                          placeholder="/path"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onclick="addHoneypotRoute()"
+                      class="mt-2 text-[10px] uppercase tracking-widest font-bold text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                    >
+                      <i data-lucide="plus" class="w-3 h-3"></i> Add Trap
+                      Endpoint
+                    </button>
+                  </div>
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      On Trigger (select all that apply)
+                    </div>
+                    <div class="space-y-2">
+                      <label
+                        class="flex items-center gap-2.5 cursor-pointer group"
+                        ><label class="custom-check"
+                          ><input
+                            type="checkbox"
+                            id="sec-hp-act-log"
+                            checked="checked"
+                            disabled="disabled" /><span class="check-box"
+                            ><svg viewBox="0 0 24 24">
+                              <polyline
+                                points="20 6 9 17 4 12"
+                              ></polyline></svg></span></label
+                        ><span
+                          class="text-xs group-hover:text-white transition-colors"
+                          style="color: var(--text-muted)"
+                          >Log & Profile (always on)</span
+                        ></label
+                      >
+                      <label
+                        class="flex items-center gap-2.5 cursor-pointer group"
+                        ><label class="custom-check"
+                          ><input type="checkbox" id="sec-hp-act-block" /><span
+                            class="check-box"
+                            ><svg viewBox="0 0 24 24">
+                              <polyline
+                                points="20 6 9 17 4 12"
+                              ></polyline></svg></span></label
+                        ><span
+                          class="text-xs group-hover:text-white transition-colors"
+                          style="color: var(--text-muted)"
+                          >Auto-Block Source IP</span
+                        ></label
+                      >
+                      <p class="text-xs" style="color: var(--text-muted); line-height: 1.6; margin-top: 8px">
+                        Trap blocks keep their configured expiry across policy refreshes.
+                        Turning traps off stops new captures; it does not clear existing blocks.
+                        An explicit IP whitelist overrides a block.
+                      </p>
+                      <label
+                        class="flex items-center gap-2.5 cursor-pointer group"
+                        ><label class="custom-check"
+                          ><input type="checkbox" id="sec-hp-act-tarpit" /><span
+                            class="check-box"
+                            ><svg viewBox="0 0 24 24">
+                              <polyline
+                                points="20 6 9 17 4 12"
+                              ></polyline></svg></span></label
+                        ><span
+                          class="text-xs group-hover:text-white transition-colors"
+                          style="color: var(--text-muted)"
+                          >Tarpit (slow response)</span
+                        ></label
+                      >
+                      <label
+                        class="flex items-center gap-2.5 cursor-pointer group"
+                        ><label class="custom-check"
+                          ><input
+                            type="checkbox"
+                            id="sec-hp-act-deceive" /><span class="check-box"
+                            ><svg viewBox="0 0 24 24">
+                              <polyline
+                                points="20 6 9 17 4 12"
+                              ></polyline></svg></span></label
+                        ><span
+                          class="text-xs group-hover:text-white transition-colors"
+                          style="color: var(--text-muted)"
+                          >Serve Fake Response Data</span
+                        ></label
+                      >
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex items-center justify-between gap-3 mb-2">
+                      <div>
+                        <div
+                          class="text-[10px] uppercase tracking-widest font-bold"
+                          style="color: var(--text-subtle)"
+                        >
+                          Fake Response Body
+                        </div>
+                        <div
+                          class="text-[10px] mt-1"
+                          style="color: var(--text-subtle)"
+                        >
+                          What a trap returns to the attacker instead of a real
+                          error or 404. Plain text or JSON.
+                        </div>
+                      </div>
+                      <label
+                        class="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-zinc-400 cursor-pointer"
+                        ><input
+                          type="checkbox"
+                          id="sec-hp-fake-enabled"
+                          class="accent-blue-500"
+                        />
+                        Return Fake Data</label
+                      >
+                    </div>
+                    <textarea
+                      id="sec-hp-fake-body"
+                      rows="7"
+                      class="clean-input w-full rounded-xl px-3 py-3 text-xs font-mono-cli text-zinc-100 custom-scroll"
+                      placeholder='{"status":"ok","version":"1.0.0","debug":false}'
+                    ></textarea>
+                  </div>
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Tarpit Delay (seconds)
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <input
+                        type="range"
+                        id="sec-hp-tarpit-delay"
+                        min="1"
+                        max="120"
+                        step="1"
+                        value="15"
+                        class="flex-1 accent-blue-500 h-1"
+                        oninput="
+                          document.getElementById(
+                            'sec-hp-tarpit-val',
+                          ).textContent = this.value + 's'
+                        "
+                      />
+                      <span
+                        id="sec-hp-tarpit-val"
+                        class="font-mono-cli text-sm text-blue-400 w-10 text-right"
+                        >15s</span
+                      >
+                    </div>
+                  </div>
+                  <button
+                    onclick="saveHoneypotSettings()"
+                    class="btn-primary w-full py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest flex justify-center items-center gap-2"
+                  >
+                    <i data-lucide="save" class="w-4 h-4"></i> Save Honeypot
+                    Config
+                  </button>
+                </div>
+                <div class="space-y-6">
+                  <div class="acrylic-panel p-6 rounded-2xl">
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-4"
+                      style="color: var(--text-subtle)"
+                    >
+                      Captured Attacker Profiles
+                    </div>
+                    <div
+                      id="sec-hp-captures"
+                      class="space-y-3 max-h-64 overflow-y-auto custom-scroll"
+                    >
+                      <div
+                        class="text-xs text-center py-6"
+                        style="color: var(--text-subtle)"
+                      >
+                        No captures yet. Enable honeypot to start profiling
+                        threats.
+                      </div>
+                    </div>
+                  </div>
+                  <div class="acrylic-panel p-6 rounded-2xl">
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-3"
+                      style="color: var(--text-subtle)"
+                    >
+                      Trap Hit Statistics
+                    </div>
+                    <div id="sec-hp-stats" class="space-y-2">
+                      <div
+                        class="text-xs text-center py-4"
+                        style="color: var(--text-subtle)"
+                      >
+                        No data
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="sec-panel-events" class="sec-panel hidden space-y-6">
+              <div
+                class="acrylic-panel rounded-2xl overflow-hidden security-scroll-card"
+              >
+                <div
+                  class="p-5 border-b flex items-center justify-between"
+                  style="border-color: var(--table-border)"
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Security Event Log
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <select
+                      id="sec-events-filter"
+                      class="ink-input rounded-lg px-3 py-1.5 text-xs font-bold"
+                      onchange="renderSecurityEvents()"
+                    >
+                      <option value="all">All Events</option>
+                      <option value="block">Blocks</option>
+                      <option value="honeypot">Honeypot</option>
+                      <option value="ratelimit">Rate Limit</option>
+                      <option value="geo">Geo Block</option>
+                      <option value="policy">Policy Changes</option>
+                    </select>
+                    <span class="inline-flex items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Auto
+                    </span>
+                  </div>
+                </div>
+                <div
+                  id="sec-events-feed"
+                  class="flex-1 min-h-[520px] custom-scroll scroll-fill"
+                >
+                  <div
+                    class="p-8 text-center text-xs"
+                    style="color: var(--text-subtle)"
+                  >
+                    <i
+                      data-lucide="scroll-text"
+                      class="w-8 h-8 mx-auto mb-3 opacity-30"
+                    ></i>
+                    <div>No security events yet.</div>
+                    <div class="mt-1.5 opacity-70">Blocks, honeypot hits, rate-limit and geo actions, and policy changes will show up here as they happen.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>

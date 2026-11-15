@@ -1,0 +1,267 @@
+        let _wh_username = null,
+          selectedDashboardPasskeyPlatform = "passkey",
+          dashboardPasskeyBusy = false,
+          dashboardPasskeyOptions = null,
+          dashboardPasskeyOptionsUntil = 0,
+          dashboardPasskeyController = null,
+          dashboardPasskeyGeneration = 0,
+          dashboardPasskeyInvoker = null;
+        const dashboardPasskeyPlatformCopy = Object.freeze({
+          passkey: {
+            name: "Passkey",
+            title: "Add a passkey",
+            description:
+              "Use a device passkey or nearby phone. Your browser offers the supported methods. Existing keys stay registered.",
+            enableLabel: "Add passkey",
+            hints: ["client-device", "hybrid"],
+          },
+          "security-key": {
+            name: "Security key",
+            title: "Add a physical security key",
+            description:
+              "Connect your USB or NFC security key. First confirm with an existing account factor, then follow your browser's new-key prompt.",
+            enableLabel: "Add security key",
+            hints: ["security-key"],
+          },
+          windows: {
+            name: "Windows Hello",
+            title: "Add a Windows Hello passkey",
+            description:
+              "Choose Windows Hello in the browser prompt when available. Your device PIN and biometrics stay on your device.",
+            enableLabel: "Add Windows Hello passkey",
+            hints: ["client-device"],
+          },
+        });
+        function syncPasskeyEnrollmentAvailability(e, t = "") {
+          (_hasWebAuthn = !!e), t && (_wh_username = t);
+          ["menu-item-hello", "settings-passkey-setup"].forEach((t) => {
+            const n = document.getElementById(t);
+            n && n.classList.remove("hidden");
+          });
+          ["menu-passkey-label", "settings-passkey-label"].forEach((id) => {
+            const label = document.getElementById(id);
+            if (label) label.textContent = e
+              ? "Add another passkey or security key" : "Add passkey or security key";
+          });
+          const n = document.getElementById("settings-webauthn-status");
+          n && (n.innerText = e ? "Passkey ready" : "Passkey not enrolled");
+        }
+        function setHelloStatus(e = "", t = "idle") {
+          const n = document.getElementById("wh-status");
+          n && ((n.innerText = e), (n.dataset.state = t));
+        }
+        function setHelloButton(e = "", t = !1) {
+          const n = document.getElementById("wh-btn");
+          if (!n) return;
+          const o = dashboardPasskeyPlatformCopy[selectedDashboardPasskeyPlatform],
+            r = e || (o ? o.enableLabel : "Choose a sign-in method");
+          ((n.disabled = t || !o),
+            (n.innerHTML = `<i data-lucide="${t ? "loader-circle" : "fingerprint"}" class="w-4 h-4${t ? " animate-spin" : ""}"></i><span>${r}</span>`),
+            lucide.createIcons());
+          document.querySelectorAll("[data-dashboard-passkey-platform]")
+            .forEach((button) => { button.disabled = t; });
+        }
+        function selectDashboardPasskeyPlatform(e) {
+          if (dashboardPasskeyBusy) return;
+          const t = dashboardPasskeyPlatformCopy[e];
+          if (!t) return;
+          selectedDashboardPasskeyPlatform = e;
+          const n = document.getElementById("wh-title"),
+            o = document.getElementById("wh-copy");
+          (n && (n.textContent = t.title), o && (o.textContent = t.description));
+          document
+            .querySelectorAll("[data-dashboard-passkey-platform]")
+            .forEach((t) => {
+              const n = t.dataset.dashboardPasskeyPlatform === e;
+              (t.setAttribute("aria-pressed", n ? "true" : "false"),
+                t.classList.toggle("border-blue-500/60", n),
+                t.classList.toggle("bg-blue-500/15", n));
+            });
+          (setHelloStatus(), setHelloButton());
+        }
+        function startPasskeySetup() {
+          if (!window.PublicKeyCredential)
+            return showToast("This browser doesn't support passkeys.", "error");
+          if (dashboardPasskeyBusy) return;
+          dashboardPasskeyInvoker = document.activeElement;
+          dashboardPasskeyOptions = null;
+          dashboardPasskeyOptionsUntil = 0;
+          window.ivCloseGuides?.();
+          if (isMenuOpen) toggleUserMenu();
+          closeModal();
+          selectDashboardPasskeyPlatform("passkey");
+          document.getElementById("wh-modal").classList.remove("hidden");
+          document.querySelector('[data-dashboard-passkey-platform="passkey"]')?.focus();
+        }
+        function startWindowsHelloSetup() {
+          startPasskeySetup();
+        }
+        function closeHelloModal(restoreFocus = true) {
+          dashboardPasskeyGeneration++;
+          dashboardPasskeyController?.abort();
+          dashboardPasskeyController = null;
+          dashboardPasskeyBusy = false;
+          dashboardPasskeyOptions = null;
+          dashboardPasskeyOptionsUntil = 0;
+          (document.getElementById("wh-modal").classList.add("hidden"),
+            setHelloStatus());
+          setHelloButton();
+          if (restoreFocus) {
+            const settingsButton = document.getElementById("settings-passkey-setup");
+            const target = dashboardPasskeyInvoker?.isConnected
+              && dashboardPasskeyInvoker.getClientRects().length
+              ? dashboardPasskeyInvoker : settingsButton?.getClientRects().length
+                ? settingsButton : document.getElementById("user-profile-btn");
+            target?.focus();
+          }
+        }
+        async function enrollDashboardPasskey(registrationTotp = null) {
+          if (dashboardPasskeyBusy) return;
+          dashboardPasskeyBusy = true;
+          const generation = ++dashboardPasskeyGeneration;
+          const controller = new AbortController();
+          dashboardPasskeyController = controller;
+          (setHelloButton("Waiting for your device...", !0),
+            setHelloStatus("Waiting for your device...", "pending"));
+          try {
+            let t = dashboardPasskeyOptionsUntil > Date.now() ? dashboardPasskeyOptions : null;
+            if (!t) {
+              const e = await fetch("/client/auth/webauthn/register-options", {
+                method: "POST",
+                signal: controller.signal,
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-TOTP-Auth": registrationTotp || "",
+                  "X-Account-Pin": _activeActionPin || "",
+                },
+                body: JSON.stringify({ username: _wh_username }),
+              });
+              t = await e.json();
+              if (generation !== dashboardPasskeyGeneration) return;
+              if (!e.ok && t.reauth_required && registrationTotp === null) {
+                closeHelloModal(false);
+                return showTotpPrompt("Add a passkey or security key", (code) => {
+                  closeModal();
+                  document.getElementById("wh-modal").classList.remove("hidden");
+                  return enrollDashboardPasskey(code);
+                }, "webauthn_registration");
+              }
+              if (!e.ok) throw new Error(t.error || "Failed to get registration options");
+              dashboardPasskeyOptions = t;
+              dashboardPasskeyOptionsUntil = Date.now() + 45000;
+            }
+            const
+              o = {
+                ...t,
+                hints: dashboardPasskeyPlatformCopy[selectedDashboardPasskeyPlatform].hints,
+                authenticatorSelection: {
+                  ...t.authenticatorSelection,
+                  ...(selectedDashboardPasskeyPlatform === "security-key"
+                    ? { authenticatorAttachment: "cross-platform" } : {}),
+                },
+                challenge: base64urlToBuffer(t.challenge),
+                user: { ...t.user, id: base64urlToBuffer(t.user.id) },
+                excludeCredentials: (t.excludeCredentials || []).map((e) => ({
+                  ...e,
+                  id: base64urlToBuffer(e.id),
+                })),
+              },
+              r = await navigator.credentials.create({ publicKey: o, signal: controller.signal });
+            if (generation !== dashboardPasskeyGeneration) return;
+            if (!r) throw new Error("No credential returned");
+            dashboardPasskeyOptions = null;
+            dashboardPasskeyOptionsUntil = 0;
+            const
+              s = {
+                id: r.id,
+                rawId: bufferToBase64url(r.rawId),
+                type: r.type,
+                response: {
+                  attestationObject: bufferToBase64url(
+                    r.response.attestationObject,
+                  ),
+                  clientDataJSON: bufferToBase64url(r.response.clientDataJSON),
+                },
+              },
+              a = await fetch("/client/auth/webauthn/register-verify", {
+                method: "POST",
+                signal: controller.signal,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  username: _wh_username,
+                  credential: s,
+                }),
+              });
+            const result = await a.json().catch(() => ({}));
+            if (generation !== dashboardPasskeyGeneration) return;
+            if (!a.ok || !result.success) throw new Error(result.error || "Registration failed");
+            (setHelloStatus(
+              `${dashboardPasskeyPlatformCopy[selectedDashboardPasskeyPlatform].name} added. Your existing keys are unchanged.`,
+              "success",
+            ),
+              syncPasskeyEnrollmentAvailability(!0),
+              showToast("Sign-in key added.", "success"));
+          } catch (e) {
+            if (generation !== dashboardPasskeyGeneration) return;
+            const cancelled = ["NotAllowedError", "AbortError"].includes(e.name)
+              || /cancel/i.test(String(e.message || ""));
+            if (!cancelled) {
+              dashboardPasskeyOptions = null;
+              dashboardPasskeyOptionsUntil = 0;
+            }
+            (setHelloStatus(
+              cancelled
+                ? "Setup was cancelled or timed out. Your existing keys are unchanged. You can try again."
+                : (e.message || "Registration failed. Try again."),
+              "error",
+            ));
+          } finally {
+            if (generation === dashboardPasskeyGeneration) {
+              dashboardPasskeyBusy = false;
+              dashboardPasskeyController = null;
+              setHelloButton();
+            }
+          }
+        }
+
+        function handlePasskeyModalKeydown(event) {
+          const modal = document.getElementById("wh-modal");
+          if (!modal || modal.classList.contains("hidden")) return;
+          if (event.key === "Escape") {
+            event.preventDefault();
+            closeHelloModal();
+          } else if (event.key === "Tab") {
+            const buttons = Array.from(modal.querySelectorAll('button:not([disabled])'))
+              .filter((button) => button.getClientRects().length);
+            const first = buttons[0], last = buttons[buttons.length - 1];
+            if (first && event.shiftKey && document.activeElement === first) {
+              event.preventDefault(); last.focus();
+            } else if (last && !event.shiftKey && document.activeElement === last) {
+              event.preventDefault(); first.focus();
+            }
+          }
+        }
+        document.addEventListener("keydown", handlePasskeyModalKeydown);
+
+        (document.addEventListener("click", async (e) => {
+          const t = e.target.closest("[data-dashboard-passkey-platform]");
+          if (t)
+            return selectDashboardPasskeyPlatform(
+              t.dataset.dashboardPasskeyPlatform,
+            );
+          if (!e.target.closest("#wh-btn")) return;
+          await enrollDashboardPasskey();
+        }),
+          setFeedbackSentiment("confusing"),
+          trackDashboardEvent("view", getCurrentViewId(), "", {
+            source: "initial-load",
+          }),
+          syncPasskeyEnrollmentAvailability(
+            _hasWebAuthn,
+            APP_STATE.username,
+          ),
+          (lockRequiresBilling() && !APP_STATE.demo_mode && pauseDashboardForAccess(APP_STATE.payment_required ? 402 : 423)),
+          fetchAccountInfo(),
+          updateDashboardData(),
+          syncBillingStateFromUrlIfNeeded(),
+          startDashboardPolling());

@@ -1,0 +1,238 @@
+      @font-face { font-family: "Source Sans 3"; font-style: normal; font-weight: 200 900; font-display: swap; src: url("/static/enterprise/fonts/SourceSans3VF-Upright.ttf.woff2") format("woff2"); }
+      :root {
+        --iv-font-sans: "Source Sans 3", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        --iv-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        --bg-body: #000000;
+        --bg-overlay-grad-1: transparent;
+        --bg-overlay-grad-2: transparent;
+        --panel-bg: #000000;
+        --panel-solid: #000000;
+        --panel-border: #262626;
+        --panel-shadow: none;
+        --text-main: #f3f3f3;
+        --text-muted: #b5b5b5;
+        --text-subtle: #858585;
+        --input-bg: #000000;
+        --input-border: #686868;
+        --nav-hover: #000000;
+        --nav-active-bg: #000000;
+        --nav-active-border: #2878ff;
+        --table-border: #262626;
+        --table-stripe: #000000;
+        --accent: #2878ff;
+        --accent-glow: rgba(229, 229, 229, 0.24);
+        --chart-color: rgba(229, 229, 229, 0.26);
+        --chart-active: #e5e5e5;
+        --menu-bg: #000000;
+      }
+      body {
+        font-family: var(--iv-font-sans);
+        color: var(--text-main);
+        background-color: var(--bg-body);
+        overflow: hidden;
+        transition:
+          background-color 0.4s ease,
+          color 0.4s ease;
+      }
+      :root {
+        --iv-font-sans: "Source Sans 3", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        --iv-type-body: 450;
+        --iv-type-control: 550;
+        --iv-type-heading: 650;
+      }
+      
+      html body {
+        font-family: var(--iv-font-sans);
+        font-weight: var(--iv-type-body);
+        line-height: 1.55;
+        font-kerning: normal;
+        font-synthesis: none;
+      }
+      
+      /* Keep real monospace for commands, identifiers, logs, and numeric readouts. */
+      button, input, select, textarea { font-weight: inherit; }
+      .dashboard-main :is(.font-light, .font-normal) { font-weight: var(--iv-type-body); }
+      .dashboard-main .font-medium { font-weight: var(--iv-type-control); }
+      
+      html body .dashboard-main > header #page-title {
+        font-size: 20px !important;
+        font-weight: var(--iv-type-heading) !important;
+        letter-spacing: -.015em;
+      }
+      html body .dashboard-main .view-section :is(h2, h3),
+      html body .dashboard-main .view-section > .iv-page-header h2,
+      html body :is(.iv-modal-header h3, .iv-appearance-heading h3) {
+        font-weight: var(--iv-type-heading) !important;
+        letter-spacing: -.015em !important;
+        line-height: 1.3;
+      }
+      
+      .dashboard-sidebar .iv-nav-trigger-label {
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        line-height: 1.4;
+        letter-spacing: 0;
+      }
+      html .dashboard-sidebar .iv-nav-flyout .nav-item {
+        font-size: 14px !important;
+        font-weight: var(--iv-type-control) !important;
+        line-height: 1.45;
+      }
+      .dashboard-sidebar #user-profile-btn .text-xs { font-size: 13px; font-weight: 600; }
+      
+      .iv-command-button {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-muted);
+      }
+      .dashboard-main .view-section :is(.btn-primary, .btn-secondary, .btn-danger),
+      .iv-settings-nav button, .iv-local-nav button {
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.45;
+      }
+      .dashboard-main .ink-input, .iv-fleet-search input, .iv-command-search input {
+        font-size: 14px;
+        font-weight: var(--iv-type-body);
+        line-height: 1.5;
+      }
+      
+      /* Small supporting copy needs a readable size before adding visual emphasis. */
+      .dashboard-main .text-xs { font-size: 13px; line-height: 1.55; }
+      .dashboard-main .text-sm { line-height: 1.6; }
+      .dashboard-main :is(.text-\[9px\], .text-\[10px\]) { font-size: 11px; line-height: 1.55; }
+      .dashboard-main .text-\[11px\] { font-size: 12px; line-height: 1.55; }
+      .dashboard-main :is(.iv-section-label, .iv-eyebrow, .text-\[9px\].uppercase, .text-\[10px\].uppercase, .text-\[11px\].uppercase) {
+        font-size: 11px;
+        font-weight: var(--iv-type-heading);
+        letter-spacing: .075em;
+        line-height: 1.5;
+      }
+      .iv-fleet-stage-empty > span { font-size: 13px; line-height: 1.65; }
+      .iv-fleet-stage-empty strong { font-size: 16px; font-weight: 600; }
+      .iv-fleet-breadcrumb strong { font-size: 14px; font-weight: 600; }
+      .iv-fleet-breadcrumb > span { font-size: 12px; font-weight: 500; }
+      .iv-preview-label { font-size: 11px; font-weight: 500; letter-spacing: .01em; }
+      .iv-modal-header p, .iv-modal-callout span { font-size: 13px; line-height: 1.6; }
+      .dashboard-main .view-section table thead th { font-size: 12px; font-weight: 600; }
+      .dashboard-main .view-section table tbody { font-weight: var(--iv-type-body); }
+      
+      @media (max-width: 640px) {
+        html body .dashboard-main > header #page-title { font-size: 18px !important; }
+      }
+
+      .bg-overlay {
+        position: fixed;
+        inset: 0;
+        background: 0 0;
+        z-index: -1;
+        transition: background 0.4s ease;
+      }
+      .dashboard-main,
+      .sidebar,
+      .global-assistant-panel {
+        transition:
+          filter 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+          transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      body.tour-welcome-blur .dashboard-main,
+      body.tour-welcome-blur .sidebar,
+      body.tour-welcome-blur .global-assistant-panel {
+        filter: blur(18px) saturate(0.82) brightness(0.72);
+        opacity: 0.72;
+        transform: scale(0.992);
+        pointer-events: none;
+      }
+      body.tour-welcome-blur::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 185;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 50% 42%, rgba(37, 99, 235, 0.11), transparent 28rem),
+          rgba(0, 0, 0, 0.42);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+        animation: fadeIn 0.35s ease both;
+      }
+      .acrylic-panel {
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        box-shadow: none;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        transition: border-color 0.18s ease, background 0.18s ease;
+      }
+      .operator-page-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1.25rem;
+        padding: 1.25rem;
+        border: 1px solid var(--panel-border);
+        border-radius: 1.25rem;
+        background: rgba(0, 0, 0, 0.32);
+        box-shadow: none;
+      }
+      .operator-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border: 1px solid var(--table-border);
+        border-radius: 1rem;
+        background: rgba(0, 0, 0, 0.28);
+      }
+      .operator-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+      }
+      .operator-kpi {
+        border: 1px solid var(--panel-border);
+        border-radius: 1rem;
+        background: rgba(0, 0, 0, 0.28);
+        padding: 1rem;
+      }
+      .operator-panel-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--table-border);
+        background: rgba(0, 0, 0, 0.28);
+      }
+      
+      #view-launcher:has(#launcher-host-grid:not(:has(.launcher-host-card))) #daemon-status-section,
+      #view-launcher:has(#launcher-host-grid:not(:has(.launcher-host-card))) #launcher-capacity-diagnostic-section {
+        display: none !important;
+      }
+      .operator-status-dot {
+        width: 0.625rem;
+        height: 0.625rem;
+        border-radius: 999px;
+        box-shadow: none;
+        outline: 0;
+        outline-offset: 0;
+      }
+      @media (max-width: 1180px) {
+        .operator-page-header {
+          align-items: stretch;
+          flex-direction: column;
+        }
+        .operator-toolbar {
+          width: 100%;
+        }
+        .operator-kpi-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .dashboard-shell {
+        background: 0 0;
+      }
+      .view-section {
+        display: none;
+      }
+      .view-section.active {
+        display: block;
+      }

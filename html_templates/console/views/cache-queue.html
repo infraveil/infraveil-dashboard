@@ -1,0 +1,85 @@
+<div
+            id="view-cache-queue"
+            class="view-section hidden max-w-7xl mx-auto space-y-6"
+          >
+            <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
+              <div>
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Cache & Queue</div>
+                <h2 class="text-2xl text-white mt-2">Runtime cache, fallback, and telemetry pressure</h2>
+                <p class="text-sm mt-2 max-w-4xl" style="color: var(--text-muted)">
+                  Check available recovery copies, paused retries, assigned ports, and telemetry delivery.
+                </p>
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <button onclick="runLauncherDoctor()" class="btn-secondary px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Run Doctor</button>
+                <button onclick="sendLauncherCommand('clear-workspace')" class="btn-danger px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Clear Local Workspace</button>
+              </div>
+            </div>
+            <div id="cache-queue-summary" class="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div class="rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3">
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Encrypted Cache</div>
+                <div class="text-lg text-white mt-1 font-mono-cli">Waiting</div>
+                <div class="text-[11px] mt-1 leading-relaxed" style="color: var(--text-muted)">Agents report whether encrypted runtime cache exists and how many versions are available.</div>
+              </div>
+              <div class="rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3">
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Fallback</div>
+                <div class="text-lg text-white mt-1 font-mono-cli">Waiting</div>
+                <div class="text-[11px] mt-1 leading-relaxed" style="color: var(--text-muted)">Rollback requires a different verified known-good package. Without one, failed retries pause.</div>
+              </div>
+              <div class="rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3">
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Queue</div>
+                <div class="text-lg text-white mt-1 font-mono-cli">Waiting</div>
+                <div class="text-[11px] mt-1 leading-relaxed" style="color: var(--text-muted)">Event queue size shows whether telemetry posting is keeping up.</div>
+              </div>
+              <div class="rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3">
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Drops</div>
+                <div class="text-lg text-white mt-1 font-mono-cli">Waiting</div>
+                <div class="text-[11px] mt-1 leading-relaxed" style="color: var(--text-muted)">Dropped event count tells you when the agent protected itself under pressure.</div>
+              </div>
+            </div>
+            <div id="cache-queue-grid" class="grid xl:grid-cols-[1fr_0.9fr] gap-6">
+              <div class="acrylic-panel rounded-2xl p-6 space-y-5">
+                <div>
+                  <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Workload Cache</div>
+                  <h3 class="text-lg text-white mt-1">Per-agent cache state</h3>
+                </div>
+                <div class="grid md:grid-cols-3 gap-3">
+                  <select id="cache-queue-filter" onchange="renderCacheQueue(window.__latestStatusPayload || {})" class="ink-input text-xs rounded-lg px-3 py-2">
+                    <option value="all">All workloads</option>
+                    <option value="pressure">Queue pressure</option>
+                    <option value="cached">Cached only</option>
+                    <option value="missing">No cache reported</option>
+                  </select>
+                  <input id="cache-queue-threshold" type="number" min="0" value="1" onchange="renderCacheQueue(window.__latestStatusPayload || {})" class="ink-input text-xs rounded-lg px-3 py-2" placeholder="Queue warning threshold" />
+                  <select id="cache-queue-sort" onchange="renderCacheQueue(window.__latestStatusPayload || {})" class="ink-input text-xs rounded-lg px-3 py-2">
+                    <option value="pressure">Sort by pressure</option>
+                    <option value="name">Sort by name</option>
+                    <option value="versions">Sort by versions</option>
+                  </select>
+                </div>
+                <div id="cache-queue-agent-list" class="space-y-3">
+                  <div class="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-xs" style="color: var(--text-muted)">Connect an agent to see runtime contract identity, cached versions, fallback state, queue size, and drop count.</div>
+                </div>
+              </div>
+              <div class="acrylic-panel rounded-2xl p-6 space-y-5">
+                <div>
+                  <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Controls</div>
+                  <h3 class="text-lg text-white mt-1">Safe actions</h3>
+                </div>
+                <div class="space-y-3">
+                  <button onclick="switchView('runtime-evidence')" class="w-full text-left rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] px-4 py-3 transition">
+                    <div class="text-xs text-white font-semibold">Open Runtime Control</div>
+                    <div class="text-[11px] mt-1" style="color: var(--text-muted)">Return to the full launcher and agent map.</div>
+                  </button>
+                  <button onclick="switchView('console')" class="w-full text-left rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] px-4 py-3 transition">
+                    <div class="text-xs text-white font-semibold">Read Runtime Logs</div>
+                    <div class="text-[11px] mt-1" style="color: var(--text-muted)">Look for cache bootstrap, fallback reload, instability rollback, or queue errors.</div>
+                  </button>
+                  <button onclick="exportAuditEvidence()" class="w-full text-left rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] px-4 py-3 transition">
+                    <div class="text-xs text-white font-semibold">Export Audit</div>
+                    <div class="text-[11px] mt-1" style="color: var(--text-muted)">Runtime cache state, contract hashes, action receipts, and runtime identity.</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>

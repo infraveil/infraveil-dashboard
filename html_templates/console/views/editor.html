@@ -1,0 +1,304 @@
+<div id="view-editor" class="view-section hidden w-full px-4 xl:px-6">
+            <div class="ide-workspace rounded-xl overflow-hidden flex flex-col">
+              <div
+                class="ide-titlebar px-5 py-3 flex items-center justify-between gap-4 shrink-0"
+              >
+                <div class="min-w-0">
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: #7f8aa3"
+                  >
+                    Runtime Contract
+                  </div>
+                  <div class="text-sm mt-1 text-white">
+                    Node
+                    <span
+                      id="editor-target-node"
+                      class="font-mono-cli text-zinc-300"
+                      >Loading...</span
+                    >
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <button
+                    onclick="switchView('docs')"
+                    class="btn-secondary px-3 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                  >
+                    <i data-lucide="book-open" class="w-3.5 h-3.5"></i> Docs
+                  </button>
+                  <button
+                    onclick="openRuntimeSetupGuide()"
+                    class="btn-secondary px-3 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                  >
+                    <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
+                    Guided Setup
+                  </button>
+                  <button
+                    onclick="switchView('deployments')"
+                    class="btn-secondary px-3 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                  >
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i> Close
+                  </button>
+                  <button
+                    onclick="deployCode()"
+                    id="editor-save-deploy-btn"
+                    class="btn-primary px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                  >
+                    <i data-lucide="zap" class="w-3.5 h-3.5"></i> Save Contract
+                  </button>
+                </div>
+              </div>
+              <div class="flex-1 min-h-0 flex">
+                <aside
+                  class="ide-sidebar w-[310px] min-w-[310px] flex flex-col min-h-0"
+                >
+                  <div
+                    class="px-4 py-3 border-b shrink-0"
+                    style="border-color: rgba(255, 255, 255, 0.06)"
+                  >
+                    <div class="flex items-center justify-between gap-3 mb-3">
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: #7f8aa3"
+                      >
+                        Runtime Contract
+                      </div>
+                      <div class="flex items-center gap-1.5">
+                        <button
+                          onclick="createEditorFile()"
+                          class="w-7 h-7 rounded-md border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 flex items-center justify-center"
+                          title="New file"
+                        >
+                          <i data-lucide="file-plus" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button
+                          onclick="createEditorFolder()"
+                          class="w-7 h-7 rounded-md border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 flex items-center justify-center"
+                          title="New folder"
+                        >
+                          <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button
+                          onclick="
+                            document
+                              .getElementById('editor-folder-import')
+                              .click()
+                          "
+                          class="w-7 h-7 rounded-md border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 flex items-center justify-center"
+                          title="Optional package import"
+                        >
+                          <i data-lucide="folder-input" class="w-3.5 h-3.5"></i>
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      id="editor-folder-import"
+                      type="file"
+                      webkitdirectory
+                      directory
+                      multiple="multiple"
+                      class="hidden"
+                      onchange="importEditorFolder(event)"
+                    />
+                    <input
+                      id="editor-file-filter"
+                      class="ide-input w-full rounded-md px-3 py-2 text-xs font-mono-cli"
+                      placeholder="Filter files or folders"
+                      oninput="setEditorFileFilter(this.value)"
+                    />
+                  </div>
+                  <div class="px-4 py-3 shrink-0">
+                    <div
+                      class="editor-rail-card rounded-lg p-3 grid grid-cols-2 gap-3 text-[10px] uppercase tracking-widest"
+                    >
+                      <div>
+                        <div style="color: #7f8aa3">Files</div>
+                        <div
+                          id="editor-file-count"
+                          class="mt-1 text-white font-mono-cli"
+                        >
+                          0
+                        </div>
+                      </div>
+                      <div>
+                        <div style="color: #7f8aa3">Mode</div>
+                        <div
+                          id="editor-language-badge"
+                          class="mt-1 text-zinc-300 font-mono-cli"
+                        >
+                          Text
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    id="editor-file-tree"
+                    class="flex-1 min-h-0 overflow-y-auto custom-scroll px-3 pb-3 text-xs font-mono-cli"
+                  ></div>
+                </aside>
+                <section
+                  class="flex-1 min-w-0 min-h-0 flex flex-col bg-[#020202]"
+                >
+                  <div class="ide-tabbar shrink-0 flex items-center min-w-0">
+                    <div class="ide-tab-chip min-w-0">
+                      <i
+                        data-lucide="file-code-2"
+                        class="w-3.5 h-3.5 text-zinc-400 shrink-0"
+                      ></i>
+                      <span
+                        id="editor-file-title"
+                        class="font-mono-cli text-xs text-white truncate"
+                        >infraveil.json</span
+                      >
+                    </div>
+                  </div>
+                  <div
+                    class="px-4 py-2 border-b flex items-center gap-3 shrink-0"
+                    style="
+                      background: #050505;
+                      border-color: rgba(255, 255, 255, 0.05);
+                    "
+                  >
+                    <div class="min-w-0">
+                      <div
+                        id="editor-breadcrumb"
+                        class="text-[11px] font-mono-cli truncate"
+                        style="color: #e4e4e7"
+                      >
+                        infraveil.json
+                      </div>
+                      <div
+                        class="text-[10px] uppercase tracking-widest"
+                        style="color: #7f8aa3"
+                      >
+                        <span id="editor-line-count">0 lines</span>
+                        <span class="mx-1">|</span>
+                        <span id="editor-selection-status">Ln 1, Col 1</span>
+                      </div>
+                    </div>
+                    <div class="ml-auto flex items-center gap-2 shrink-0">
+                      <button
+                        onclick="deleteCurrentEditorFile()"
+                        class="btn-secondary px-3 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                      >
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete
+                      </button>
+                      <button
+                        onclick="copyCurrentEditorFile()"
+                        class="btn-secondary px-3 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                      >
+                        <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy
+                      </button>
+                    </div>
+                  </div>
+                  <div class="relative flex-1 min-h-0 runtime-contract-shell">
+                    <div id="runtime-config-panel" class="runtime-config-panel custom-scroll"></div>
+                    <div id="runtime-wizard" class="hidden"><div id="runtime-wizard-body"></div></div>
+                    <textarea
+                      id="source-code-editor"
+                      class="code-textarea w-full h-full bg-transparent text-sm p-4 font-mono-cli custom-scroll"
+                      style="color: #e4e4e7"
+                      spellcheck="false"
+                      placeholder='{"services":[{"name":"existing-api","runtime":"external","start":"systemctl start my-api","port":8080}]}'
+                    ></textarea>
+                  </div>
+                  <div
+                    class="ide-statusbar px-4 py-1.5 text-[10px] uppercase tracking-widest font-bold flex items-center gap-3 shrink-0"
+                  >
+                    <span id="editor-status-language">Text</span>
+                    <span class="opacity-70">|</span>
+                    <span id="editor-status-lines">0 lines</span>
+                    <span class="opacity-70">|</span>
+                    <span id="editor-status-cursor">Ln 1, Col 1</span>
+                    <span class="opacity-70">|</span>
+                    <span id="editor-status-files">0 files</span>
+                  </div>
+                </section>
+                <aside
+                  class="ide-utility-rail w-[280px] min-w-[280px] flex flex-col gap-3 p-4 min-h-0"
+                >
+                  <div
+                    class="editor-rail-card rounded-xl p-4 flex flex-col gap-3"
+                  >
+                    <div class="flex items-center gap-2">
+                      <div
+                        id="hash-dot"
+                        class="w-2 h-2 rounded-full bg-blue-500 shrink-0"
+                        style="box-shadow: 0 0 8px rgba(59, 130, 246, 0.7)"
+                      ></div>
+                      <span
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: #7f8aa3"
+                        >Live Hash</span
+                      >
+                      <span
+                        class="ml-auto text-[9px] font-mono-cli text-zinc-400"
+                        >SHA-256</span
+                      >
+                    </div>
+                    <div
+                      id="editor-hash-display"
+                      class="font-mono-cli text-[10px] break-all leading-loose select-all cursor-text rounded-lg p-3"
+                      style="
+                        color: #e4e4e7;
+                        background: #030303;
+                        border: 1px solid rgba(255, 255, 255, 0.08);
+                        word-break: break-all;
+                        min-height: 88px;
+                      "
+                    >
+                      <span style="color: #7f8aa3"
+                        >Start typing to compute...</span
+                      >
+                    </div>
+                    <div
+                      class="text-[9px] uppercase tracking-widest"
+                      style="color: #7f8aa3"
+                    >
+                      File:
+                      <span id="hash-tab-label" class="text-zinc-300"
+                        >infraveil.json</span
+                      >
+                    </div>
+                  </div>
+                  <div
+                    class="editor-rail-card rounded-xl p-4 flex flex-col gap-3"
+                  >
+                    <div class="flex items-center gap-2">
+                      <div
+                        class="w-2 h-2 rounded-full bg-amber-500 shrink-0"
+                        style="box-shadow: 0 0 8px rgba(245, 158, 11, 0.6)"
+                      ></div>
+                      <span
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: #7f8aa3"
+                        >Runtime Contract</span
+                      >
+                    </div>
+                    <div
+                      id="editor-pkg-hash-display"
+                      class="font-mono-cli text-[10px] break-all leading-loose select-all cursor-text rounded-lg p-3"
+                      style="
+                        color: #fbbf24;
+                        background: rgba(2, 6, 12, 0.82);
+                        border: 1px solid rgba(255, 255, 255, 0.08);
+                        word-break: break-all;
+                        min-height: 88px;
+                      "
+                    >
+                      <span style="color: #7f8aa3"
+                        >Deploy to register hash</span
+                      >
+                    </div>
+                    <button
+                      onclick="copyEditorHash()"
+                      class="btn-secondary w-full py-2.5 rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2"
+                    >
+                      <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy Live
+                      Hash
+                    </button>
+                  </div>
+                </aside>
+              </div>
+            </div>
+          </div>

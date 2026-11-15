@@ -1,0 +1,1459 @@
+        const APP_STATE = Object.assign(
+          {
+            demo_mode: !1,
+            plan_type: "Professional",
+            payment_required: !1,
+            payment_status: "unpaid",
+            workspace_locked: !1,
+            billing: {},
+            demo_tour_mode: "production",
+            demo_access_code: "",
+            demo_username: "",
+            demo_session_key: "",
+            questionnaire_defaults: {
+              multi_host: !0,
+              multiple_apis: !0,
+              host_count: 2,
+              api_count: 3,
+            },
+            pin_enabled: !1,
+            has_webauthn: !1,
+            runtime_observed: !1,
+            action_auth_mode: "totp_only",
+            recovery_mode: "totp_or_email",
+            auth_prompt_behavior: "smart",
+            release_approval_required: !1,
+            release_approval_enrolled: !1,
+            release_approval_pubkey: "",
+          },
+          window.APP_CONFIG || {},
+        );
+        window.APP_STATE = APP_STATE;
+        _hasWebAuthn = !!APP_STATE.has_webauthn;
+        function hydrateUserProfileFromConfig(e = APP_STATE) {
+          const t = e.business_name || e.demo_username || e.username || "",
+            n = e.username || e.email || e.demo_username || "",
+            o = e.client_id || e.id || "";
+          const r = document.getElementById("user-profile-name"),
+            s = document.getElementById("popover-name"),
+            a = document.getElementById("popover-email"),
+            i = document.getElementById("user-profile-id");
+          (r && t && (r.innerText = t),
+            s && t && (s.innerText = t),
+            a && n && (a.innerText = n),
+            i && o && (i.innerText = "ID: " + String(o).substring(0, 8)));
+        }
+        hydrateUserProfileFromConfig();
+        function isEnterprisePlan() {
+          return !0;
+        }
+        function lockRequiresBilling() {
+          return APP_STATE.payment_required || APP_STATE.workspace_locked;
+        }
+        function isBillingAccessibleWhileLocked(e) {
+          return [
+            "billing",
+            "support",
+            "auth-settings",
+            "usage",
+            "scale",
+            "integrations",
+            "export-data",
+            "feedback",
+            "settings",
+          ].includes(e);
+        }
+        function buildAccountMenuPages() {
+          [
+            ["auth-settings-content", "expiry-warning-banner"],
+            ["auth-settings-content", "settings-profile-panel"],
+            ["auth-settings-content", "settings-auth-panel"],
+            ["auth-settings-content", "settings-trust-panel"],
+            ["auth-settings-content", "delete-account-section"],
+            ["feedback-page-content", "settings-feedback-panel"],
+            ["feedback-page-content", "settings-activity-panel"],
+            ["usage-page-content", "billing-usage-panel"],
+            ["usage-page-content", "billing-diagnostics-panel"],
+            ["scale-page-content", "billing-scale-panel"],
+          ].forEach(([e, t]) => {
+            const n = document.getElementById(e),
+              o = document.getElementById(t);
+            n && o && n.appendChild(o);
+          });
+        }
+        function isProductionDemo() {
+          return (
+            APP_STATE.demo_mode && "production" === APP_STATE.demo_tour_mode
+          );
+        }
+        function isDemoWorkspace() {
+          return Boolean(
+            APP_STATE.demo_mode ||
+              APP_STATE.demo_access_code ||
+              APP_STATE.demo_session_key ||
+              window.__demoAccessCode,
+          );
+        }
+        function applyPlanVisibility() {
+          (document
+            .querySelectorAll('[data-enterprise-only="true"]')
+            .forEach((e) => {
+              e.classList.remove("hidden");
+            }),
+            document
+              .querySelectorAll('[data-demo-only="true"]')
+              .forEach((e) => {
+                e.classList.toggle("hidden", !APP_STATE.demo_mode);
+              }));
+        }
+        function applyWorkspaceState() {
+          const e = document.getElementById("payment-lock-banner");
+          const scroll = document.getElementById("dashboard-page-scroll");
+          if (e && scroll && e.parentNode !== scroll) scroll.prepend(e);
+          e &&
+            e.classList.toggle(
+              "hidden",
+              (!lockRequiresBilling() && !window.ivDashboardAccess?.paused) || APP_STATE.demo_mode,
+            );
+          const t = document.getElementById("demo-launcher-guide");
+          if (
+            (t && t.classList.toggle("hidden", !isProductionDemo()),
+            lockRequiresBilling() &&
+              !APP_STATE.demo_mode &&
+              !isBillingAccessibleWhileLocked(getCurrentViewId()))
+          ) {
+            document.getElementById("view-billing") && switchView("billing");
+          }
+          applyPlanVisibility();
+        }
+        const viewHydrationInFlight = {};
+        function hydrateActiveView(e, t = {}) {
+          const { force: n = !1 } = t;
+          if (!e || viewHydrationInFlight[e]) return;
+          const o = (t) => {
+            viewHydrationInFlight[e] = Promise.resolve(t).finally(() => {
+              viewHydrationInFlight[e] = null;
+            });
+          };
+          if ("overview" === e)
+            return void (_opsState && !n
+              ? window.renderFleetIntelligence?.(_opsState.fleet_intelligence)
+              : o(fetchOperationsState(!1)));
+          if (["incidents", "status-page", "catalog"].includes(e))
+            return void (_opsState && !n
+              ? ("incidents" === e && renderIncidentCommand(),
+                "status-page" === e && renderStatusPage(),
+                "catalog" === e && renderServiceCatalog())
+              : o(fetchOperationsState(!0)));
+          if ("security" === e)
+            return void (_securityPolicy && _securityInsights && !n
+              ? (renderSecurityUI(),
+                renderSecurityEvents(),
+                renderTrafficChart(),
+                renderLearningInsights())
+              : o(fetchSecuritySettings()));
+          if ("pipelines" === e)
+            return void (_securityPolicy && !n
+              ? (ensurePipelineStateFromPolicy(_securityPolicy.global || {}), renderPipelineBuilder(), !_securityInsights && o(fetchPipelineInsights()))
+              : o(fetchSecuritySettings()));
+          if ("pipeline-logs" === e)
+            return void o(refreshPipelineAnalytics());
+          if ("remediation" === e)
+            return void o(window.ivMcpRefresh?.());
+          if ("support" === e)
+            return void o(refreshSupportTickets(!1));
+          if (["app-logs", "console", "network", "internal-network"].includes(e))
+            return void (
+              ("app-logs" === e && _appLogs.length && renderAppLogs()),
+              ("console" === e && _consoleLogs.length && renderConsole()),
+              ("network" === e && _networkLogs.length && renderNetwork()),
+              ("internal-network" === e &&
+                (_internalNetworkLogs.length
+                  ? renderInternalNetwork()
+                  : o(fetchInternalNetworkLogs()))),
+              (!window.__latestStatusPayload || n) && o(updateDashboardData())
+            );
+          if (
+            [
+              "runtime-evidence",
+              "capacity-audit",
+              "cache-queue",
+              "process-supervisor",
+              "gateway-routes",
+              "trust-receipts",
+              "launcher",
+              "deployments",
+              "rollout",
+              "overview",
+            ].includes(e)
+          )
+            return void (window.__latestStatusPayload && !n
+              ? renderStatusSubView(e, window.__latestStatusPayload, !0)
+              : o(updateDashboardData()));
+        }
+        function switchView(e) {
+          (toggleMobileNav(!1),
+            "api-reference" !== e ||
+              APP_STATE.demo_mode ||
+              (showToast(
+                "API Reference is only available in demo workspaces.",
+                "error",
+              ),
+              (e = "overview")),
+            !lockRequiresBilling() ||
+              APP_STATE.demo_mode ||
+              isBillingAccessibleWhileLocked(e) ||
+              (showToast(
+                "This workspace is locked until billing is active.",
+                "error",
+              ),
+              (e = "billing")),
+            document.querySelectorAll(".view-section").forEach((e) => {
+              (e.classList.remove("active"),
+                e.classList.add("hidden"),
+                (e.style.display = "none"));
+            }),
+            document
+              .querySelectorAll(".nav-item")
+              .forEach((e) => e.classList.remove("active")));
+          const t = document.getElementById("view-" + e);
+          t &&
+            ((t.style.display = "block"),
+            t.classList.remove("hidden"),
+            t.classList.add("active"));
+          const n = document.getElementById("nav-" + e);
+          n && (n.classList.add("active"), n.classList.remove("hidden"));
+          ((document.getElementById("page-title").textContent =
+            {
+              overview: "Operations Home",
+              incidents: "Incidents",
+              "status-page": "Status Page",
+              catalog: "Service Catalog",
+              deployments: "Workloads",
+              launcher: "Servers",
+              "app-logs": "App Logs",
+              console: "Runtime Logs",
+              "api-reference": "API Surface",
+              network: "Request Trace",
+              "internal-network": "Control Trace",
+              "runtime-evidence": "Runtime Control",
+              "capacity-audit": "Capacity Audit",
+              "cache-queue": "Cache & Queue",
+              "process-supervisor": "Process Supervisor",
+              "gateway-routes": "Gateway & Routes",
+              "trust-receipts": "Connections & History",
+              "pipeline-logs": "Pipeline Analytics",
+              pipelines: "Pipeline Builder",
+              security: "Security Policy",
+              settings: "Workspace Settings",
+              "auth-settings": "Account Settings",
+              feedback: "Feedback",
+              usage: "Usage",
+              scale: "Scale",
+              integrations: "Edge Integrations",
+              "export-data": "Export Data",
+              billing: "Billing & Usage",
+              support: "Support Center",
+              rollout: "Placement",
+              updates: "Updates",
+              editor: "Runtime Contract",
+              docs: "Documentation",
+              remediation: "MCP Control",
+            }[e] || "Console"),
+            "rollout" !== e && resetPlacementDraft(),
+            "status-page" === e && typeof loadStatusLink === "function" && loadStatusLink(),
+            "integrations" === e && refreshIntegrations(!1),
+            "editor" === e && initRuntimeContractEditor(),
+            "rollout" === e && bindPlacementDraftInputs(),
+            "updates" === e && renderUpdatesView());
+          hydrateActiveView(e);
+          FLEET_SURFACES[e] && hydrateFleetSurface(e, { force: true });
+          const o = document.getElementById("feedback-view");
+          (o && (o.value = humanizeTelemetryKey(e)),
+            _lastTrackedView !== e &&
+              ((_lastTrackedView = e),
+              trackDashboardEvent("view", e, "", { source: "switchView" })));
+        }
+        function selectLauncherHost(e, t = {}) {
+          const { user: o = !0 } = t;
+          const n = canonicalLauncherHostId(e);
+          if (n !== canonicalLauncherHostId(fleetSelectionState.currentLauncherHostId)) {
+            window.dispatchEvent(new CustomEvent("infraveil:launcher-selected"));
+          }
+          ((fleetSelectionState.currentLauncherHostId = n || null),
+            o && (fleetSelectionState.launcherUserPinnedHostId = fleetSelectionState.currentLauncherHostId),
+            o &&
+              ((fleetSelectionState.selectedLauncherHostIds = n ? new Set([n]) : new Set()),
+              saveStoredLauncherSelection()),
+            saveStoredCurrentLauncherHost(),
+            document
+              .querySelectorAll("[data-launcher-host-id]")
+              .forEach((e) => {
+                const t =
+                  canonicalLauncherHostId(e.getAttribute("data-launcher-host-id")) ===
+                  canonicalLauncherHostId(fleetSelectionState.currentLauncherHostId);
+                (e.classList.toggle("launcher-host-card-active", t),
+                  e.setAttribute("aria-selected", t ? "true" : "false"));
+              }));
+          (applyLauncherSelectionDomState(), updateLauncherBulkActions());
+          const r =
+              (window.__launcherHosts || []).find(
+                (e) => launcherHostMatches(e, fleetSelectionState.currentLauncherHostId),
+              ) || null,
+            s = document.getElementById("launcher-selected-host"),
+            a = document.getElementById("launcher-selected-host-detail"),
+            i = document.getElementById("launcher-selected-host-explainer"),
+            l = document.getElementById("launcher-status-dot"),
+            c = document.getElementById("launcher-status-text"),
+            d = document.getElementById("launcher-install-target");
+          d && (d.textContent = r?.name || launcherHostIdentity(r || fleetSelectionState.currentLauncherHostId) || "Selected server");
+          if (s && a) {
+            if (!r)
+              return (
+                (s.textContent = "No host selected"),
+                (a.textContent =
+                  "Click a host in the list above to manage it, or add a server (top right) to connect a new machine."),
+                l && (l.className = "operator-status-dot bg-red-500"),
+                c &&
+                  ((c.className = "text-sm font-semibold text-red-500"),
+                  (c.innerText = "OFFLINE")),
+                renderLauncherCapacityDiagnostic(null),
+                void (
+                  i &&
+                  (i.textContent =
+                    "Capacity is the hard API limit for this machine. Weight is placement preference: higher weight means the scheduler prefers this host sooner when multiple hosts qualify.")
+                )
+              );
+            if (
+              ((s.textContent = r.name || launcherHostIdentity(r).substring(0, 8)),
+              (a.textContent = `Launcher Host • ${r.assigned_agent_ids?.length || 0} assigned APIs • rollout delay ${r.rollout_delay_seconds || 0}s`),
+              i)
+            ) {
+              const e = r.region || "global",
+                n =
+                  Array.isArray(r.labels) && r.labels.length
+                    ? r.labels.join(", ")
+                    : "no labels";
+              i.textContent = `Region: ${e}. Labels: ${n}. Capacity: ${r.max_apis || 25} APIs max. Weight: ${r.weight || 100} placement preference.`;
+            }
+            const e = "online" === r.status;
+            l && (l.className = `operator-status-dot ${e ? "bg-emerald-500" : "bg-red-500"}`);
+            c &&
+              ((c.className = `text-sm font-semibold ${e ? "text-emerald-500" : "text-red-500"}`),
+              (c.innerText = e ? "ONLINE & SYNCING" : "LAUNCHER DISCONNECTED"));
+            if (i) {
+              const reportingApps = (window.__launcherAgents || []).filter((agent) =>
+                canonicalLauncherHostId(agent.launcher_host_id) === canonicalLauncherHostId(r.host_id || r.launcher_host_id || r.id) && agent.status === "online");
+              i.textContent += e
+                ? ` Launcher sync is connected; app heartbeat and health are checked separately. ${reportingApps.length} apps report online in this inventory slice.`
+                : ` Launcher sync is disconnected. ${reportingApps.length} assigned apps still report online independently in this inventory slice; launcher disconnect does not prove those apps stopped.`;
+            }
+          }
+          renderLauncherCapacityDiagnostic(r);
+        }
+        function diagnosticValue(e, t, n = "-") {
+          const o = t.split(".").reduce((e, t) => (e && null != e[t] ? e[t] : null), e);
+          return null == o || "" === o ? n : o;
+        }
+        function capacityBar(e, t, n = "") {
+          const o = Math.max(0, Math.min(100, Number(e || 0)));
+          return `<div>
+            <div class="flex items-center justify-between text-[10px] uppercase tracking-widest mb-2" style="color: var(--text-subtle)">
+              <span>${escapeHtml(t)}</span><span>${escapeHtml(n || `${Math.round(o)}%`)}</span>
+            </div>
+            <div class="h-2 rounded-full bg-white/[0.06] overflow-hidden border border-white/10">
+              <div class="h-full rounded-full ${o >= 85 ? "bg-red-400/80" : o >= 70 ? "bg-amber-400/80" : "bg-emerald-400/75"}" style="width:${o}%"></div>
+            </div>
+          </div>`;
+        }
+        function renderLauncherCapacityDiagnostic(e) {
+          const t = document.getElementById("launcher-capacity-diagnostic");
+          if (!t) return;
+          const n = e?.runtime_status?.capacity_diagnostic || e?.last_capacity_diagnostic || null;
+          const o = e?.name || e?.host_id || e?.launcher_host_id || "selected server";
+          if (!n) {
+            t.innerHTML = `<div class="rounded-xl border border-dashed border-white/10 bg-black/20 px-5 py-5 text-sm" style="color: var(--text-muted)">No capacity diagnostic has been reported for ${escapeHtml(o)} yet. Run the diagnostic here, then open Capacity Audit for the full report.</div>`;
+            return;
+          }
+          const r = Number(n.safe_agent_capacity || 0),
+            s = Number(n.burst_agent_capacity || 0),
+            a = String(n.rating || "unknown"),
+            i = String(n.limiting_resource || "unknown"),
+            l = n.generated_at ? new Date(1e3 * Number(n.generated_at)).toLocaleString() : "latest report";
+          t.innerHTML = `<div class="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-5">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div>
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Latest for ${escapeHtml(o)}</div>
+                <div class="text-xl text-white mt-2 font-mono-cli">${escapeHtml(a.toUpperCase())} · ${r || "-"} safe APIs</div>
+                <div class="text-xs mt-2" style="color: var(--text-muted)">Burst ${s || "-"} · limiter ${escapeHtml(i)} · ${escapeHtml(l)}</div>
+              </div>
+              <button onclick="switchView('capacity-audit')" class="btn-secondary px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+                <i data-lucide="arrow-right" class="w-4 h-4"></i> Open Capacity Audit
+              </button>
+            </div>
+          </div>`;
+          window.lucide && lucide.createIcons();
+        }
+        function capacityAuditDiagnosticForHost(e) {
+          return e?.runtime_status?.capacity_diagnostic || e?.last_capacity_diagnostic || null;
+        }
+        function capacityAuditHostName(e) {
+          return e?.name || e?.host_id || e?.launcher_host_id || e?.id || "server";
+        }
+        function renderCapacityAudit(e) {
+          const t = document.getElementById("capacity-audit-summary"),
+            n = document.getElementById("capacity-audit-list");
+          if (!t || !n) return;
+          const o = Array.isArray(e?.launcher_hosts) ? e.launcher_hosts : [],
+            inventory = e?.inventory || {},
+            r = o.map((e) => ({ host: e, report: capacityAuditDiagnosticForHost(e) })),
+            s = r.filter((e) => !!e.report),
+            a = s.reduce((e, t) => e + Number(t.report.safe_agent_capacity || 0), 0),
+            i = s.reduce((e, t) => e + Number(t.report.burst_agent_capacity || 0), 0),
+            l = s.reduce((e, t) => e + Number(t.report.current_agents || 0), 0),
+            c = (inventory.limiters || []).map((item) => item.key).join(", ") || [...new Set(s.map((e) => String(e.report.limiting_resource || "unknown")).filter(Boolean))].join(", ") || "-",
+            fleetHosts = Number(inventory.hosts ?? o.length),
+            auditedHosts = Number(inventory.audited_hosts ?? s.length),
+            safeCapacity = Number(inventory.safe_capacity ?? a);
+          t.innerHTML = [
+            ["Servers", fleetHosts.toLocaleString(), "Launcher hosts in this workspace."],
+            ["Audited", `${auditedHosts.toLocaleString()}/${fleetHosts.toLocaleString()}`, "Hosts with capacity diagnostic reports."],
+            ["Estimated workload slots", safeCapacity.toLocaleString() || "-", "Advisory estimates, not measured throughput or reserved resources."],
+            ["Limiters", c, "Resources currently limiting capacity."],
+          ].map((e) => evidenceCard(e[0], e[1], e[2])).join("");
+          const d = document.getElementById("capacity-audit-filter")?.value || "all",
+            u = document.getElementById("capacity-audit-sort")?.value || "capacity";
+          let p = r.filter(({ report: e }) => {
+            if ("with-report" === d) return !!e;
+            if ("missing" === d) return !e;
+            if ("limited" === d) return !!e && !["strong", "healthy", "excellent"].includes(String(e.rating || "").toLowerCase());
+            return !0;
+          });
+          p.sort((e, t) => {
+            const n = capacityAuditHostName(e.host),
+              o = capacityAuditHostName(t.host),
+              r = e.report || {},
+              s = t.report || {};
+            if ("name" === u) return String(n).localeCompare(String(o));
+            if ("limiter" === u) return String(r.limiting_resource || "").localeCompare(String(s.limiting_resource || ""));
+            if ("recent" === u) return Number(s.generated_at || 0) - Number(r.generated_at || 0);
+            return Number(s.safe_agent_capacity || 0) - Number(r.safe_agent_capacity || 0);
+          });
+          n.innerHTML = p.map(({ host: e, report: t }) => {
+            const n = capacityAuditHostName(e),
+              o = launcherHostIdentity(e),
+              r = Array.isArray(e.assigned_agent_ids) ? e.assigned_agent_ids.length : (window.__launcherAgents || []).filter((e) => launcherHostIdentity(e.launcher_host_id || "") === o).length,
+              s = e.status === "online";
+            if (!t)
+              return `<div class="rounded-2xl border border-dashed border-white/10 bg-black/20 p-5">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div>
+                    <div class="text-sm font-semibold text-white">${escapeHtml(n)}</div>
+                    <div class="text-xs mt-2" style="color: var(--text-muted)">${escapeHtml(e.region || "global")} · ${r} assigned workloads · ${s ? "online" : "offline"}</div>
+                    <div class="text-xs mt-2" style="color: var(--text-subtle)">No capacity audit has been reported for this server yet.</div>
+                  </div>
+                  <button onclick="selectLauncherHost('${escapeHtml(o)}'); sendLauncherCommand('capacity-diagnostic')" class="btn-primary px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Run Audit</button>
+                </div>
+              </div>`;
+            const a = Number(t.safe_agent_capacity || 0),
+              c = Number(t.burst_agent_capacity || 0),
+              d = Number(t.current_agents || r || 0),
+              u = Math.min(100, a ? (d / a) * 100 : 0),
+              p = String(t.rating || "unknown"),
+              m = String(t.limiting_resource || "unknown"),
+              g = t.generated_at ? new Date(1e3 * Number(t.generated_at)).toLocaleString() : "latest report",
+              h = Array.isArray(t.recommendations) ? t.recommendations : [];
+            return `<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-5 space-y-5">
+              <p class="text-xs" style="color:var(--text-muted)">${t.estimate_only === true ? `Planning estimate · ${escapeHtml(t.resource_scope || "resource scope unknown")} · ${Number(t.duration_seconds || 0)}s sample · not a load test` : "Legacy estimate: container limits were not verified. Rerun with the updated launcher."}</p>
+              <div class="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+                <div>
+                  <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Server</div>
+                  <div class="text-2xl text-white mt-2">${escapeHtml(n)}</div>
+                  <div class="text-xs mt-2" style="color: var(--text-muted)">${escapeHtml(e.region || "global")} · ${d} running workloads · ${s ? "online" : "offline"} · generated ${escapeHtml(g)}</div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <button onclick="selectLauncherHost('${escapeHtml(o)}'); sendLauncherCommand('capacity-diagnostic')" class="btn-secondary px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Rerun Audit</button>
+                  <button onclick="selectLauncherHost('${escapeHtml(o)}'); switchView('launcher')" class="btn-secondary px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Open Server</button>
+                </div>
+              </div>
+              <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
+                ${evidenceCard("Rating", p.toUpperCase(), `Limiter: ${m}`)}
+                ${evidenceCard("Estimated steady slots", a || "-", "Normal steady-state placement target.")}
+                ${evidenceCard("Estimated burst slots", c || "-", "Short spike or test ceiling.")}
+                ${evidenceCard("Per-workload memory", `${diagnosticValue(t, "memory.planning_per_agent_mb", 180)} MB`, "Planning estimate used for this host.")}
+              </div>
+              <div class="grid xl:grid-cols-2 gap-5">
+                <div class="rounded-2xl border border-white/10 bg-black/20 p-5 space-y-5">
+                  ${capacityBar(u, "Safe capacity used", `${d}/${a || "?"} workloads`)}
+                  ${capacityBar(diagnosticValue(t, "cpu.average_percent", 0), "CPU average", `${diagnosticValue(t, "cpu.average_percent", 0)}% avg · ${diagnosticValue(t, "cpu.peak_percent", 0)}% peak`)}
+                  ${capacityBar(diagnosticValue(t, "memory.average_percent", 0), "Memory average", `${diagnosticValue(t, "memory.available_mb", 0)} MB available`)}
+                  ${capacityBar(diagnosticValue(t, "disk.average_percent", 0), "Disk used", `${diagnosticValue(t, "disk.free_mb", 0)} MB free`)}
+                </div>
+                <div class="rounded-2xl border border-white/10 bg-black/20 p-5">
+                  <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Resource Detail</div>
+                  <div class="grid md:grid-cols-2 gap-3 mt-4">
+                    ${evidenceCard("CPU Cores", diagnosticValue(t, "cpu.logical_cores", "-"), `${diagnosticValue(t, "cpu.physical_cores", "-")} physical cores`)}
+                    ${evidenceCard("Memory Total", `${diagnosticValue(t, "memory.total_mb", "-")} MB`, `${diagnosticValue(t, "memory.available_mb", "-")} MB available`)}
+                    ${evidenceCard("Disk Total", `${diagnosticValue(t, "disk.total_mb", "-")} MB`, `${diagnosticValue(t, "disk.free_mb", "-")} MB free`)}
+                    ${evidenceCard("Observed/API", `${diagnosticValue(t, "memory.observed_per_agent_mb", "-")} MB`, "Measured agent footprint.")}
+                  </div>
+                </div>
+              </div>
+              ${h.length ? `<div class="grid md:grid-cols-3 gap-3">${h.slice(0, 6).map((e) => `<div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs" style="color: var(--text-muted)">${escapeHtml(e)}</div>`).join("")}</div>` : ""}
+            </div>`;
+          }).join("") || '<div class="rounded-xl border border-dashed border-white/10 bg-black/20 px-5 py-5 text-sm" style="color: var(--text-muted)">No capacity audit rows match the current filter.</div>';
+          window.lucide && lucide.createIcons();
+        }
+        function launcherHostIdentity(...args) { return fleetSelection.launcherHostIdentity(...args); }
+        function launcherHostAliases(...args) { return fleetSelection.launcherHostAliases(...args); }
+        function launcherHostAliasKey(...args) { return fleetSelection.launcherHostAliasKey(...args); }
+        function launcherHostMatches(...args) { return fleetSelection.launcherHostMatches(...args); }
+        function canonicalLauncherHostId(...args) { return fleetSelection.canonicalLauncherHostId(...args); }
+        function agentIdentity(...args) { return fleetSelection.agentIdentity(...args); }
+        function updateLauncherBulkActions(...args) { return fleetSelection.updateLauncherBulkActions(...args); }
+        function applyLauncherSelectionDomState(...args) { return fleetSelection.applyLauncherSelectionDomState(...args); }
+        function launcherSelectionStorageKey(...args) { return fleetSelection.launcherSelectionStorageKey(...args); }
+        function launcherActiveHostStorageKey(...args) { return fleetSelection.launcherActiveHostStorageKey(...args); }
+        function loadStoredCurrentLauncherHost(...args) { return fleetSelection.loadStoredCurrentLauncherHost(...args); }
+        function saveStoredCurrentLauncherHost(...args) { return fleetSelection.saveStoredCurrentLauncherHost(...args); }
+        function hostIdSet(...args) { return fleetSelection.hostIdSet(...args); }
+        function resolveActiveLauncherHostId(...args) { return fleetSelection.resolveActiveLauncherHostId(...args); }
+        function loadStoredLauncherSelection(...args) { return fleetSelection.loadStoredLauncherSelection(...args); }
+        function saveStoredLauncherSelection(...args) { return fleetSelection.saveStoredLauncherSelection(...args); }
+        function reconcileDashboardSelections(...args) { return fleetSelection.reconcileDashboardSelections(...args); }
+        function toggleLauncherHostSelection(...args) { return fleetSelection.toggleLauncherHostSelection(...args); }
+        function renderLauncherFleet(e, t, inventory = null) {
+          ((window.__launcherHosts = Array.isArray(e) ? e : []),
+            (window.__launcherAgents = Array.isArray(t) ? t : []));
+          reconcileDashboardSelections(window.__launcherHosts, window.__launcherAgents);
+          const n = document.getElementById("launcher-host-grid"),
+            o = document.getElementById("launcher-fleet-count");
+          if (n && o) {
+            const hostIds = hostIdSet(window.__launcherHosts);
+            if (!hostIds.size) {
+              fleetSelectionState.currentLauncherHostId = null;
+              fleetSelectionState.launcherUserPinnedHostId = null;
+            }
+            else fleetSelectionState.currentLauncherHostId = resolveActiveLauncherHostId(window.__launcherHosts);
+            if (
+              ((o.textContent = `${Number(inventory?.hosts ?? window.__launcherHosts.length).toLocaleString()} Host${1 === Number(inventory?.hosts ?? window.__launcherHosts.length) ? "" : "s"}`),
+              !window.__launcherHosts.length)
+            )
+              return (
+                (n.innerHTML =
+                  '<div class="rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-sm" style="color: var(--text-muted)">No launcher hosts yet. Add one to connect a server.</div>'),
+                fleetSelectionState.selectedLauncherHostIds.clear(),
+                saveStoredLauncherSelection(),
+                saveStoredCurrentLauncherHost(),
+                updateLauncherBulkActions(),
+                void selectLauncherHost(null, { user: !1 })
+              );
+            ((n.innerHTML = window.__launcherHosts
+              .slice()
+              .sort((e, t) => (e.rollout_order || 0) - (t.rollout_order || 0))
+              .map((e) => {
+                const i = launcherHostIdentity(e),
+                  t = Array.isArray(e.assigned_agent_ids)
+                    ? e.assigned_agent_ids
+                    : window.__launcherAgents.filter(
+                        (t) => launcherHostIdentity(t.launcher_host_id || "") === i,
+                      ),
+                  n = "online" === e.status,
+                  o = launcherHostMatches(e, fleetSelectionState.currentLauncherHostId),
+                  a = fleetSelectionState.selectedLauncherHostIds.has(canonicalLauncherHostId(i)),
+                  r =
+                    Array.isArray(e.labels) && e.labels.length
+                      ? e.labels.join(", ")
+                      : "no labels",
+                  s = commandReceiptBadge(e.current_command_receipt),
+                  l = Number(e.rollout_order || 1),
+                  c = Number(e.rollout_delay_seconds || 0);
+                return `\n                        <div role="button" tabindex="0" aria-selected="${o ? "true" : "false"}" data-launcher-host-id="${i}" onclick="selectLauncherHost('${i}')" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectLauncherHost('${i}'); }" class="launcher-host-card iv-server-row ${o ? "launcher-host-card-active" : ""}">\n                            <div class="iv-server-select" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()"><input type="checkbox" data-launcher-select="${i}" ${a ? "checked" : ""} onchange="toggleLauncherHostSelection('${i}', event, this.checked)" class="infraveil-check" aria-label="Select ${escapeHtml(e.name || "server")}"></div>\n                            <div class="iv-server-identity">\n                                <div class="iv-server-name">${escapeHtml(e.name || "unnamed-host")}</div>\n                                <div class="iv-server-meta">${escapeHtml(e.region || "global")} · ${escapeHtml(r)}</div>\n                            </div>\n                            <div class="iv-server-stat"><span>Status</span><strong class="${n ? "is-online" : "is-offline"}">${n ? "Online" : "Offline"}</strong></div>\n                            <div class="iv-server-stat"><span>Workloads</span><strong>${t.length.toLocaleString()}</strong></div>\n                            <div class="iv-server-stat"><span>Capacity</span><strong>${Number(e.max_apis || 25).toLocaleString()}</strong></div>\n                            <div class="iv-server-stat"><span>Rollout</span><strong>#${l} · +${c}s</strong></div>\n                            <div class="iv-server-actions" onclick="event.stopPropagation()">\n                                <button type="button" class="iv-server-action" onclick="openLauncherInstallDialog('${i}')" title="Deployment command" aria-label="Deployment command"><i data-lucide="terminal"></i></button>\n                                <button type="button" class="iv-server-action" onclick="selectLauncherHost('${i}'); sendLauncherCommand('restart')" title="Restart launcher" aria-label="Restart launcher"><i data-lucide="rotate-cw"></i></button>\n                                <button type="button" class="iv-server-action" onclick="selectLauncherHost('${i}'); sendLauncherCommand('capacity-diagnostic')" title="Run capacity diagnostic" aria-label="Run capacity diagnostic"><i data-lucide="gauge"></i></button>\n                                <button type="button" class="iv-server-action" onclick="ivOpenLauncherRowMenu(event, '${i}')" title="More server actions" aria-label="More server actions"><i data-lucide="ellipsis"></i></button>\n                            </div>\n                            ${e.current_command_receipt ? `<div class="iv-server-receipt">${s}</div>` : ""}\n                        </div>\n                    `;
+              })
+              .join("")),
+              fleetSelectionState.currentLauncherHostId = resolveActiveLauncherHostId(window.__launcherHosts),
+              selectLauncherHost(fleetSelectionState.currentLauncherHostId, { user: !1 }),
+              updateLauncherBulkActions(),
+              applyLauncherSelectionDomState(),
+              renderJohnnyAttackScriptPreview(),
+              n.querySelectorAll('[data-lucide="terminal"]').forEach((icon) => icon.setAttribute("data-lucide", "clipboard-copy")),
+              window.lucide && lucide.createIcons());
+          }
+        }
+        async function launchPowerStack() {
+          if (lockRequiresBilling())
+            return showToast(
+              "Activate billing before launching a test stack.",
+              "error",
+            );
+          const e = Number(
+              document.getElementById("power-stack-count")?.value || 3,
+            ),
+            t = Number(
+              document.getElementById("power-stack-host-count")?.value || 2,
+            ),
+            n = (
+              document.getElementById("power-stack-prefix")?.value || "stack"
+            ).trim(),
+            o = (
+              document.getElementById("power-stack-placement-mode")?.value ||
+              "spread"
+            ).trim(),
+            r = (
+              document.getElementById("power-stack-region")?.value || "any"
+            ).trim(),
+            s = (
+              document.getElementById("power-stack-labels")?.value || ""
+            ).trim(),
+            a = async (a = "") => {
+              try {
+                const i = { "Content-Type": "application/json" };
+                APP_STATE.demo_mode || (i["X-TOTP-Auth"] = a);
+                const l = await fetch("/client/api/power-stack/create", {
+                    method: "POST",
+                    headers: i,
+                    body: JSON.stringify({
+                      count: e,
+                      host_count: t,
+                      prefix: n,
+                      placement_mode: o,
+                      preferred_region: r,
+                      required_labels: s,
+                    }),
+                  }),
+                  c = await l.json().catch(() => ({}));
+                if (!l.ok || !c.success)
+                  throw new Error(
+                    c.error || "Could not launch power-user stack.",
+                  );
+                (showToast(
+                  `Launched ${c.created.length} starter API hosts.`,
+                  "success",
+                ),
+                  await updateDashboardData(),
+                  switchView("launcher"));
+              } catch (e) {
+                showToast(
+                  e.message || "Could not launch power-user stack.",
+                  "error",
+                );
+              }
+            };
+          if (APP_STATE.demo_mode) return a();
+          showTotpPrompt("Launch power-user test stack", async (e) => a(e));
+        }
+        function renderRolloutPlan(e) {
+          const t = document.getElementById("rollout-launcher-list"),
+            n = document.getElementById("rollout-api-list");
+          if (!t || !n) return;
+          if (placementRolloutDirty && "rollout" === getCurrentViewId()) return;
+          const o = Array.isArray(e?.launcher_hosts)
+              ? e.launcher_hosts.slice()
+              : [],
+            r = Array.isArray(e?.agents) ? e.agents.slice() : [],
+            s = e?.rollout_plan || { launcher_order: [], api_order: [] },
+            a = new Map((s.launcher_order || []).map((e) => [e.host_id, e])),
+            i = new Map((s.api_order || []).map((e) => [e.agent_id, e]));
+          ((t.innerHTML =
+            o
+              .sort(
+                (e, t) =>
+                  (a.get(e.host_id)?.order || e.rollout_order || 0) -
+                  (a.get(t.host_id)?.order || t.rollout_order || 0),
+              )
+              .map((e, t) => {
+                const n = a.get(e.host_id) || {},
+                  r = o
+                    .filter((t) => t.host_id !== e.host_id)
+                    .map(
+                      (t) =>
+                        `<option value="${t.host_id}" ${t.host_id === (e.failover_host_id || "") ? "selected" : ""}>${t.name}</option>`,
+                    )
+                    .join(""),
+                  s =
+                    Array.isArray(e.labels) && e.labels.length
+                      ? e.labels.join(", ")
+                      : "no labels";
+                return `\n                        <div class="rounded-xl border border-white/10 bg-black/20 px-5 py-4 space-y-4" data-rollout-launcher-host="${e.host_id}">\n                            <div class="grid lg:grid-cols-[1.2fr_90px_110px_110px_110px_1fr_auto] gap-3 items-end">\n                                <div class="min-w-0">\n                                    <div class="text-sm font-semibold text-white truncate">${e.name}</div>\n                                    <div class="text-[11px] mt-1 truncate" style="color: var(--text-muted)">${e.assigned_agent_ids?.length || 0} APIs • ${e.region || "global"} • ${s}</div>\n                                </div>\n                                <label class="block"><div class="text-[9px] uppercase tracking-widest mb-1" style="color: var(--text-subtle)">Use Order</div><input type="number" min="1" class="ink-input rounded-lg px-3 py-2 text-sm font-mono-cli w-full rollout-launcher-order" value="${n.order || e.rollout_order || t + 1}"></label>\n                                <label class="block"><div class="text-[9px] uppercase tracking-widest mb-1" style="color: var(--text-subtle)">Delay Sec</div><input type="number" min="0" class="ink-input rounded-lg px-3 py-2 text-sm font-mono-cli w-full rollout-launcher-delay" value="${n.delay_seconds || e.rollout_delay_seconds || 0}"></label>\n                                <label class="block"><div class="text-[9px] uppercase tracking-widest mb-1" style="color: var(--text-subtle)">Max APIs</div><input type="number" min="1" class="ink-input rounded-lg px-3 py-2 text-sm font-mono-cli w-full rollout-launcher-max-apis" value="${e.max_apis || 25}"></label>\n                                <label class="block"><div class="text-[9px] uppercase tracking-widest mb-1" style="color: var(--text-subtle)">Placement Weight</div><input type="number" min="1" class="ink-input rounded-lg px-3 py-2 text-sm font-mono-cli w-full rollout-launcher-weight" value="${e.weight || 100}"></label>\n                                <label class="block min-w-0"><div class="text-[9px] uppercase tracking-widest mb-1" style="color: var(--text-subtle)">Backup Host</div><select class="ink-input rounded-lg px-3 py-2 text-sm w-full rollout-launcher-failover"><option value="">No backup selected</option>${r}</select></label>\n                                <button type="button" onclick="toggleLauncherDrain('${e.host_id}', ${e.draining ? "false" : "true"})" class="btn-secondary rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest whitespace-nowrap" title="Maintenance mode stops new work from being placed on this host and moves APIs away if enabled.">${e.draining ? "Use Host" : "Maintenance"}</button>\n                            </div>\n                            <div class="text-[11px]" style="color: var(--text-muted)">Maintenance stops new API placement here and evacuates current APIs if enabled. Placement weight is preference only: higher weight means this host is chosen sooner when multiple hosts qualify.</div>\n                        </div>\n                    `;
+              })
+              .join("") ||
+            '<div class="text-sm" style="color: var(--text-muted)">No launcher hosts to order yet.</div>'),
+            (n.innerHTML =
+              r
+                .sort(
+                  (e, t) =>
+                    (i.get(e.agent_id)?.order || 9999) -
+                    (i.get(t.agent_id)?.order || 9999),
+                )
+                .map((e, t) => {
+                  const n = i.get(e.agent_id) || {},
+                    r =
+                      n.launcher_host_id ||
+                      e.launcher_host_id ||
+                      fleetSelectionState.currentLauncherHostId ||
+                      o[0]?.host_id ||
+                      "";
+                  return `\n                        <div class="rounded-xl border border-white/10 bg-black/20 px-5 py-4 grid lg:grid-cols-[1.3fr_90px_1fr_110px] gap-3 items-end" data-rollout-api-agent="${e.agent_id}">\n                            <div class="min-w-0">\n                                <div class="text-sm font-semibold text-white truncate">${e.name}</div>\n                                <div class="text-[11px] mt-1 truncate" style="color: var(--text-muted)">${e.runtime_profile || "Multi-language"} · ${e.type || "API workload"}</div>\n                            </div>\n                            <label class="block"><div class="text-[9px] uppercase tracking-widest mb-1" style="color: var(--text-subtle)">Start Order</div><input type="number" min="1" class="ink-input rounded-lg px-3 py-2 text-sm font-mono-cli w-full rollout-api-order" value="${n.order || t + 1}"></label>\n                            <label class="block min-w-0"><div class="text-[9px] uppercase tracking-widest mb-1" style="color: var(--text-subtle)">Run On Host</div><select class="ink-input rounded-lg px-3 py-2 text-sm w-full rollout-api-host">${o.map((e) => `<option value="${e.host_id}" ${e.host_id === r ? "selected" : ""}>${e.name}</option>`).join("")}</select></label>\n                            <label class="block"><div class="text-[9px] uppercase tracking-widest mb-1" style="color: var(--text-subtle)">Delay Sec</div><input type="number" min="0" class="ink-input rounded-lg px-3 py-2 text-sm font-mono-cli w-full rollout-api-delay" value="${n.delay_seconds || 0}"></label>\n                        </div>\n                    `;
+                })
+                .join("") ||
+              '<div class="text-sm" style="color: var(--text-muted)">No APIs to order yet.</div>'));
+          bindPlacementDraftInputs();
+        }
+        ((window.__demoAccessCode = APP_STATE.demo_access_code || ""),
+          (window.__demoUsername = APP_STATE.demo_username || ""),
+          setTimeout(() => setFeedbackSentiment("confusing"), 0),
+          window.addEventListener("beforeunload", () => {
+            try {
+              navigator.sendBeacon(
+                API.telemetry,
+                new Blob(
+                  [
+                    JSON.stringify({
+                      event_type: "refresh",
+                      view: getCurrentViewId(),
+                      metadata: { source: "beforeunload" },
+                    }),
+                  ],
+                  { type: "application/json" },
+                ),
+              );
+            } catch (e) {}
+          }),
+          APP_STATE.demo_mode &&
+            "production" === APP_STATE.demo_tour_mode &&
+            setTimeout(() => {
+              const e = document.getElementById("demo-username-display"),
+                t = document.getElementById("demo-code-display");
+              (e &&
+                APP_STATE.demo_username &&
+                (e.innerText = APP_STATE.demo_username),
+                t &&
+                  APP_STATE.demo_access_code &&
+                  (t.innerText = APP_STATE.demo_access_code));
+            }, 500));
+        let placementPolicyDirty = !1,
+          placementRolloutDirty = !1;
+        function resetPlacementDraft() {
+          placementPolicyDirty = !1;
+          placementRolloutDirty = !1;
+        }
+        function markPlacementPolicyDirty() {
+          placementPolicyDirty = !0;
+        }
+        function markPlacementRolloutDirty() {
+          placementRolloutDirty = !0;
+        }
+        function renderPlacementPolicy(e) {
+          if (placementPolicyDirty) return;
+          const t = e?.placement_policy || {},
+            n = (e, t) => {
+              const n = document.getElementById(e);
+              null != n && null != t && (n.value = t);
+            };
+          (n("placement-mode", t.mode || "spread"),
+            n("placement-region", t.preferred_region || "any"),
+            n(
+              "placement-required-labels",
+              Array.isArray(t.required_labels)
+                ? t.required_labels.join(", ")
+                : "",
+            ),
+            n("placement-max-apis", t.max_apis_per_host || 25),
+            n(
+              "placement-overflow-strategy",
+              "least-loaded",
+            ));
+          const o = document.getElementById("placement-enable-failover");
+          o && ((o.checked = false), (o.disabled = true));
+          const r = document.getElementById("placement-auto-failover");
+          r && ((r.checked = false), (r.disabled = true));
+          const s = document.getElementById("placement-rebalance-recovery");
+          s && ((s.checked = false), (s.disabled = true));
+          const note = document.getElementById("placement-failover-note");
+          if (note && t.automatic_failover_unavailable_reason) note.textContent = t.automatic_failover_unavailable_reason;
+        }
+        function createLauncherHost() {
+          const e =
+              (
+                document.getElementById("launcher-host-name")?.value || ""
+              ).trim() || `launcher-${Math.floor(1e3 * Math.random())}`,
+            t = (
+              document.getElementById("launcher-host-region")?.value || "global"
+            ).trim(),
+            n = (
+              document.getElementById("launcher-host-labels")?.value || ""
+            ).trim(),
+            o = Number(
+              document.getElementById("launcher-host-max-apis")?.value || 25,
+            ),
+            r = Number(
+              document.getElementById("launcher-host-weight")?.value || 100,
+            ),
+            s = async (s = "") => {
+              try {
+                const a = { "Content-Type": "application/json" };
+                APP_STATE.demo_mode || (a["X-TOTP-Auth"] = s);
+                const i = await fetch("/client/api/launcher-host/create", {
+                    method: "POST",
+                    headers: a,
+                    body: JSON.stringify({
+                      name: e,
+                      region: t,
+                      labels: n,
+                      max_apis: o,
+                      weight: r,
+                    }),
+                  }),
+                  l = await i.json().catch(() => ({}));
+                if (!i.ok || !l.success)
+                  throw new Error(l.error || "Could not create launcher host.");
+                const d = document.getElementById("launcher-host-name"),
+                  u = document.getElementById("launcher-host-region"),
+                  p = document.getElementById("launcher-host-labels"),
+                  m = document.getElementById("launcher-host-max-apis"),
+                  g = document.getElementById("launcher-host-weight");
+                (showToast("Launcher host created.", "success"),
+                  d && (d.value = ""),
+                  u && (u.value = ""),
+                  p && (p.value = ""),
+                  m && (m.value = "25"),
+                  g && (g.value = "100"),
+                  await updateDashboardData(),
+                  switchView("launcher"));
+              } catch (e) {
+                showToast(
+                  e.message || "Could not create launcher host.",
+                  "error",
+                );
+              }
+            };
+          if (APP_STATE.demo_mode) return s();
+          showTotpPrompt("Create launcher host", async (e) => s(e));
+        }
+        function deleteSelectedLauncherHost() {
+          const e =
+              canonicalLauncherHostId(fleetSelectionState.currentLauncherHostId) ||
+              launcherHostIdentity(window.__launcherHosts?.[0]) ||
+              "",
+            t = (window.__launcherHosts || []).find((t) => launcherHostMatches(t, e));
+          if (!e || !t)
+            return void showToast("Select a launcher first.", "error");
+          const n = t.assigned_agent_ids?.length || 0,
+            o = async (t = "") => {
+              try {
+                const n = { "Content-Type": "application/json" };
+                APP_STATE.demo_mode || (n["X-TOTP-Auth"] = t);
+                const o = await fetch("/client/api/launcher-host/delete", {
+                    method: "POST",
+                    headers: n,
+                    body: JSON.stringify({ host_id: e }),
+                  }),
+                  r = await o.json().catch(() => ({}));
+                if (!o.ok || !r.success)
+                  throw new Error(r.error || "Could not delete launcher host.");
+                ((fleetSelectionState.currentLauncherHostId = null),
+                  (fleetSelectionState.launcherUserPinnedHostId = null),
+                  showToast(
+                    `Launcher removed. ${r.reassigned_count || 0} APIs reassigned.`,
+                    "success",
+                  ),
+                  await updateDashboardData(),
+                  switchView("launcher"));
+              } catch (e) {
+                showToast(
+                  e.message || "Could not delete launcher host.",
+                  "error",
+                );
+              }
+            };
+          showEditorConfirmModal({
+            title: "Delete Server Host",
+            body: `Delete ${escapeCodeHtml(t.name || "this launcher")}? Infraveil will first move ${n} assigned API${1 === n ? "" : "s"} to other healthy hosts.`,
+            confirmText: "Delete Server",
+            onConfirm() {
+              if (APP_STATE.demo_mode) return o();
+              showTotpPrompt("Delete launcher host", async (e) => o(e));
+            },
+          });
+        }
+        function deleteSelectedLauncherHosts() {
+          const e = [...fleetSelectionState.selectedLauncherHostIds],
+            t = (window.__launcherHosts || []).filter((t) =>
+              e.some((e) => launcherHostMatches(t, e)),
+            );
+          if (!t.length)
+            return void showToast("Select at least one server.", "error");
+          const n = async (n = "") => {
+            let o = 0,
+              r = 0;
+            for (const s of t)
+              try {
+                const t = { "Content-Type": "application/json" };
+                APP_STATE.demo_mode || (t["X-TOTP-Auth"] = n);
+                const a = await fetch("/client/api/launcher-host/delete", {
+                    method: "POST",
+                    headers: t,
+                    body: JSON.stringify({ host_id: launcherHostIdentity(s) }),
+                  }),
+                  i = await a.json().catch(() => ({}));
+                if (!a.ok || !i.success)
+                  throw new Error(i.error || "Could not delete server.");
+                o += 1;
+              } catch (e) {
+                r += 1;
+                showToast(e.message || "Could not delete server.", "error");
+              }
+            (fleetSelectionState.selectedLauncherHostIds.clear(),
+              saveStoredLauncherSelection(),
+              (fleetSelectionState.currentLauncherHostId = null),
+              (fleetSelectionState.launcherUserPinnedHostId = null),
+              await updateDashboardData(),
+              switchView("launcher"),
+              showToast(
+                r
+                  ? `${o} server${1 === o ? "" : "s"} deleted, ${r} failed.`
+                  : `${o} server${1 === o ? "" : "s"} deleted.`,
+                r ? "error" : "success",
+              ));
+          };
+          APP_STATE.demo_mode
+            ? n()
+            : showTotpPrompt(
+                `Delete ${t.length} selected server${1 === t.length ? "" : "s"}`,
+                async (e) => n(e),
+              );
+        }
+        function markLauncherCommandPending(e, t) {
+          const n = new Set((Array.isArray(e) ? e : [e]).map(canonicalLauncherHostId).filter(Boolean));
+          if (!n.size || !Array.isArray(window.__launcherHosts)) return;
+          const o = Math.floor(Date.now() / 1000);
+          window.__launcherHosts = window.__launcherHosts.map((e) => {
+            const r = canonicalLauncherHostId(launcherHostIdentity(e));
+            if (!n.has(r)) return e;
+            return {
+              ...e,
+              current_command_receipt: {
+                ...(e.current_command_receipt || {}),
+                command: t,
+                status: "queued",
+                queued_at: o,
+              },
+            };
+          });
+          renderLauncherFleet(window.__launcherHosts, window.__launcherAgents || []);
+          window.__latestStatusPayload &&
+            ((window.__latestStatusPayload.launcher_hosts = window.__launcherHosts),
+            renderStatusSubView(getCurrentViewId(), window.__latestStatusPayload, !0));
+        }
+        function sendSelectedLauncherCommand(e) {
+          const t = [...fleetSelectionState.selectedLauncherHostIds],
+            n = {
+              restart: "Restart launcher",
+              stop: "Kill launcher",
+              "restart-agents": "Restart APIs",
+              "stop-agents": "Kill APIs",
+              "capacity-diagnostic": "Run capacity diagnostic",
+              "clear-workspace": "Clear workspace",
+            };
+          if (!t.length)
+            return void showToast("Select at least one server.", "error");
+          const o = async (o = "") => {
+            let r = 0,
+              s = 0;
+            const c = [];
+            for (const a of t)
+              try {
+                const t = { "Content-Type": "application/json" };
+                APP_STATE.demo_mode || (t["X-TOTP-Auth"] = o);
+                const i = await fetch("/client/api/launcher/command", {
+                  method: "POST",
+                  headers: t,
+                  body: JSON.stringify({ command: e, launcher_host_id: a }),
+                });
+                if (!i.ok) throw new Error("Action denied");
+                (r += 1, c.push(a), markLauncherCommandPending([a], e));
+              } catch (e) {
+                s += 1;
+                showToast(e.message || "Could not send server action.", "error");
+              }
+            (c.length && markLauncherCommandPending(c, e),
+              updateDashboardData(),
+              "restart" === e &&
+                (demoTourMilestones.launcherRestartSentAt = Date.now()),
+              "capacity-diagnostic" === e && setTimeout(() => switchView("capacity-audit"), 250),
+              showToast(
+                s
+                  ? `${n[e] || e} sent to ${r} server${1 === r ? "" : "s"}, ${s} failed.${"capacity-diagnostic" === e ? " Open Capacity Audit for successful reports." : ""}`
+                  : "capacity-diagnostic" === e
+                    ? `Capacity audit started for ${r} selected server${1 === r ? "" : "s"}. Open Capacity Audit for full reports.`
+                    : `${n[e] || e} sent to ${r} server${1 === r ? "" : "s"}.`,
+                s ? "error" : "success",
+              ));
+          };
+          APP_STATE.demo_mode
+            ? o()
+            : showTotpPrompt(
+                `${n[e] || e} for ${t.length} selected server${1 === t.length ? "" : "s"}`,
+                async (e) => o(e),
+              );
+        }
+        function clearAllLaunchers() {
+          const e = (window.__launcherHosts || []).map(launcherHostIdentity).filter(Boolean);
+          if (!e.length) return void showToast("No launcher hosts to clear.", "error");
+          const t = async (t = "") => {
+            let n = 0,
+              o = 0;
+            for (const r of e)
+              try {
+                const e = { "Content-Type": "application/json" };
+                APP_STATE.demo_mode || (e["X-TOTP-Auth"] = t);
+                const s = await fetch("/client/api/launcher/command", {
+                  method: "POST",
+                  headers: e,
+                  body: JSON.stringify({
+                    command: "clear-workspace",
+                    launcher_host_id: r,
+                  }),
+                });
+                if (!s.ok) throw new Error("Action denied");
+                n += 1;
+              } catch (e) {
+                o += 1;
+                showToast(e.message || "Could not clear launcher.", "error");
+              }
+            (await updateDashboardData(),
+              showToast(
+                o
+                  ? `Clear sent to ${n} launcher${1 === n ? "" : "s"}, ${o} failed.`
+                  : `Clear sent to all ${n} launcher${1 === n ? "" : "s"}.`,
+                o ? "error" : "success",
+              ));
+          };
+          showEditorConfirmModal({
+            title: "Clear All Launchers",
+            body: `Send a local workspace clear to all ${e.length} launcher host${1 === e.length ? "" : "s"}? This keeps the servers registered and lets the dashboard rehydrate them cleanly.`,
+            confirmText: "Clear Launchers",
+            onConfirm() {
+              if (APP_STATE.demo_mode) return t();
+              showTotpPrompt("Clear all launchers", async (e) => t(e));
+            },
+          });
+        }
+        function toggleRolloutAdvanced() {
+          const e = document.getElementById("rollout-advanced-settings"),
+            t = document.getElementById("rollout-advanced-label");
+          if (e) {
+            e.classList.contains("hidden")
+              ? (e.classList.remove("hidden"),
+                (t.textContent = "Hide Advanced"))
+              : (e.classList.add("hidden"), (t.textContent = "Show Advanced"));
+          }
+        }
+        function clearPlacementPlan() {
+          const e = async (e = "") => {
+            const t = { "Content-Type": "application/json" };
+            APP_STATE.demo_mode || (t["X-TOTP-Auth"] = e);
+            const n = await fetch("/client/api/placement/clear", {
+                method: "POST",
+                headers: t,
+              }),
+              o = await n.json().catch(() => ({}));
+            if (!n.ok || !o.success)
+              throw new Error(o.error || "Could not clear placement plan.");
+            return o;
+          };
+          showEditorConfirmModal({
+            title: "Reset Placement",
+            body: "Reset server sequence, backup hosts, maintenance flags, API rollout order, and placement policy back to a clean default. This does not delete servers or APIs.",
+            confirmText: "Clear Plan",
+            onConfirm() {
+              if (APP_STATE.demo_mode)
+                return e()
+                  .then(async () => {
+                    (resetPlacementDraft(),
+                      showToast("Placement plan reset.", "success"),
+                      await updateDashboardData(),
+                      switchView("rollout"));
+                  })
+                  .catch((e) =>
+                    showToast(
+                      e.message || "Could not clear placement plan.",
+                      "error",
+                    ),
+                  );
+              showTotpPrompt("Clear placement plan", async (t) => {
+                try {
+                  (await e(t),
+                    resetPlacementDraft(),
+                    showToast("Placement plan reset.", "success"),
+                    await updateDashboardData(),
+                    switchView("rollout"));
+                } catch (e) {
+                  showToast(
+                    e.message || "Could not clear placement plan.",
+                    "error",
+                  );
+                }
+              });
+            },
+          });
+        }
+        function saveRolloutPlan() {
+          const e = Array.from(
+              document.querySelectorAll("[data-rollout-launcher-host]"),
+            ).map((e) => ({
+              host_id: e.getAttribute("data-rollout-launcher-host"),
+              order: Number(
+                e.querySelector(".rollout-launcher-order")?.value || 1,
+              ),
+              delay_seconds: Number(
+                e.querySelector(".rollout-launcher-delay")?.value || 0,
+              ),
+              max_apis: Number(
+                e.querySelector(".rollout-launcher-max-apis")?.value || 25,
+              ),
+              weight: Number(
+                e.querySelector(".rollout-launcher-weight")?.value || 100,
+              ),
+              failover_host_id:
+                e.querySelector(".rollout-launcher-failover")?.value || null,
+            })),
+            t = Array.from(
+              document.querySelectorAll("[data-rollout-api-agent]"),
+            ).map((e) => ({
+              agent_id: e.getAttribute("data-rollout-api-agent"),
+              order: Number(e.querySelector(".rollout-api-order")?.value || 1),
+              launcher_host_id:
+                e.querySelector(".rollout-api-host")?.value ||
+                fleetSelectionState.currentLauncherHostId ||
+                "",
+              delay_seconds: Number(
+                e.querySelector(".rollout-api-delay")?.value || 0,
+              ),
+            })),
+            existingPlan = window.__latestStatusPayload?.rollout_plan || {},
+            launcherOrder = new Map((existingPlan.launcher_order || []).map((item) => [String(item.host_id || ""), item])),
+            apiOrder = new Map((existingPlan.api_order || []).map((item) => [String(item.agent_id || ""), item])),
+            n = async (n = "") => {
+              e.forEach((item) => launcherOrder.set(String(item.host_id || ""), item));
+              t.forEach((item) => apiOrder.set(String(item.agent_id || ""), item));
+              const o = { "Content-Type": "application/json" };
+              APP_STATE.demo_mode || (o["X-TOTP-Auth"] = n);
+              const r = await fetch("/client/api/rollout/order", {
+                  method: "POST",
+                  headers: o,
+                  body: JSON.stringify({
+                    rollout_plan: {
+                      launcher_order: Array.from(launcherOrder.values()),
+                      api_order: Array.from(apiOrder.values()),
+                    },
+                  }),
+                }),
+                s = await r.json().catch(() => ({}));
+              if (!r.ok || !s.success)
+                throw new Error(s.error || "Could not save rollout order.");
+              return s;
+            };
+          if (APP_STATE.demo_mode)
+            return n()
+              .then(() => {
+                (placementRolloutDirty = !1,
+                  showToast("Rollout order saved.", "success"),
+                  updateDashboardData());
+              })
+              .catch((e) =>
+                showToast(
+                  e.message || "Could not save rollout order.",
+                  "error",
+                ),
+              );
+          showTotpPrompt("Save rollout order", async (e) => {
+            try {
+              (await n(e),
+                (placementRolloutDirty = !1),
+                showToast("Rollout order saved.", "success"),
+                await updateDashboardData());
+            } catch (e) {
+              showToast(e.message || "Could not save rollout order.", "error");
+            }
+          });
+        }
+        function savePlacementPolicy() {
+          const e = {
+              mode:
+                document.getElementById("placement-mode")?.value || "spread",
+              preferred_region:
+                document.getElementById("placement-region")?.value || "any",
+              required_labels:
+                document.getElementById("placement-required-labels")?.value ||
+                "",
+              max_apis_per_host: Number(
+                document.getElementById("placement-max-apis")?.value || 25,
+              ),
+              overflow_strategy:
+                document.getElementById("placement-overflow-strategy")?.value ||
+                "least-loaded",
+              enable_failover: false,
+              auto_failover_on_offline: false,
+              rebalance_on_recovery: false,
+            },
+            t = async (t = "") => {
+              const n = { "Content-Type": "application/json" };
+              APP_STATE.demo_mode || (n["X-TOTP-Auth"] = t);
+              const o = await fetch("/client/api/placement-policy", {
+                  method: "POST",
+                  headers: n,
+                  body: JSON.stringify(e),
+                }),
+                r = await o.json().catch(() => ({}));
+              if (!o.ok || !r.success)
+                throw new Error(r.error || "Could not save placement policy.");
+              ((placementPolicyDirty = !1),
+                renderPlacementPolicy({
+                  placement_policy: r.placement_policy,
+                }));
+            };
+          if (APP_STATE.demo_mode)
+            return t()
+              .then(() => showToast("Placement policy saved.", "success"))
+              .catch((e) =>
+                showToast(
+                  e.message || "Could not save placement policy.",
+                  "error",
+                ),
+              );
+          showTotpPrompt("Save placement policy", async (e) => {
+            try {
+              (await t(e), showToast("Placement policy saved.", "success"));
+            } catch (e) {
+              showToast(
+                e.message || "Could not save placement policy.",
+                "error",
+              );
+            }
+          });
+        }
+        function bindPlacementDraftInputs() {
+          [
+            "placement-mode",
+            "placement-region",
+            "placement-required-labels",
+            "placement-max-apis",
+            "placement-overflow-strategy",
+            "placement-enable-failover",
+            "placement-auto-failover",
+            "placement-rebalance-recovery",
+          ].forEach((e) => {
+            const t = document.getElementById(e);
+            if (!t || "1" === t.dataset.dirtyBound) return;
+            const n = "checkbox" === t.type ? "change" : "input";
+            (t.addEventListener(n, () => {
+              markPlacementPolicyDirty();
+            }),
+              "checkbox" !== t.type &&
+                t.addEventListener("change", () => {
+                  markPlacementPolicyDirty();
+                }),
+              (t.dataset.dirtyBound = "1"));
+          });
+          document
+            .querySelectorAll(
+              ".rollout-launcher-order, .rollout-launcher-delay, .rollout-launcher-max-apis, .rollout-launcher-weight, .rollout-launcher-failover, .rollout-api-order, .rollout-api-host, .rollout-api-delay",
+            )
+            .forEach((e) => {
+              if (!e || "1" === e.dataset.rolloutDirtyBound) return;
+              const t = "SELECT" === e.tagName ? "change" : "input";
+              (e.addEventListener(t, markPlacementRolloutDirty),
+                "input" === t && e.addEventListener("change", markPlacementRolloutDirty),
+                (e.dataset.rolloutDirtyBound = "1"));
+            });
+        }
+        function rebalancePlacement() {
+          const e = {
+              mode:
+                document.getElementById("placement-mode")?.value || "spread",
+              preferred_region:
+                document.getElementById("placement-region")?.value || "any",
+              required_labels:
+                document.getElementById("placement-required-labels")?.value ||
+                "",
+            },
+            t = async (t = "") => {
+              const n = { "Content-Type": "application/json" };
+              APP_STATE.demo_mode || (n["X-TOTP-Auth"] = t);
+              const o = await fetch("/client/api/placement/rebalance", {
+                  method: "POST",
+                  headers: n,
+                  body: JSON.stringify(e),
+                }),
+                r = await o.json().catch(() => ({}));
+              if (!o.ok || !r.success)
+                throw new Error(r.error || "Could not rebalance fleet.");
+              (await updateDashboardData(),
+                showToast(
+                  `Rebalanced ${Array.isArray(r.assignments) ? r.assignments.length : 0} APIs across the fleet.`,
+                  "success",
+                ));
+            };
+          if (APP_STATE.demo_mode)
+            return t().catch((e) =>
+              showToast(e.message || "Could not rebalance fleet.", "error"),
+            );
+          showTotpPrompt("Rebalance fleet placement", async (e) => {
+            try {
+              await t(e);
+            } catch (e) {
+              showToast(e.message || "Could not rebalance fleet.", "error");
+            }
+          });
+        }
+        function showLauncherDrainResult(hostId, requestedDrain, result, refreshWarning = "") {
+          const actions = Array.isArray(result.actions) ? result.actions : [],
+            blocked = Array.isArray(result.blocked) ? result.blocked : [],
+            draining = typeof result.draining === "boolean" ? result.draining : requestedDrain,
+            hostName = (id) => {
+              const host = (window.__launcherHosts || []).find((item) => launcherHostIdentity(item) === launcherHostIdentity(id));
+              return host?.name || id || "Unknown host";
+            },
+            workloadName = (id) => (window.__launcherAgents || []).find((item) => item.agent_id === id)?.name || id || "Unknown workload",
+            previousFocus = document.activeElement;
+          document.getElementById("launcher-drain-result-modal")?.remove();
+          const modal = createModal(`
+            <div class="p-6 sm:p-7">
+              <h3 id="launcher-drain-result-title" class="text-lg text-white font-semibold">${draining ? "Host drain result" : "Assignments reopened"}</h3>
+              <p class="text-sm mt-3 leading-6" style="color: var(--text-muted)">${escapeHtml(hostName(hostId))}: ${draining ? "new assignments are blocked." : "new assignments are allowed again."} Existing process health is not inferred from this control change.</p>
+              <div class="mt-5 space-y-5">
+                <section aria-label="Requested assignment updates">
+                  <h4 class="text-sm text-white font-semibold">${actions.length} requested assignment update${actions.length === 1 ? "" : "s"}</h4>
+                  ${actions.length ? `<ul class="mt-3 space-y-3 text-sm" style="color: var(--text-muted)">${actions.map((item) => `<li class="border px-3 py-3 rounded-lg" style="border-color: var(--table-border)"><strong class="text-white">${escapeHtml(workloadName(item.agent_id))}</strong><div class="mt-1">${escapeHtml(hostName(item.previous_host_id || hostId))} → requested target ${escapeHtml(hostName(item.host_id))}</div></li>`).join("")}</ul>` : '<p class="text-sm mt-2" style="color: var(--text-muted)">No workload assignments changed.</p>'}
+                </section>
+                <section aria-label="Blocked workloads">
+                  <h4 class="text-sm text-white font-semibold">${blocked.length} blocked workload${blocked.length === 1 ? "" : "s"}</h4>
+                  ${blocked.length ? `<ul class="mt-3 space-y-3 text-sm" style="color: var(--text-muted)">${blocked.map((item) => `<li class="border px-3 py-3 rounded-lg" style="border-color: var(--table-border)"><strong class="text-white">${escapeHtml(workloadName(item.agent_id))}</strong><div class="mt-1">${escapeHtml(item.reason || item.code || "Assignment could not be updated.")}</div></li>`).join("")}</ul>` : '<p class="text-sm mt-2" style="color: var(--text-muted)">No placement requests were blocked.</p>'}
+                </section>
+              </div>
+              <p class="text-sm mt-5 leading-6" style="color: var(--text-muted)">Assignment updates do not confirm that previous processes stopped or target services became healthy. Verify runtime reports before treating relocation as complete.</p>
+              ${refreshWarning ? `<p role="alert" class="text-sm mt-4 leading-6" style="color: var(--text-muted)">${escapeHtml(refreshWarning)}</p>` : ""}
+              <div class="flex justify-end mt-6"><button type="button" id="launcher-drain-result-close" class="btn-secondary px-5 py-3 rounded-lg text-xs font-semibold">Close</button></div>
+            </div>`, "w-full max-w-xl mx-4");
+          modal.id = "launcher-drain-result-modal";
+          modal.setAttribute("role", "dialog");
+          modal.setAttribute("aria-modal", "true");
+          modal.setAttribute("aria-labelledby", "launcher-drain-result-title");
+          const close = () => { modal.remove(); if (previousFocus?.isConnected) previousFocus.focus(); };
+          const closeButton = modal.querySelector("#launcher-drain-result-close");
+          closeButton.addEventListener("click", close);
+          modal.addEventListener("keydown", (event) => { if (event.key === "Escape") { event.preventDefault(); close(); } });
+          closeButton.focus();
+        }
+        function toggleLauncherDrain(e, t) {
+          const n = async (n = "") => {
+            const o = { "Content-Type": "application/json" };
+            APP_STATE.demo_mode || (o["X-TOTP-Auth"] = n);
+            const r = await fetch("/client/api/launcher-host/drain", {
+                method: "POST",
+                headers: o,
+                body: JSON.stringify({ host_id: e, drain: t, evacuate: t }),
+              }),
+              s = await r.json().catch(() => ({}));
+            if (!r.ok || (!s.success && !(typeof s.draining === "boolean" && Array.isArray(s.actions) && Array.isArray(s.blocked))))
+              throw new Error(
+                s.error || "Could not change host maintenance mode.",
+              );
+            let refreshWarning = "";
+            try { await updateDashboardData(); }
+            catch (_) { refreshWarning = "The host control response was received, but the dashboard refresh failed. Reload to inspect current runtime reports."; }
+            showLauncherDrainResult(e, t, s, refreshWarning);
+            const updated = Array.isArray(s.actions) ? s.actions.length : 0,
+              blocked = Array.isArray(s.blocked) ? s.blocked.length : 0;
+            showToast(
+              `${t ? "Drain control updated" : "Assignments reopened"}: ${updated} requested assignment update${updated === 1 ? "" : "s"}, ${blocked} blocked workload${blocked === 1 ? "" : "s"}. Runtime verification is separate.`,
+              blocked ? "info" : "success",
+            );
+          };
+          if (APP_STATE.demo_mode)
+            return n().catch((e) =>
+              showToast(
+                e.message || "Could not change host maintenance mode.",
+                "error",
+              ),
+            );
+          showTotpPrompt(
+            t
+              ? "Put host in maintenance mode"
+              : "Return host to active service",
+            async (e) => {
+              try {
+                await n(e);
+              } catch (e) {
+                showToast(
+                  e.message || "Could not change host maintenance mode.",
+                  "error",
+                );
+              }
+            },
+          );
+        }
+        function openQuestionnaire() {
+          const e = document.getElementById("demo-questionnaire-modal");
+          if (!e) return;
+          const t = APP_STATE.questionnaire_defaults || {};
+          ((document.getElementById("questionnaire-multi-host").checked =
+            !!t.multi_host),
+            (document.getElementById("questionnaire-multiple-apis").checked =
+              !!t.multiple_apis),
+            (document.getElementById("questionnaire-host-count").value =
+              t.host_count || 2),
+            (document.getElementById("questionnaire-api-count").value =
+              t.api_count || 3),
+            e.classList.remove("hidden"));
+        }
+        function skipQuestionnaire() {
+          (sessionStorage.setItem("infraveil-demo-questionnaire-complete", "1"),
+            document
+              .getElementById("demo-questionnaire-modal")
+              ?.classList.add("hidden"),
+            startDemoTour());
+        }
+        async function applyQuestionnaireAndStart() {
+          const e = !!document.getElementById("questionnaire-multi-host")
+              ?.checked,
+            t = !!document.getElementById("questionnaire-multiple-apis")
+              ?.checked,
+            n = Math.max(
+              1,
+              Number(
+                document.getElementById("questionnaire-host-count")?.value || 1,
+              ),
+            ),
+            o = Math.max(
+              1,
+              Number(
+                document.getElementById("questionnaire-api-count")?.value || 1,
+              ),
+            );
+          if (
+            ((APP_STATE.questionnaire_defaults = {
+              multi_host: e,
+              multiple_apis: t,
+              host_count: n,
+              api_count: o,
+            }),
+            sessionStorage.setItem(
+              "infraveil-demo-questionnaire-complete",
+              "1",
+            ),
+            document
+              .getElementById("demo-questionnaire-modal")
+              ?.classList.add("hidden"),
+            !lockRequiresBilling() && (e || t))
+          ) {
+            const r = t ? o : 1,
+              s = e ? n : 1;
+            ((document.getElementById("power-stack-host-count").value = s),
+              (document.getElementById("power-stack-count").value = r),
+              (document.getElementById("power-stack-prefix").value = "stack"),
+              await launchPowerStack());
+          }
+          startDemoTour();
+        }

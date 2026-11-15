@@ -1,0 +1,43 @@
+(function createController(ports) {
+    let returnFocus = null;
+    function createModal(e, t = "w-full max-w-sm mx-4") {
+      returnFocus = ports.readDocument().activeElement;
+      const n = ports.readDocument().createElement("div");
+      return (
+        (n.className =
+          "fixed inset-0 z-[200] flex items-center justify-center modal-backdrop view-section px-4 py-6"),
+        (n.id = "activeModal"),
+        (n.innerHTML = `<div class="iv-modal-card ${t} max-h-[88vh] overflow-y-auto">${e}</div>`),
+        ports.readDocument().getElementById("modal-container").appendChild(n),
+        n.addEventListener("keydown", ports.readEnterHandler()),
+        ports.refreshIcons(),
+        n
+      );
+    }
+    function closeModal() {
+      const e = ports.readDocument().getElementById("activeModal");
+      if (e) {
+        e.remove();
+        const target = returnFocus;
+        returnFocus = null;
+        if (target?.isConnected && typeof target.focus === "function") target.focus({ preventScroll: true });
+      }
+    }
+    function handleModalEnterSubmit(e) {
+      if ("Enter" !== e.key || e.isComposing) return;
+      const t = e.target;
+      if (!t) return;
+      const n = String(t.tagName || "").toLowerCase();
+      if ("textarea" === n && !e.ctrlKey && !e.metaKey) return;
+      if (t.isContentEditable || t.closest?.("[data-enter-ignore], textarea, input, select")) return;
+      const o = t.closest?.("#activeModal");
+      if (!o) return;
+      const r = o.querySelector(
+        "[data-enter-submit]:not([disabled]), [data-default-action]:not([disabled]), #modal-submit-btn:not([disabled]), #modal-save-btn:not([disabled]), #modal-email-recovery-submit:not([disabled]), #editor-modal-confirm:not([disabled]), #editor-confirm-ok:not([disabled]), .btn-primary:not([disabled])",
+      );
+      if (!r) return;
+      e.preventDefault();
+      r.click();
+    }
+    return { createModal, closeModal, handleModalEnterSubmit };
+  })

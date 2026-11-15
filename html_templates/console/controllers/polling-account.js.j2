@@ -1,0 +1,545 @@
+        function queueDashboardRefresh(options = {}) {
+          const sections = Array.isArray(options.sections)
+            ? options.sections.map((section) => String(section || "").toLowerCase()).filter(Boolean)
+            : [];
+          if (!sections.length || sections.includes("all")) {
+            dashboardRefreshQueuedAll = !0;
+            dashboardRefreshQueuedSections.clear();
+          } else if (!dashboardRefreshQueuedAll) {
+            sections.forEach((section) => dashboardRefreshQueuedSections.add(section));
+          }
+          options.reason && (dashboardRefreshQueuedReason = String(options.reason));
+        }
+
+        function takeDashboardRefreshOptions() {
+          const sections = dashboardRefreshQueuedAll
+            ? ["all"]
+            : [...dashboardRefreshQueuedSections];
+          const reason = dashboardRefreshQueuedReason;
+          dashboardRefreshQueuedAll = !1;
+          dashboardRefreshQueuedSections.clear();
+          dashboardRefreshQueuedReason = "";
+          return { sections: sections.length ? sections : ["all"], reason };
+        }
+
+        function hasQueuedDashboardRefresh() {
+          return dashboardRefreshQueuedAll || dashboardRefreshQueuedSections.size > 0;
+        }
+
+        async function performDashboardDataUpdate(options = {}) {
+          if (dashboardAccess.paused) return false;
+          try {
+            dashboardPollCounter += 1;
+            const requestedSections = new Set(
+                Array.isArray(options.sections) && options.sections.length
+                  ? options.sections.map((section) => String(section || "").toLowerCase())
+                  : ["all"],
+              ),
+              fullRefresh = requestedSections.has("all"),
+              wants = (...names) => fullRefresh || names.some((name) => requestedSections.has(name)),
+              l = getCurrentViewId(),
+              c = wants("operations", "fleet", "launcher-sync", "topology"),
+              infoRequested = wants("info", "agents", "hosts", "metrics", "console"),
+              statusRequested = wants(
+                "status",
+                "commands",
+                "security",
+                "security-policy",
+                "security-insights",
+                "security-events",
+                "trust",
+              ),
+              i = "console" === l && wants("console"),
+              d = "network" === l && wants("network"),
+              u = "internal-network" === l && wants("internal-network"),
+              p = "security" === l && wants("security", "security-events", "security-insights"),
+              [infoPayload, t, n, o, r, s, a] = await Promise.all([
+              infoRequested ? fetchAPI(API.info) : Promise.resolve(null),
+              statusRequested ? fetchAPI(API.status, !0) : Promise.resolve(null),
+              i ? fetchAPI(API.consoleLogs, !0) : Promise.resolve(null),
+              d ? fetchAPI(API.network, !0) : Promise.resolve(null),
+              u ? fetchAPI(API.internalNetwork, !0) : Promise.resolve(null),
+              p ? fetchAPI("/client/api/security/events", !0) : Promise.resolve(null),
+              c || !_opsState ? fetchOperationsSnapshot() : Promise.resolve(null),
+            ]);
+            const refreshFailed =
+              (infoRequested && !infoPayload) ||
+              (statusRequested && !t) ||
+              (i && !n) ||
+              (d && !o) ||
+              (u && !r) ||
+              (p && !s) ||
+              ((c || !_opsState) && !a);
+            if (refreshFailed || dashboardAccess.paused) return false;
+            fullRefresh && (dashboardLastFullRefreshAt = Date.now());
+            window.__latestInfoPayload = infoPayload || window.__latestInfoPayload || null;
+            a && applyOperationsState(a, !1);
+            l === "overview" &&
+              !activeElementIsEditable() &&
+              _opsState?.fleet_intelligence &&
+              window.renderFleetIntelligence?.(_opsState.fleet_intelligence);
+            (infoPayload && renderInfo(infoPayload),
+              t &&
+                ((window.__latestStatusPayload = t),
+                setLatestCommandReceipts(t.command_receipts || []),
+                window.ivUpdatesFromStatus && window.ivUpdatesFromStatus(t),
+                renderTrustSummary(t),
+                renderPlacementPolicy(t)),
+              _opsState &&
+                ("incidents" === getCurrentViewId() && renderIncidentCommand(),
+                "status-page" === getCurrentViewId() && renderStatusPage(),
+                "catalog" === getCurrentViewId() && renderServiceCatalog()),
+              n &&
+                (shouldRenderHeavyView("console")
+                  ? renderConsole(n)
+                  : (_consoleLogs = normalizeConsoleEntries(n))),
+              o &&
+                (shouldRenderHeavyView("network")
+                  ? renderNetwork(o)
+                  : (_networkLogs = sanitizeTraceLogList(o?.logs))),
+              r &&
+                (shouldRenderHeavyView("internal-network")
+                  ? renderInternalNetwork(r)
+                  : (_internalNetworkLogs = sanitizeTraceLogList(r?.logs))),
+              s && (window.__latestSecurityEvents = Array.isArray(s?.events)
+                ? s.events
+                : Array.isArray(s?.logs)
+                  ? s.logs
+                  : Array.isArray(s)
+                    ? s
+                    : window.__latestSecurityEvents || []),
+              t && !FLEET_SURFACES[l] && renderStatusSubView(l, t),
+              renderOverviewMetrics(infoPayload || window.__latestInfoPayload, n, o, _opsState),
+              updateJohnnyConfidence(n, o, s));
+            return true;
+          } catch (e) {
+            console.error(e);
+            return false;
+          }
+        }
+
+        function updateDashboardData(options = {}) {
+          if (dashboardAccess.paused) return Promise.resolve(false);
+          queueDashboardRefresh(options);
+          if (dashboardRefreshPromise) return dashboardRefreshPromise;
+          dashboardRefreshInFlight = !0;
+          const request = (async () => {
+              let applied = !0;
+              do {
+                applied = (await performDashboardDataUpdate(takeDashboardRefreshOptions())) && applied;
+              } while (!dashboardAccess.paused && hasQueuedDashboardRefresh());
+              return applied;
+            })(),
+            tracked = request.finally(() => {
+              if (dashboardRefreshPromise === tracked) {
+                dashboardRefreshPromise = null;
+                dashboardRefreshInFlight = !1;
+                !dashboardRevisionApplyInFlight && pendingDashboardSections.size && scheduleDashboardDrain(
+                  Math.min(30000, DASHBOARD_REVISION_ACTIVE_MS * 2 ** dashboardDrainFailures),
+                );
+              }
+            });
+          dashboardRefreshPromise = tracked;
+          return tracked;
+        }
+        let johnnyRefreshInterval = null;
+        function startJohnnyRefresh() {
+          if (dashboardAccess.paused) return;
+          (johnnyRefreshInterval && clearInterval(johnnyRefreshInterval),
+            (johnnyRefreshInterval = setInterval(async () => {
+              const e = document.querySelector(
+                ".view-section:not(.hidden)",
+              )?.id;
+              if ("view-api-reference" === e)
+                try {
+                  const [e, t, n] = await Promise.all([
+                    fetchAPI(API.consoleLogs, !0),
+                    fetchAPI(API.network, !0),
+                    fetchAPI("/client/api/security/events", !0),
+                  ]);
+                  updateJohnnyConfidence(e, t, n);
+                } catch (e) {}
+            }, 2e3)));
+        }
+        async function fetchAccountInfo() {
+          try {
+            const e = await fetchAPI("/client/api/account-info");
+            if (e) {
+              const t = (e) => !!e && document.activeElement !== e,
+                n = (e) => {
+                  if (null == e || "" === e) return "-";
+                  const t =
+                    "number" == typeof e ? new Date(1e3 * e) : new Date(e);
+                  return Number.isNaN(t.getTime())
+                    ? "-"
+                    : `${t.toLocaleDateString()} ${t.toLocaleTimeString()}`;
+                },
+                o = (e) => {
+                  if (null == e || "" === e) return "";
+                  const t =
+                    "number" == typeof e ? 1e3 * e : new Date(e).getTime();
+                  if (!Number.isFinite(t) || Number.isNaN(t)) return "";
+                  const n = t - Date.now();
+                  if (n <= 0) return "Expired";
+                  const o = Math.floor(n / 864e5),
+                    r = Math.floor((n % 864e5) / 36e5);
+                  if (o > 0) return `${o}d ${r}h remaining`;
+                  return `${r}h ${Math.max(0, Math.floor((n % 36e5) / 6e4))}m remaining`;
+                },
+                r = document.getElementById("settings-org"),
+                s = document.getElementById("settings-created"),
+                a = document.getElementById("billing-expiry-date"),
+                i = document.getElementById("billing-expiry-meta"),
+                l = document.getElementById("billing-expiry-state"),
+                c = document.getElementById("billing-hero-title"),
+                d = document.getElementById("billing-hero-copy"),
+                u = document.getElementById("billing-hero-actions"),
+                p = document.getElementById("billing-launcher-capacity"),
+                m = document.getElementById("billing-launcher-capacity-meta"),
+                g = document.getElementById("billing-api-capacity"),
+                h = document.getElementById("billing-api-capacity-meta"),
+                y = document.getElementById("billing-plan-meta"),
+                f = document.getElementById("billing-workspace-status"),
+                b = document.getElementById("billing-workspace-meta"),
+                v = document.getElementById("billing-status-icon-wrap"),
+                x = document.getElementById("billing-status-icon"),
+                w = document.getElementById("billing-diag-professional-state"),
+                _ = document.getElementById("billing-diag-professional-meta"),
+                T = document.getElementById("billing-diag-launcher-state"),
+                k = document.getElementById("billing-diag-launcher-meta"),
+                E = document.getElementById("billing-diag-api-state"),
+                S = document.getElementById("billing-diag-api-meta"),
+                I = document.getElementById("billing-diag-portal-state"),
+                A = document.getElementById("billing-diag-portal-meta"),
+                P = document.getElementById("user-menu-support-badge"),
+                C = document.getElementById("user-profile-name"),
+                $ = document.getElementById("popover-name"),
+                L = document.getElementById("popover-email"),
+                B = document.getElementById("user-profile-id"),
+                N = e.business_name || "Unknown",
+                O = e.username || e.email || "Unknown";
+              if (
+                (r && t(r) && (r.value = e.business_name || "Unknown"),
+                C && (C.innerText = N),
+                $ && ($.innerText = N),
+                L && (L.innerText = O),
+                B && (B.innerText = "ID: " + (e.client_id || "-")),
+                s && t(s) && (s.value = n(e.created_at)),
+                a && (a.innerText = n(e.expiry_time)),
+                i)
+              ) {
+                const t = o(e.expiry_time);
+                i.innerText = t || "No expiry date on file";
+              }
+              (l &&
+                (e.workspace_locked
+                  ? ((l.innerText = "Locked"), (l.style.color = "#f87171"))
+                  : ["paid", "trialing", "canceled"].includes(
+                        String(e.payment_status || "").toLowerCase(),
+                      )
+                    ? ((l.innerText = "Active"), (l.style.color = "#34d399"))
+                    : "past_due" ===
+                        String(e.payment_status || "").toLowerCase()
+                      ? ((l.innerText = "Past Due"),
+                        (l.style.color = "#f59e0b"))
+                      : ((l.innerText = "Pending"),
+                        (l.style.color = "#fbbf24"))),
+                (APP_STATE.billing = e.billing || {}));
+              const D = Number(APP_STATE.billing.launcher_host_count || 0),
+                M = Number(APP_STATE.billing.included_launcher_hosts || 2),
+                launcherCapacityLimit = Number(APP_STATE.billing.launcher_capacity_limit || M),
+                j =
+                  (Number(APP_STATE.billing.billable_launcher_addons || 0),
+                  Number(APP_STATE.billing.api_count || 0)),
+                R = Number(APP_STATE.billing.included_startup_apis || 5),
+                apiCapacityLimit = Number(APP_STATE.billing.api_capacity_limit || R),
+                H =
+                  (Number(APP_STATE.billing.billable_api_addons || 0),
+                  !!APP_STATE.billing.api_addon_catalog_enabled),
+                F =
+                  (APP_STATE.billing.api_addon_recurring,
+                  APP_STATE.billing.catalog || {}),
+                q = F.professional || {},
+                J = F.launcher || {},
+                U = F.api || {},
+                W = !!APP_STATE.billing.manage_billing_available;
+              if ((p && (p.innerText = `${D} / ${launcherCapacityLimit} capacity`), m)) {
+                const e = Number(APP_STATE.billing.recurring_launcher_slots || 0),
+                  t = Number(APP_STATE.billing.purchased_launcher_slots || 0),
+                  n = e + t;
+                m.innerText =
+                  n > 0
+                    ? `${n} additional launcher slot${1 === n ? "" : "s"} active. Recurring add-ons remain available while billing is active.`
+                    : "Additional launcher slots are recurring $19/month add-ons.";
+              }
+              if ((g && (g.innerText = `${j} / ${apiCapacityLimit} capacity`), h)) {
+                const e = Number(APP_STATE.billing.recurring_api_slots || 0),
+                  t = Number(APP_STATE.billing.purchased_api_slots || 0),
+                  n = e + t;
+                h.innerText = H
+                  ? n > 0
+                    ? `${n} additional API slot${1 === n ? "" : "s"} active. Recurring add-ons remain available while billing is active.`
+                    : "Additional API slots are recurring $9/month add-ons."
+                  : "The current Stripe catalog cannot see the API slot product yet.";
+              }
+              if (
+                (w && (w.innerText = q.connected ? "Connected" : "Missing"),
+                _ &&
+                  (_.innerText = q.connected
+                    ? "Recurring catalog price visible to this workspace."
+                    : "The current Stripe keys cannot see the Professional price."),
+                T &&
+                  (T.innerText = J.connected
+                    ? J.self_serve
+                      ? "Self-Serve Ready"
+                      : "Connected"
+                    : "Missing"),
+                k &&
+                  (k.innerText = J.connected
+                    ? J.self_serve
+                      ? "Launcher growth bills automatically against a recurring Stripe item."
+                      : "Launcher catalog is visible but not configured as a recurring self-serve item."
+                    : "The current Stripe keys cannot see the launcher add-on price."),
+                E &&
+                  (E.innerText = U.connected
+                    ? U.self_serve && "recurring" === U.mode
+                      ? "Self-Serve Ready"
+                      : "Connected"
+                    : "Missing"),
+                S &&
+                  (S.innerText = U.connected
+                    ? "recurring" === U.mode
+                      ? "API growth can be billed automatically against a recurring Stripe item."
+                      : "API product is visible, but the active catalog price is not recurring. The workspace tracks capacity clearly, but recurring self-serve billing is not fully automated yet."
+                    : "The current Stripe keys cannot see the API add-on price."),
+                I && (I.innerText = W ? "Available" : "Not Ready Yet"),
+                A &&
+                  (A.innerText = W
+                    ? "Customers can update payment methods and cancel at period end."
+                    : "The billing portal becomes available after the workspace has a Stripe customer record."),
+                c &&
+                  (c.innerText =
+                    ["paid", "trialing"].includes(
+                      String(e.payment_status || "").toLowerCase(),
+                    ) && !e.workspace_locked
+                      ? "Workspace is active and ready"
+                      : "canceled" !==
+                            String(e.payment_status || "").toLowerCase() ||
+                          e.workspace_locked
+                        ? "past_due" ===
+                          String(e.payment_status || "").toLowerCase()
+                          ? "Payment needs attention"
+                          : e.workspace_locked
+                            ? "Workspace is locked until billing is active"
+                            : "Activate the workspace when you are ready"
+                        : "Subscription ends at period close"),
+                d &&
+                  (d.innerText =
+                    ["paid", "trialing"].includes(
+                      String(e.payment_status || "").toLowerCase(),
+                    ) && !e.workspace_locked
+                      ? "Billing is active. Usage is shown for visibility only, and the workspace is currently live."
+                      : "canceled" !==
+                            String(e.payment_status || "").toLowerCase() ||
+                          e.workspace_locked
+                        ? "past_due" ===
+                          String(e.payment_status || "").toLowerCase()
+                          ? "Your workspace is still within its billing grace window. Update payment details to avoid interruption."
+                          : "Usage is shown for visibility only. Infraveil is not limiting requests, nodes, logs, or security events from this panel."
+                        : `Cancellation is scheduled. Access remains active until ${formatBillingDate(APP_STATE.billing.current_period_end) || "the end of the current billing period"}.`),
+                u)
+              ) {
+                u.classList.remove("hidden");
+                const t = document.getElementById("billing-primary-action"),
+                  n = document.getElementById("billing-secondary-action"),
+                  o = ["paid", "trialing", "past_due", "canceled"].includes(
+                    String(e.payment_status || "").toLowerCase(),
+                  );
+                (t &&
+                  ((t.textContent = o ? "Manage Billing" : "Buy Professional"),
+                  (t.onclick = o ? openBillingPortal : startBillingCheckout)),
+                  n &&
+                    ((n.textContent = o ? "Billing Help" : "Invoice / ACH"),
+                    (n.onclick = openInvoiceBillingPath)));
+              }
+              const z = e.account_settings || {},
+                V = e.telemetry_summary || {};
+              ((APP_STATE.pin_enabled = !!z.pin_enabled),
+                (APP_STATE.action_auth_mode =
+                  z.action_auth_mode || "totp_only"),
+                (APP_STATE.recovery_mode = z.recovery_mode || "totp_or_email"),
+                (APP_STATE.auth_prompt_behavior =
+                  z.auth_prompt_behavior || "smart"));
+              syncPasskeyEnrollmentAvailability(
+                !!z.has_webauthn,
+                e.username,
+              );
+              const G = document.getElementById("settings-totp-status"),
+                X = document.getElementById("settings-totp-reset-at"),
+                Y = document.getElementById("settings-pin-status"),
+                K = document.getElementById("settings-webauthn-status"),
+                Z = document.getElementById("settings-action-auth-mode"),
+                Q = document.getElementById("settings-recovery-mode"),
+                authPromptSelect = document.getElementById(
+                  "settings-auth-prompt-behavior"
+                );
+              if (
+                (G &&
+                  (G.innerText = z.has_totp
+                    ? "Authenticator active"
+                    : "Authenticator not configured"),
+                X &&
+                  (X.innerText = `Last reset: ${z.totp_last_reset_at ? new Date(z.totp_last_reset_at).toLocaleString() : "Never"}`),
+                Y &&
+                  (Y.innerText = z.pin_enabled ? "PIN enabled" : "No PIN set"),
+                K &&
+                  (K.innerText = z.has_webauthn
+                    ? "Passkey ready"
+                    : "Passkey not enrolled"),
+                Z &&
+                  !_securitySettingsDirty &&
+                  t(Z) &&
+                  (Z.value = APP_STATE.action_auth_mode),
+                Q &&
+                  !_securitySettingsDirty &&
+                  t(Q) &&
+                  (Q.value = APP_STATE.recovery_mode),
+                authPromptSelect &&
+                  !_securitySettingsDirty &&
+                  t(authPromptSelect) &&
+                  (authPromptSelect.value = APP_STATE.auth_prompt_behavior),
+                y)
+              ) {
+                const t = Number(
+                    (e.billing || {}).billable_launcher_addons || 0,
+                  ),
+                  n = Number((e.billing || {}).billable_api_addons || 0);
+                y.innerText =
+                  t > 0 || n > 0
+                    ? `Professional active • ${t} launcher add-on${1 === t ? "" : "s"} • ${n} API add-on${1 === n ? "" : "s"}`
+                    : ["paid", "trialing", "past_due", "canceled"].includes(
+                          String(e.payment_status || "").toLowerCase(),
+                        )
+                      ? "Service tier is active"
+                      : "Service tier is staged";
+              }
+              if (
+                (f &&
+                  (f.innerText =
+                    ["paid", "trialing"].includes(
+                      String(e.payment_status || "").toLowerCase(),
+                    ) && !e.workspace_locked
+                      ? "Workspace Active"
+                      : "canceled" !==
+                            String(e.payment_status || "").toLowerCase() ||
+                          e.workspace_locked
+                        ? "past_due" ===
+                          String(e.payment_status || "").toLowerCase()
+                          ? "Payment Attention Needed"
+                          : e.workspace_locked
+                            ? "Workspace Locked"
+                            : "Awaiting Billing"
+                        : "Canceling At Period End"),
+                b &&
+                  (b.innerText =
+                    ["paid", "trialing"].includes(
+                      String(e.payment_status || "").toLowerCase(),
+                    ) && !e.workspace_locked
+                      ? "Protection and control-plane actions are live"
+                      : "canceled" !==
+                            String(e.payment_status || "").toLowerCase() ||
+                          e.workspace_locked
+                        ? "past_due" ===
+                          String(e.payment_status || "").toLowerCase()
+                          ? "Update payment details to keep launcher and agent control uninterrupted"
+                          : e.workspace_locked
+                            ? "Activate billing to unlock high-trust actions"
+                            : "Workspace has not been activated yet"
+                        : "You can still manage billing and keep service through the current term"),
+                v &&
+                  (v.className =
+                    ["paid", "trialing"].includes(
+                      String(e.payment_status || "").toLowerCase(),
+                    ) && !e.workspace_locked
+                      ? "p-2 rounded bg-emerald-500/10 border border-emerald-500/20"
+                      : "past_due" ===
+                          String(e.payment_status || "").toLowerCase()
+                        ? "p-2 rounded bg-amber-500/10 border border-amber-500/20"
+                        : e.workspace_locked
+                          ? "p-2 rounded bg-red-500/10 border border-red-500/20"
+                          : "p-2 rounded bg-amber-500/10 border border-amber-500/20"),
+                x)
+              ) {
+                const t = String(e.payment_status || "").toLowerCase();
+                (x.setAttribute(
+                  "data-lucide",
+                  ["paid", "trialing", "canceled"].includes(t) &&
+                    !e.workspace_locked
+                    ? "badge-check"
+                    : "past_due" === t
+                      ? "circle-alert"
+                      : e.workspace_locked
+                        ? "lock"
+                        : "credit-card",
+                ),
+                  (x.className =
+                    ["paid", "trialing", "canceled"].includes(t) &&
+                    !e.workspace_locked
+                      ? "w-6 h-6 text-emerald-500"
+                      : "past_due" === t
+                        ? "w-6 h-6 text-amber-400"
+                        : e.workspace_locked
+                          ? "w-6 h-6 text-red-500"
+                          : "w-6 h-6 text-amber-400"));
+              }
+              const ee = document.getElementById("settings-first-view"),
+                te = document.getElementById("settings-first-action"),
+                ne = document.getElementById("settings-feedback-count"),
+                oe = document.getElementById("settings-refresh-count");
+              (ee && (ee.innerText = humanizeTelemetryKey(V.first_view || "-")),
+                te &&
+                  (te.innerText = humanizeTelemetryKey(V.first_action || "-")),
+                ne && (ne.innerText = String(V.feedback_count || 0)),
+                oe && (oe.innerText = String(V.refresh_count || 0)),
+                renderTelemetryList(
+                  "settings-top-views",
+                  V.top_views || [],
+                  "No page telemetry yet.",
+                ),
+                renderTelemetryList(
+                  "settings-top-actions",
+                  V.top_actions || [],
+                  "No action telemetry yet.",
+                ),
+                renderTelemetryList(
+                  "settings-top-friction",
+                  V.top_friction || [],
+                  "No reported issues yet.",
+                ));
+              const re = document.getElementById("expiry-warning-banner"),
+                se = document.getElementById("expiry-warning-text");
+              (e.expiry_warning && e.expiry_warning.is_unpaid
+                ? (re && re.classList.remove("hidden"),
+                  se && (se.innerText = e.expiry_warning.message))
+                : re && re.classList.add("hidden"),
+                (APP_STATE.workspace_locked = !!e.workspace_locked),
+                (APP_STATE.payment_required =
+                  APP_STATE.workspace_locked ||
+                  (!["paid", "trialing", "past_due", "canceled"].includes(
+                    String(e.payment_status || "").toLowerCase(),
+                  ) &&
+                    !APP_STATE.demo_mode)),
+                applyWorkspaceState(),
+                supportController.updateUnreadCount(e.support_unread_count, P));
+              const ae = document.getElementById("support-contact-email");
+              ae && !ae.value && t(ae) && (ae.value = e.email || "");
+              const ie = document.getElementById("delete-account-section");
+              ("paid" === e.payment_status || APP_STATE.demo_mode
+                ? ie && ie.classList.add("hidden")
+                : ie && ie.classList.remove("hidden"),
+                window.lucide && lucide.createIcons());
+            }
+          } catch (e) {
+            console.error("Failed to fetch account info:", e);
+          }
+        }

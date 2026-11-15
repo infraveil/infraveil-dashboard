@@ -1,0 +1,740 @@
+        let _securityPolicy = null,
+          _securityEvents = [],
+          _networkLogs = [],
+          _securityInsights = null,
+          _telemetryPipeline = [],
+          _responsePipeline = [],
+          _customDefenseModules = [],
+          _telemetryDimensions = [],
+          _learningEngine = {},
+          _pipelineStacks = [],
+          _activePipelineStackId = null;
+        const DEFAULT_PIPELINE_STACK = {
+            id: "primary-stack",
+            name: "Primary Stack",
+            enabled: !0,
+            order: 1,
+            target_mode: "all",
+            target_agent_ids: [],
+            target_launcher_host_ids: [],
+            telemetry_dimensions: [
+              "path",
+              "method",
+              "status",
+              "country",
+              "ip",
+              "user_agent",
+            ],
+            telemetry_pipeline: [],
+            response_pipeline: [],
+            custom_defense_modules: [],
+            learning_engine: {
+              enabled: !1,
+              mode: "recommend",
+              sources: [
+                "network_trace",
+                "security_events",
+                "honeypot_captures",
+              ],
+              allowed_tools: [
+                "suggest_pipeline_stage",
+                "suggest_honeypot_route",
+                "suggest_pattern",
+                "suggest_module",
+                "suggest_geo_rule",
+              ],
+              objectives: [
+                "identify_top_routes",
+                "detect_attack_patterns",
+                "recommend_custom_modules",
+              ],
+              auto_apply_safe_suggestions: !1,
+              notes: "",
+              custom_tools: [],
+            },
+          },
+          ANALYSIS_TOOL_OPTIONS = [
+            "suggest_pipeline_stage",
+            "suggest_honeypot_route",
+            "suggest_pattern",
+            "suggest_module",
+            "suggest_geo_rule",
+          ],
+          ANALYSIS_SOURCE_OPTIONS = [
+            "network_trace",
+            "security_events",
+            "honeypot_captures",
+          ],
+          ANALYSIS_OBJECTIVE_OPTIONS = [
+            "identify_top_routes",
+            "detect_attack_patterns",
+            "recommend_custom_modules",
+          ],
+          SECURITY_STAGE_LIBRARY = [
+            {
+              id: "observe_request",
+              category: "Monitoring",
+              title: "Observe Request",
+              description:
+                "Capture route, method, query, body, and dimensions for every request.",
+            },
+            {
+              id: "tag_route",
+              category: "Monitoring",
+              title: "Tag Route",
+              description:
+                "Normalize route families like /, /settings, /api/* into labels you can chart later.",
+            },
+            {
+              id: "count_dimension",
+              category: "Monitoring",
+              title: "Count Dimension",
+              description:
+                "Increment counters by path, method, country, user-agent, tenant, or custom key.",
+            },
+            {
+              id: "capture_payload_shape",
+              category: "Monitoring",
+              title: "Capture Body Shape",
+              description:
+                "Record body presence, content type, size bands, and field presence without full raw storage.",
+            },
+            {
+              id: "session_fingerprint",
+              category: "Monitoring",
+              title: "Session Fingerprint",
+              description:
+                "Build a durable behavioral fingerprint from IP, headers, cookies, and cadence.",
+            },
+            {
+              id: "detect_pattern",
+              category: "Detection",
+              title: "Detect Pattern",
+              description:
+                "Match suspicious path, header, payload, or user-agent signatures.",
+            },
+            {
+              id: "risk_score",
+              category: "Detection",
+              title: "Risk Score",
+              description:
+                "Assign or raise risk based on rules, source context, and observed behavior.",
+            },
+            {
+              id: "geo_gate",
+              category: "Detection",
+              title: "Geo Gate",
+              description:
+                "Evaluate geo policy or custom regional heuristics before passing the request through.",
+            },
+            {
+              id: "rate_shape",
+              category: "Detection",
+              title: "Rate Shape",
+              description:
+                "Track bursts, sustained request pressure, and unusual request cadence.",
+            },
+            {
+              id: "enrich_request",
+              category: "Enrichment",
+              title: "Enrich Request",
+              description:
+                "Attach derived metadata like route_group, session_kind, or attack_family.",
+            },
+            {
+              id: "branch_by_condition",
+              category: "Flow",
+              title: "Branch By Condition",
+              description:
+                "Split the pipeline on risk, route, country, tenant, or any custom predicate.",
+            },
+            {
+              id: "emit_dashboard_signal",
+              category: "Observability",
+              title: "Emit Dashboard Signal",
+              description:
+                "Create a dashboard counter, chart series, or list-friendly event from the stage output.",
+            },
+            {
+              id: "log_event",
+              category: "Response",
+              title: "Log Event",
+              description:
+                "Write a structured event for review without changing request behavior.",
+            },
+            {
+              id: "call_tool",
+              category: "Response",
+              title: "Call Tool",
+              description:
+                "Invoke your own named tool contract such as a SIEM exporter, webhook, queue, or classifier.",
+            },
+            {
+              id: "block_request",
+              category: "Response",
+              title: "Block Request",
+              description: "Hard-stop the request with a controlled response.",
+            },
+            {
+              id: "tarpit_request",
+              category: "Response",
+              title: "Tarpit Request",
+              description:
+                "Slow hostile traffic down instead of immediately denying it.",
+            },
+            {
+              id: "serve_deception",
+              category: "Response",
+              title: "Serve Deception",
+              description:
+                "Return a fake but plausible response for traps and scanners.",
+            },
+            {
+              id: "invoke_module",
+              category: "Extensibility",
+              title: "Invoke Module",
+              description:
+                "Hand off control to a custom defense module you define below.",
+            },
+          ],
+          STAGE_FIELDS = {
+            tag_route: [
+              { key: "map", label: "Route → label", type: "keyvalue", help: "One per line, e.g.  /api/users: users-api" },
+            ],
+            count_dimension: [
+              { key: "dimensions", label: "Count by", type: "csv", placeholder: "path, method, country", help: "Which fields to tally up." },
+            ],
+            detect_pattern: [
+              { key: "paths", label: "Suspicious paths", type: "csv", placeholder: "/.env, /wp-login.php, /.git/config", help: "Leave blank to use your global Security Policy list. Fill in to give THIS detector its own path signatures." },
+              { key: "user_agents", label: "Suspicious user-agents", type: "csv", placeholder: "sqlmap, nikto, nmap", help: "Substring match against the request's User-Agent." },
+              { key: "payloads", label: "Suspicious payload strings", type: "csv", placeholder: "UNION SELECT, ../, ${jndi:", help: "Matched against the request body and path." },
+              { key: "score", label: "Risk added on a match", type: "number", placeholder: "25", help: "Points added to the risk score when this detector matches." },
+            ],
+            risk_score: [
+              { key: "weights", label: "Points per match type", type: "keyvalue", help: "One per line, e.g.  path: 15\npayload: 20\nuser-agent: 20" },
+              { key: "country_weights", label: "Points per country", type: "keyvalue", help: "Optional. e.g.  CN: 10\nRU: 10" },
+            ],
+            geo_gate: [
+              { key: "mode", label: "Mode", type: "select", options: [["blocklist", "Block these countries"], ["allowlist", "Allow only these countries"]] },
+              { key: "countries", label: "Countries", type: "csv", placeholder: "CN, RU, KP", help: "Two-letter country codes. Leave blank to use your global Geo-Blocking list." },
+            ],
+            rate_shape: [
+              { key: "window_seconds", label: "Window (seconds)", type: "number", placeholder: "60" },
+              { key: "risk_threshold", label: "Burst size before flagging", type: "number", placeholder: "20" },
+              { key: "score", label: "Risk added when bursting", type: "number", placeholder: "15" },
+            ],
+            enrich_request: [
+              { key: "set", label: "Fields to attach", type: "keyvalue", help: "One per line, e.g.  tier: gold" },
+            ],
+            branch_by_condition: [
+              { key: "min_risk", label: "Only continue if risk ≥", type: "number", placeholder: "0", help: "Steps below this one are skipped when the risk score is lower." },
+            ],
+            emit_dashboard_signal: [
+              { key: "name", label: "Signal name", type: "text", placeholder: "pipeline_signal" },
+              { key: "dimension", label: "Value taken from field", type: "text", placeholder: "path" },
+            ],
+            log_event: [
+              { key: "message", label: "Log message", type: "text", placeholder: "Suspicious request seen" },
+            ],
+            call_tool: [
+              { key: "tool", label: "Tool name", type: "text", placeholder: "siem-exporter", help: "Must match a tool registered under Advanced → Connected Tools." },
+              { key: "kind", label: "Kind", type: "text", placeholder: "analysis" },
+            ],
+            block_request: [
+              { key: "threshold", label: "Block when risk ≥", type: "number", placeholder: "1" },
+              { key: "status", label: "HTTP status to return", type: "number", placeholder: "403" },
+              { key: "body", label: "Response body", type: "text", placeholder: "Forbidden" },
+            ],
+            tarpit_request: [
+              { key: "threshold", label: "Tarpit when risk ≥", type: "number", placeholder: "1" },
+              { key: "delay_seconds", label: "Delay (seconds)", type: "number", placeholder: "5" },
+            ],
+            serve_deception: [
+              { key: "threshold", label: "Serve fake when risk ≥", type: "number", placeholder: "1" },
+              { key: "status", label: "HTTP status", type: "number", placeholder: "200" },
+              { key: "payload", label: "Fake JSON body", type: "json", placeholder: '{"status":"ok","debug":false}' },
+            ],
+          },
+          SEC_COUNTRIES = [
+            { code: "CN", name: "China" },
+            { code: "RU", name: "Russia" },
+            { code: "US", name: "United States" },
+            { code: "IN", name: "India" },
+            { code: "BR", name: "Brazil" },
+            { code: "KR", name: "South Korea" },
+            { code: "DE", name: "Germany" },
+            { code: "FR", name: "France" },
+            { code: "GB", name: "United Kingdom" },
+            { code: "JP", name: "Japan" },
+            { code: "IR", name: "Iran" },
+            { code: "KP", name: "North Korea" },
+            { code: "VN", name: "Vietnam" },
+            { code: "UA", name: "Ukraine" },
+            { code: "ID", name: "Indonesia" },
+            { code: "NG", name: "Nigeria" },
+            { code: "PK", name: "Pakistan" },
+            { code: "TH", name: "Thailand" },
+            { code: "TR", name: "Turkey" },
+            { code: "PH", name: "Philippines" },
+            { code: "NL", name: "Netherlands" },
+            { code: "RO", name: "Romania" },
+            { code: "PL", name: "Poland" },
+            { code: "AR", name: "Argentina" },
+            { code: "MX", name: "Mexico" },
+            { code: "ZA", name: "South Africa" },
+            { code: "EG", name: "Egypt" },
+            { code: "SG", name: "Singapore" },
+            { code: "AU", name: "Australia" },
+            { code: "CA", name: "Canada" },
+          ];
+        function mountPipelineWorkspaceView() {
+          (switchPipelineTab("builder"), renderPipelineBuilder());
+        }
+        function togglePipelineAdvanced() {
+          const row = document.getElementById("pipeline-advanced-row"),
+            chev = document.getElementById("pipeline-advanced-chevron");
+          if (!row) return;
+          const open = row.classList.toggle("hidden") === false;
+          if (chev) chev.style.transform = open ? "rotate(180deg)" : "";
+          if (!open) {
+            const onAdvanced = ["adaptive", "modules", "tools", "stacks"].some(
+              (k) => {
+                const b = document.getElementById("pipeline-tab-" + k);
+                return b && b.style.color === "var(--text-main)";
+              },
+            );
+            if (onAdvanced) switchPipelineTab("builder");
+          }
+          if (window.lucide) lucide.createIcons();
+        }
+        function switchPipelineTab(e) {
+          (document.querySelectorAll(".pipeline-tab").forEach((e) => {
+            ((e.style.color = "var(--text-muted)"),
+              (e.style.background = "transparent"),
+              (e.style.borderBottom = "2px solid transparent"),
+              e.classList.remove("active"),
+              e.setAttribute("aria-selected", "false"));
+          }),
+            document
+              .querySelectorAll(".pipeline-panel")
+              .forEach((e) => {
+                e.classList.add("hidden");
+                e.hidden = !0;
+              }));
+          const t = document.getElementById("pipeline-tab-" + e);
+          t &&
+            ((t.style.color = "var(--text-main)"),
+            (t.style.background = "var(--nav-active-bg)"),
+            (t.style.borderBottom = "2px solid var(--accent)"),
+            t.classList.add("active"),
+            t.setAttribute("aria-selected", "true"));
+          const n = document.getElementById("pipeline-panel-" + e);
+          (n && (n.classList.remove("hidden"), (n.hidden = !1)),
+            lucide.createIcons(),
+            "builder" === e
+              ? renderPipelineBuilder()
+              : "adaptive" === e
+                ? (renderLearningEngine(), renderLearningInsights())
+                : "modules" === e
+                  ? renderCustomDefenseModules()
+                  : "tools" === e
+                    ? renderLearningTools()
+                    : "stacks" === e && renderPipelineStackManager());
+        }
+        function showPipelineBuilder() {
+          window.ivPipelineEditorRequested = true;
+          (document
+            .getElementById("pipeline-empty-state")
+            .classList.add("hidden"),
+            document
+              .getElementById("pipeline-builder-content")
+              .classList.remove("hidden"),
+            renderPipelineBuilder());
+        }
+        function checkPipelineEmptyState() {
+          const e = (_telemetryPipeline || []).length > 0,
+            t = (_responsePipeline || []).length > 0,
+            n = document.getElementById("pipeline-empty-state"),
+            o = document.getElementById("pipeline-builder-content");
+          n &&
+            o &&
+            (e || t || window.ivPipelineEditorRequested
+              ? (n.classList.add("hidden"), o.classList.remove("hidden"))
+              : (n.classList.remove("hidden"), o.classList.add("hidden")));
+        }
+        function switchSecTab(e) {
+          (document.querySelectorAll(".sec-tab").forEach((e) => {
+            ((e.style.color = "var(--text-muted)"),
+              (e.style.background = "transparent"),
+              (e.style.borderBottom = "2px solid transparent"),
+              e.classList.remove("active"),
+              e.setAttribute("aria-selected", "false"));
+          }),
+            document
+              .querySelectorAll(".sec-panel")
+              .forEach((e) => {
+                e.classList.add("hidden");
+                e.hidden = !0;
+              }));
+          const t = document.getElementById("sec-tab-" + e);
+          t &&
+            ((t.style.color = "var(--text-main)"),
+            (t.style.background = "var(--nav-active-bg)"),
+            (t.style.borderBottom = "2px solid var(--accent)"),
+            t.classList.add("active"),
+            t.setAttribute("aria-selected", "true"));
+          const n = document.getElementById("sec-panel-" + e);
+          (n && (n.classList.remove("hidden"), (n.hidden = !1)),
+            lucide.createIcons(),
+            "events" === e && refreshSecurityEvents(),
+            "overview" === e && refreshSecurityInsights());
+        }
+        async function fetchSecuritySettings() {
+          try {
+            const fleetQuery = window.ivMacroAgentQuery?.("security") || "";
+            const [e, t, n] = await Promise.all([
+              freshFetch("/client/api/security"),
+              freshFetch(`/client/api/security/events${fleetQuery}`),
+              freshFetch("/client/api/security/insights"),
+            ]);
+            if (!e.ok) throw new Error();
+            const o = await e.json();
+            _securityPolicy = o.policy;
+            try {
+              const e = await t.json();
+              ((_securityEvents = e.events || []),
+                updateJohnnyConfidence(null, null, e));
+            } catch (e) {
+              _securityEvents = [];
+            }
+            try {
+              const e = await n.json();
+              _securityInsights = e;
+            } catch (e) {
+              _securityInsights = null;
+            }
+            (populateSecurityScope({ skipRender: _securityPolicyDirty }),
+              _securityPolicyDirty ||
+                (renderSecurityUI(),
+                renderTrafficChart(),
+                renderGeoCountryList(),
+                renderHoneypotUI()),
+              renderSecurityEvents());
+          } catch (e) {
+            showToast("Failed to load security settings", "error");
+          }
+        }
+        function populateSecurityScope(e = {}) {
+          const { skipRender: t = !1 } = e,
+            n = document.getElementById("sec-scope-select"),
+            o = n.value;
+          let r = '<option value="global">All apps — workspace policy</option>';
+          for (const [e, t] of Object.entries(agentNames))
+            e.length > 8 &&
+              (r += `<option value="${e}">${t} (${e.substring(0, 8)})</option>`);
+          ((n.innerHTML = r),
+            o && n.querySelector(`option[value="${o}"]`) && (n.value = o),
+            onSecurityScopeChange({ skipRender: t }));
+        }
+        function onSecurityScopeChange(e = {}) {
+          const { skipRender: t = !1 } = e,
+            n = document.getElementById("sec-scope-select").value,
+            o = document.getElementById("sec-inherit-toggle-wrap");
+          ("global" === n
+            ? o.classList.add("hidden")
+            : (o.classList.remove("hidden"),
+              (document.getElementById("sec-inherit-toggle").checked =
+                !1 !== _securityPolicy?.agents?.[n]?.inherit)),
+            t || renderSecurityUI());
+        }
+        function onSecurityInheritChange() {
+          renderSecurityUI();
+        }
+        function _getEffectiveCfg() {
+          if (!_securityPolicy) return {};
+          const e = document.getElementById("sec-scope-select").value,
+            t = _securityPolicy.global || {};
+          if ("global" === e) return t;
+          return document.getElementById("sec-inherit-toggle").checked
+            ? { ...t }
+            : { ...t, ...(_securityPolicy.agents?.[e] || {}) };
+        }
+        function ensurePipelineStateFromPolicy(e, force = false) {
+          if (window.ivPipelineDraftDirty && !force) return;
+          const t = normalizePipelineStack(e || {}),
+            n =
+              Array.isArray(e?.pipeline_stacks) && e.pipeline_stacks.length
+                ? e.pipeline_stacks.map((e, t) => ({
+                    ...normalizePipelineStack(e),
+                    id: e.id || `stack-${t + 1}`,
+                    name: e.name || `Stack ${t + 1}`,
+                    enabled: !1 !== e.enabled,
+                    order: Number(e.order || t + 1),
+                    target_mode: ["all", "agents", "launcher_hosts"].includes(
+                      e.target_mode,
+                    )
+                      ? e.target_mode
+                      : "all",
+                    target_agent_ids: Array.isArray(e.target_agent_ids)
+                      ? [...e.target_agent_ids]
+                      : [],
+                    target_launcher_host_ids: Array.isArray(
+                      e.target_launcher_host_ids,
+                    )
+                      ? [...e.target_launcher_host_ids]
+                      : [],
+                  }))
+                : [
+                    {
+                      ...t,
+                      id: t.id || "primary-stack",
+                      name: t.name || "Primary Stack",
+                      enabled: t.enabled !== false,
+                      order: 1,
+                      target_mode: t.target_mode || "all",
+                      target_agent_ids: t.target_agent_ids || [],
+                      target_launcher_host_ids: t.target_launcher_host_ids || [],
+                    },
+                  ];
+          ((_pipelineStacks = n.sort(
+            (e, t) => (e.order || 9999) - (t.order || 9999),
+          )),
+            (_activePipelineStackId = _pipelineStacks.some(
+              (e) => e.id === _activePipelineStackId,
+            )
+              ? _activePipelineStackId
+              : _pipelineStacks[0]?.id || null),
+            loadActivePipelineStackIntoEditor());
+          if (typeof getCurrentViewId === "function" && getCurrentViewId() === "pipelines") renderPipelineBuilder();
+        }
+        function getActivePipelineStack() {
+          return (
+            _pipelineStacks.find((e) => e.id === _activePipelineStackId) ||
+            _pipelineStacks[0] ||
+            null
+          );
+        }
+        function persistActivePipelineStackFromEditor() {
+          const e = getActivePipelineStack();
+          e &&
+            ((e.telemetry_dimensions = [...(_telemetryDimensions || [])]),
+            (e.telemetry_pipeline = JSON.parse(
+              JSON.stringify(_telemetryPipeline || []),
+            )),
+            (e.response_pipeline = JSON.parse(
+              JSON.stringify(_responsePipeline || []),
+            )),
+            (e.custom_defense_modules = JSON.parse(
+              JSON.stringify(_customDefenseModules || []),
+            )),
+            (e.learning_engine = JSON.parse(JSON.stringify(_learningEngine || {}))));
+        }
+        function loadActivePipelineStackIntoEditor() {
+          const e = getActivePipelineStack();
+          e &&
+            ((_telemetryPipeline = Array.isArray(e.telemetry_pipeline)
+              ? JSON.parse(JSON.stringify(e.telemetry_pipeline))
+              : []),
+            (_responsePipeline = Array.isArray(e.response_pipeline)
+              ? JSON.parse(JSON.stringify(e.response_pipeline))
+              : []),
+            (_customDefenseModules = Array.isArray(e.custom_defense_modules)
+              ? JSON.parse(JSON.stringify(e.custom_defense_modules))
+              : []),
+            (_telemetryDimensions = Array.isArray(e.telemetry_dimensions)
+              ? [...e.telemetry_dimensions]
+              : ["path", "method", "status", "country", "ip", "user_agent"]),
+            (_learningEngine =
+              e.learning_engine && typeof e.learning_engine === "object"
+                ? JSON.parse(JSON.stringify(e.learning_engine))
+                : _learningEngine && Object.keys(_learningEngine).length
+                ? _learningEngine
+                : {
+                    enabled: !1,
+                    mode: "recommend",
+                    sources: [
+                      "network_trace",
+                      "security_events",
+                      "honeypot_captures",
+                    ],
+                    allowed_tools: [
+                      "suggest_pipeline_stage",
+                      "suggest_honeypot_route",
+                      "suggest_pattern",
+                      "suggest_module",
+                      "suggest_geo_rule",
+                    ],
+                    objectives: [
+                      "identify_top_routes",
+                      "detect_attack_patterns",
+                      "recommend_custom_modules",
+                    ],
+                    auto_apply_safe_suggestions: !1,
+                    notes: "",
+                    custom_tools: [],
+                  }),
+            Array.isArray(_learningEngine.custom_tools) ||
+              (_learningEngine.custom_tools = []));
+          checkPipelineEmptyState();
+        }
+        function normalizePipelineStack(e) {
+          const t =
+              e && "object" == typeof e
+                ? e.stack && "object" == typeof e.stack
+                  ? e.stack
+                  : e.global && "object" == typeof e.global
+                    ? e.global
+                    : e
+                : {},
+            n = JSON.parse(JSON.stringify(DEFAULT_PIPELINE_STACK));
+          const draftStages = (stages) => (stages || []).map((stage) => ({
+            ...stage,
+            config_json: typeof stage.config_json === "string" ? stage.config_json : JSON.stringify(stage.config || {}, null, 2),
+          }));
+          return {
+            id: t.id || n.id,
+            name: t.name || n.name,
+            enabled: !1 !== t.enabled,
+            order: Number(t.order || n.order || 1),
+            target_mode: ["all", "agents", "launcher_hosts"].includes(
+              t.target_mode,
+            )
+              ? t.target_mode
+              : n.target_mode,
+            target_agent_ids: Array.isArray(t.target_agent_ids)
+              ? t.target_agent_ids
+              : n.target_agent_ids,
+            target_launcher_host_ids: Array.isArray(t.target_launcher_host_ids)
+              ? t.target_launcher_host_ids
+              : n.target_launcher_host_ids,
+            telemetry_dimensions: Array.isArray(t.telemetry_dimensions)
+              ? t.telemetry_dimensions
+              : n.telemetry_dimensions,
+            telemetry_pipeline: Array.isArray(t.telemetry_pipeline)
+              ? draftStages(t.telemetry_pipeline)
+              : n.telemetry_pipeline,
+            response_pipeline: Array.isArray(t.response_pipeline)
+              ? draftStages(t.response_pipeline)
+              : n.response_pipeline,
+            custom_defense_modules: Array.isArray(t.custom_defense_modules)
+              ? t.custom_defense_modules
+              : n.custom_defense_modules,
+            learning_engine:
+              t.learning_engine && "object" == typeof t.learning_engine
+                ? {
+                    ...n.learning_engine,
+                    ...t.learning_engine,
+                    custom_tools: Array.isArray(t.learning_engine.custom_tools)
+                      ? t.learning_engine.custom_tools
+                      : [],
+                  }
+                : n.learning_engine,
+          };
+        }
+        function selectPipelineStack(e) {
+          (persistActivePipelineStackFromEditor(),
+            (_activePipelineStackId = e),
+            loadActivePipelineStackIntoEditor(),
+            renderPipelineBuilder());
+        }
+        function addPipelineStack() {
+          window.ivPipelineDraftDirty = true;
+          persistActivePipelineStackFromEditor();
+          const e = (_pipelineStacks.length || 0) + 1,
+            t = JSON.parse(JSON.stringify(DEFAULT_PIPELINE_STACK));
+          ((t.id = `stack-${Math.random().toString(36).slice(2, 8)}`),
+            (t.name = `Stack ${e}`),
+            (t.order = e),
+            _pipelineStacks.push(t),
+            (_activePipelineStackId = t.id),
+            loadActivePipelineStackIntoEditor(),
+            renderPipelineBuilder());
+        }
+        function startPipelineRecipe(recipe) {
+          const names = { observe: "Request tracking", score: "Suspicious-request signals", block: "Risk-threshold blocking" };
+          if (!names[recipe]) return;
+          persistActivePipelineStackFromEditor();
+          const draft = JSON.parse(JSON.stringify(DEFAULT_PIPELINE_STACK));
+          draft.id = `stack-${Math.random().toString(36).slice(2, 10)}`;
+          draft.name = names[recipe]; draft.enabled = false; draft.order = _pipelineStacks.length + 1;
+          const capture = ["observe_request", "tag_route", "capture_payload_shape"];
+          if (recipe !== "observe") capture.push("detect_pattern");
+          draft.telemetry_pipeline = capture.map(createPipelineStage);
+          const actions = recipe === "observe" ? ["log_event", "emit_dashboard_signal"] : recipe === "score" ? ["risk_score", "log_event", "emit_dashboard_signal"] : ["risk_score", "block_request", "log_event"];
+          draft.response_pipeline = actions.map(createPipelineStage);
+          const block = draft.response_pipeline.find((stage) => stage.stage === "block_request");
+          if (block) block.config_json = JSON.stringify({ threshold: 60, status: 403, body: "Forbidden" });
+          const scoring = draft.response_pipeline.find((stage) => stage.stage === "risk_score");
+          if (scoring && block) scoring.config_json = JSON.stringify({ weights: { path: 35, payload: 35, "user-agent": 35, header: 35 } });
+          draft.custom_defense_modules = []; draft.target_mode = "all";
+          draft.target_agent_ids = []; draft.target_launcher_host_ids = [];
+          _pipelineStacks.push(draft); _activePipelineStackId = draft.id;
+          window.ivPipelineDraftDirty = true;
+          loadActivePipelineStackIntoEditor(); renderPipelineBuilder();
+          showToast("Draft added, disabled. Choose its targets and settings before enabling and saving.", "success");
+        }
+        function removePipelineStack(e) {
+          window.ivPipelineDraftDirty = true;
+          (_pipelineStacks || []).length <= 1
+            ? showToast("At least one pipeline stack is required.", "error")
+            : (persistActivePipelineStackFromEditor(),
+              (_pipelineStacks = _pipelineStacks.filter((t) => t.id !== e)),
+              _pipelineStacks.forEach((e, t) => (e.order = t + 1)),
+              _activePipelineStackId === e &&
+                (_activePipelineStackId = _pipelineStacks[0]?.id || null),
+              loadActivePipelineStackIntoEditor(),
+              renderPipelineBuilder());
+        }
+        function updateActiveStackField(e, t) {
+          window.ivPipelineDraftDirty = true;
+          const n = getActivePipelineStack();
+          n &&
+            ((n[e] = t),
+            "target_mode" === e &&
+              "all" === t &&
+              ((n.target_agent_ids = []), (n.target_launcher_host_ids = [])),
+            renderPipelineStackManager());
+        }
+        function toggleStackTarget(e, t) {
+          window.ivPipelineDraftDirty = true;
+          const n = getActivePipelineStack();
+          if (!n) return;
+          const o =
+              "agent" === e ? "target_agent_ids" : "target_launcher_host_ids",
+            r = new Set(n[o] || []);
+          (r.has(t) ? r.delete(t) : r.add(t),
+            (n[o] = Array.from(r)),
+            renderPipelineStackManager());
+        }
+        function renderPipelineStackManager() {
+          const e = document.getElementById("pipeline-panel-stacks");
+          if (!e) return;
+          let t = document.getElementById("pipeline-stack-manager");
+          t ||
+            ((t = document.createElement("div")),
+            (t.id = "pipeline-stack-manager"),
+            (t.className = "space-y-5"),
+            e.appendChild(t));
+          const n = Array.isArray(window.__launcherHosts)
+              ? window.__launcherHosts
+              : [],
+            o = Array.isArray(window.__launcherAgents)
+              ? window.__launcherAgents
+              : [],
+            r = getActivePipelineStack();
+          t.innerHTML = `\n                <div class="rounded-2xl border border-white/10 bg-transparent px-0 py-0">\n                    <div class="grid xl:grid-cols-[1.1fr_0.9fr] gap-6">\n                        <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4">\n                            <div class="flex items-center justify-between gap-4">\n                                <div>\n                                    <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Pipeline Stacks</div>\n                                    <div class="text-sm mt-1" style="color: var(--text-muted)">Name them, order them, and run more than one stack in parallel across the parts of the fleet you choose.</div>\n                                </div>\n                                <button type="button" onclick="addPipelineStack()" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Add Stack</button>\n                            </div>\n                            <div class="space-y-3">\n                                ${(_pipelineStacks || []).map((e, t) => `\n                                    <div class="rounded-xl border px-4 py-4 ${e.id === _activePipelineStackId ? "border-blue-400/40 bg-blue-500/[0.05]" : "border-white/10 bg-black/20"}">\n                                        <div class="grid md:grid-cols-[1fr_90px_auto_auto] gap-3 items-center">\n                                            <input class="ink-input rounded-lg px-3 py-2 text-sm font-semibold" value="${(e.name || "").replace(/"/g, "&quot;")}" onchange="updateActiveStackField.call(null, 'noop', null); const s = _pipelineStacks.find(x => x.id === '${e.id}'); if (s) { s.name = this.value || 'Unnamed Stack'; renderPipelineStackManager(); }">\n                                            <input type="number" min="1" class="ink-input rounded-lg px-3 py-2 text-sm font-mono-cli" value="${e.order || t + 1}" onchange="const s = _pipelineStacks.find(x => x.id === '${e.id}'); if (s) { s.order = Number(this.value || ${t + 1}); _pipelineStacks.sort((a,b)=>(a.order||9999)-(b.order||9999)); renderPipelineStackManager(); }">\n                                            <button type="button" onclick="selectPipelineStack('${e.id}')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">${e.id === _activePipelineStackId ? "Editing" : "Edit"}</button>\n                                            <button type="button" onclick="removePipelineStack('${e.id}')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Remove</button>\n                                        </div>\n                                    </div>\n                                `).join("")}\n                            </div>\n                        </div>\n                        <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4">\n                            <div>\n                                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Deployment Targeting</div>\n                                <div class="text-sm mt-1" style="color: var(--text-muted)">Choose where the active stack runs: everywhere, only certain APIs, or only certain launcher hosts.</div>\n                            </div>\n                            ${r ? `\n                                <div class="grid grid-cols-3 gap-2">\n                                    ${["all", "agents", "launcher_hosts"].map((e) => `<button type="button" onclick="updateActiveStackField('target_mode', '${e}')" class="rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest border ${r.target_mode === e ? "border-blue-400/40 text-blue-300 bg-blue-500/[0.08]" : "border-white/10 text-slate-400 bg-black/20"}">${"all" === e ? "All APIs" : "agents" === e ? "Certain APIs" : "Certain Launchers"}</button>`).join("")}\n                                </div>\n                                <div class="rounded-xl border border-white/10 bg-black/20 p-4 space-y-3">\n                                    ${"agents" === r.target_mode ? `\n                                        <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Selected APIs</div>\n                                        <div class="flex flex-wrap gap-2">${o.map((e) => `<button type="button" onclick="toggleStackTarget('agent', '${e.agent_id}')" class="px-3 py-2 rounded-lg text-[10px] font-bold border ${(r.target_agent_ids || []).includes(e.agent_id) ? "border-blue-400/40 text-blue-300 bg-blue-500/[0.08]" : "border-white/10 text-slate-400 bg-transparent"}">${e.name}</button>`).join("") || '<div class="text-xs" style="color: var(--text-muted)">No APIs available yet.</div>'}</div>\n                                    ` : "launcher_hosts" === r.target_mode ? `\n                                        <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Selected Launchers</div>\n                                        <div class="flex flex-wrap gap-2">${n.map((e) => `<button type="button" onclick="toggleStackTarget('launcher', '${e.host_id}')" class="px-3 py-2 rounded-lg text-[10px] font-bold border ${(r.target_launcher_host_ids || []).includes(e.host_id) ? "border-blue-400/40 text-blue-300 bg-blue-500/[0.08]" : "border-white/10 text-slate-400 bg-transparent"}">${e.name}</button>`).join("") || '<div class="text-xs" style="color: var(--text-muted)">No launchers available yet.</div>'}</div>\n                                    ` : '\n                                        <div class="text-sm" style="color: var(--text-muted)">This stack is active across every API in the workspace unless a more specific stack target is used alongside it.</div>\n                                    '}\n                                </div>\n                            ` : ""}\n                        </div>\n                    </div>\n                </div>`;
+        }
+        function renderPipelineCatalog() {
+          const e = document.getElementById("sec-pipeline-catalog");
+          if (!e) return;
+          const t = SECURITY_STAGE_LIBRARY.reduce(
+            (e, t) => ((e[t.category] = e[t.category] || []).push(t), e),
+            {},
+          );
+          e.innerHTML = Object.entries(t)
+            .map(
+              ([e, t]) =>
+                `\n                <div class="space-y-3">\n                    <div class="text-[10px] uppercase tracking-widest font-bold px-1" style="color: var(--text-subtle)">${e}</div>\n                    ${t.map((e) => `\n                        <div class="rounded-xl border p-4" style="border-color: var(--table-border); background: var(--nav-hover)">\n                            <div class="flex items-start justify-between gap-3">\n                                <div>\n                                    <div class="text-sm" style="color: var(--text-main)">${e.title}</div>\n                                    <div class="text-xs mt-2" style="color: var(--text-muted)">${e.description}</div>\n                                </div>\n                                <div class="flex gap-2 shrink-0">\n                                    <button onclick="addPipelineStage('telemetry', '${e.id}')" class="btn-secondary px-2.5 py-1.5 rounded text-[9px] font-bold uppercase tracking-widest">+ Capture</button>\n                                    <button onclick="addPipelineStage('response', '${e.id}')" class="btn-secondary px-2.5 py-1.5 rounded text-[9px] font-bold uppercase tracking-widest">+ Response</button>\n                                </div>\n                            </div>\n                        </div>\n                    `).join("")}\n                </div>\n            `,
+            )
+            .join("");
+        }

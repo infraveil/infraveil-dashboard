@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "template_root": "html_templates",
+  "note": "Render each listed Jinja template, join with newline, then append one newline. Preserve script order and shared classic scope.",
+  "assets": {
+    "console.css": {
+      "content_type": "text/css",
+      "templates": [
+        "console/styles/tokens-surfaces.css.j2",
+        "console/styles/logs-navigation.css.j2",
+        "console/styles/inputs-editor-wizard.css.j2",
+        "console/styles/assistant-responsive.css.j2",
+        "console/styles/selection-controls.css.j2",
+        "console/styles/tour-motion-dialogs.css.j2"
+      ]
+    },
+    "console.js": {
+      "content_type": "application/javascript",
+      "templates": [
+        "console/controllers/foundation-auth.js.j2",
+        "console/controllers/workspace-navigation-fleet.js.j2",
+        "console/controllers/state-transport-billing.js.j2",
+        "console/controllers/fleet-queries-revisions.js.j2",
+        "console/controllers/api-surface-app-logs.js.j2",
+        "console/controllers/operations-workloads.js.j2",
+        "console/controllers/pipeline-state.js.j2",
+        "console/controllers/pipeline-stages.js.j2",
+        "console/controllers/pipeline-learning.js.j2",
+        "console/controllers/security-policy.js.j2",
+        "console/controllers/runtime-observability.js.j2",
+        "console/controllers/polling-account.js.j2",
+        "console/controllers/account-integrations.js.j2",
+        "console/controllers/assistant.js.j2",
+        "console/controllers/exports-remediation-commands.js.j2",
+        "console/controllers/editor.js.j2",
+        "console/controllers/demo-tour.js.j2",
+        "console/controllers/deployment-onboarding.js.j2",
+        "console/controllers/passkey-lifecycle.js.j2"
+      ]
+    },
+    "release-approval.js": {
+      "content_type": "application/javascript",
+      "templates": [
+        "console/controllers/release-approval-setup.js.j2"
+      ]
+    },
+    "runtime-update.js": {
+      "content_type": "application/javascript",
+      "templates": [
+        "console/controllers/runtime-update-toast.js.j2"
+      ]
+    },
+    "status-page.js": {
+      "content_type": "application/javascript",
+      "templates": [
+        "console/controllers/status-page-link.js.j2"
+      ]
+    },
+    "dialog.js": {
+      "content_type": "application/javascript",
+      "templates": [
+        "console/controllers/dialog.js.j2"
+      ]
+    }
+  }
+}

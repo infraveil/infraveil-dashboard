@@ -1,0 +1,84 @@
+<div
+            id="view-status-page"
+            class="view-section hidden max-w-7xl mx-auto space-y-6"
+          >
+            <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
+              <div>
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Public Status
+                </div>
+                <h2 class="text-2xl font-light mt-2" style="color: var(--text-main)">
+                  Customer-facing service status
+                </h2>
+                <p class="text-sm mt-2 max-w-3xl" style="color: var(--text-muted)">
+                  Share component health and incident updates without exposing
+                  internal logs. Status is derived from received runtime reports.
+                </p>
+              </div>
+              <span class="inline-flex items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Auto Sync
+              </span>
+            </div>
+            <div class="acrylic-panel rounded-2xl p-6" id="status-link-card">
+              <div class="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">
+                    Shareable public link
+                  </div>
+                  <p class="text-sm mt-1 max-w-2xl" style="color: var(--text-muted)">
+                    Anyone with the link can view component status without signing in.
+                    Disable sharing or rotate the link to revoke access through the old URL.
+                  </p>
+                </div>
+                <button
+                  id="status-link-enable"
+                  onclick="generateStatusLink()"
+                  class="btn-primary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest shrink-0"
+                >
+                  Generate link
+                </button>
+              </div>
+              <div id="status-link-row" class="hidden mt-4 flex items-center gap-3 flex-wrap">
+                <input
+                  id="status-link-input"
+                  readonly
+                  onclick="this.select()"
+                  class="flex-1 min-w-[260px] rounded-lg px-4 py-3 text-sm"
+                  style="background: rgba(0,0,0,0.35); border: 1px solid var(--panel-border); color: var(--text-main); font-family: ui-monospace, monospace"
+                />
+                <button onclick="copyStatusLink()" class="btn-secondary px-4 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest">Copy</button>
+                <a id="status-link-open" href="#" target="_blank" rel="noopener" class="btn-secondary px-4 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest">Open</a>
+                <button onclick="rotateStatusLink()" class="btn-secondary px-4 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest">Revoke &amp; regenerate</button>
+                <button onclick="disableStatusLink()" class="btn-danger px-4 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest">Disable</button>
+              </div>
+            </div>
+            <div
+              id="status-page-shell"
+              class="acrylic-panel rounded-2xl overflow-hidden min-h-[360px]"
+            >
+              <div class="p-8 border-b" style="border-color: var(--table-border)">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Public Status Preview</div>
+                    <h3 class="text-3xl text-white mt-2">No status to show yet</h3>
+                    <p class="text-sm mt-2" style="color: var(--text-muted)">Once your workloads are connected, this shows the simple up/down status your customers would see — built automatically from live health, with no internal details exposed.</p>
+                  </div>
+                  
+                </div>
+              </div>
+              <div class="p-6 space-y-4">
+                <div class="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4">
+                  <div class="text-sm text-white">Workspace runtime</div>
+                  <div class="text-xs text-slate-300">Not connected yet</div>
+                </div>
+                <div class="rounded-xl border border-white/10 bg-black/20 p-5">
+                  <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Latest Update</div>
+                  <div class="text-sm text-white mt-2">Nothing to report right now.</div>
+                  <div class="text-xs mt-2" style="color: var(--text-muted)">When something changes, the customer-facing status update appears here.</div>
+                </div>
+              </div>
+            </div>
+          </div>

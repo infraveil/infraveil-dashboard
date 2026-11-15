@@ -1,0 +1,191 @@
+<div
+            id="view-support"
+            class="view-section hidden max-w-6xl mx-auto space-y-6"
+          >
+            <div
+              class="acrylic-panel rounded-2xl p-8 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6"
+            >
+              <div class="max-w-2xl">
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Support Center
+                </div>
+                <h2 class="text-2xl text-white mt-2">
+                  Talk to an operator without leaving the dashboard
+                </h2>
+                <p class="text-sm mt-2" style="color: var(--text-muted)">
+                  Open a live support ticket with a quick summary, urgency, and
+                  the full context. When the admin replies, it shows up here and
+                  can also notify the workspace email.
+                </p>
+              </div>
+              <div class="grid grid-cols-2 gap-3 min-w-[260px]">
+                <div
+                  class="rounded-2xl border p-4"
+                  style="
+                    border-color: var(--table-border);
+                    background: var(--nav-hover);
+                  "
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Open Tickets
+                  </div>
+                  <div
+                    id="support-open-count"
+                    class="text-3xl font-mono-cli mt-3"
+                    style="color: var(--text-main)"
+                  >
+                    0
+                  </div>
+                </div>
+                <div
+                  class="rounded-2xl border p-4"
+                  style="
+                    border-color: var(--table-border);
+                    background: var(--nav-hover);
+                  "
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Unread Replies
+                  </div>
+                  <div
+                    id="support-unread-count"
+                    class="text-3xl font-mono-cli mt-3 text-blue-300"
+                  >
+                    0
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 xl:grid-cols-[0.95fr_1.05fr] gap-6">
+              <div class="acrylic-panel rounded-2xl p-6 space-y-5">
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Open A Ticket
+                  </div>
+                  <div class="text-sm mt-2" style="color: var(--text-muted)">
+                    Send a real support request instead of loose feedback.
+                    Critical tickets are prioritized automatically on the admin
+                    side, and replies use your workspace email automatically.
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      class="block text-[10px] uppercase tracking-widest font-bold mb-2"
+                      style="color: var(--text-subtle)"
+                      >Urgency</label
+                    >
+                    <select
+                      id="support-urgency"
+                      class="ink-input w-full rounded-lg px-4 py-3 text-sm"
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                      <option value="low">Low</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[10px] uppercase tracking-widest font-bold mb-2"
+                      style="color: var(--text-subtle)"
+                      >Reply Via</label
+                    >
+                    <select
+                      id="support-contact-method"
+                      class="ink-input w-full rounded-lg px-4 py-3 text-sm"
+                    >
+                      <option value="email_and_dashboard">
+                        Email + dashboard
+                      </option>
+                      <option value="dashboard">Dashboard only</option>
+                      <option value="email">Email only</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label
+                    class="block text-[10px] uppercase tracking-widest font-bold mb-2"
+                    style="color: var(--text-subtle)"
+                    >Category</label
+                  >
+                  <select
+                    id="support-category"
+                    class="ink-input w-full rounded-lg px-4 py-3 text-sm"
+                  >
+                    <option value="access">Access / billing</option>
+                    <option value="security">Security / protection</option>
+                    <option value="deployment">Deployment / launcher</option>
+                    <option value="bug">Bug / dashboard issue</option>
+                    <option value="general">General question</option>
+                  </select>
+                </div>
+                <div>
+                  <label
+                    class="block text-[10px] uppercase tracking-widest font-bold mb-2"
+                    style="color: var(--text-subtle)"
+                    >Quick Description</label
+                  >
+                  <input
+                    id="support-summary"
+                    class="ink-input w-full rounded-lg px-4 py-3 text-sm"
+                    placeholder="Rate limit controls are resetting during edits"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-[10px] uppercase tracking-widest font-bold mb-2"
+                    style="color: var(--text-subtle)"
+                    >Full Detail</label
+                  >
+                  <textarea
+                    id="support-description"
+                    rows="7"
+                    class="ink-input w-full rounded-lg px-4 py-3 text-sm"
+                    placeholder="What happened, what you expected, steps to reproduce, and anything urgent the operator should know."
+                  ></textarea>
+                </div>
+                <button
+                  onclick="submitSupportTicket()"
+                  class="btn-primary w-full px-6 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Start Live Ticket
+                </button>
+              </div>
+              <div class="acrylic-panel rounded-2xl p-6 space-y-4">
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold"
+                      style="color: var(--text-subtle)"
+                    >
+                      Live Ticket Feed
+                    </div>
+                    <div class="text-sm mt-2" style="color: var(--text-muted)">
+                      Replies from admin show here and unread updates are
+                      highlighted.
+                    </div>
+                  </div>
+                  <span class="inline-flex items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Auto Sync
+                  </span>
+                </div>
+                <div
+                  id="support-ticket-list"
+                  class="space-y-4 max-h-[720px] overflow-y-auto custom-scroll"
+                ></div>
+              </div>
+            </div>
+          </div>

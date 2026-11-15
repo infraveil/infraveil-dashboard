@@ -1,0 +1,316 @@
+<div
+            id="view-overview"
+            class="view-section max-w-7xl mx-auto space-y-8"
+          >
+            <div
+              class="acrylic-panel rounded-[1.75rem] p-6 md:p-8 overflow-hidden relative"
+            >
+              <div class="relative flex flex-col xl:flex-row xl:items-end xl:justify-between gap-6">
+                <div class="max-w-4xl">
+                  <div
+                    class="text-[10px] uppercase tracking-[0.28em] font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Operations Home
+                  </div>
+                  <h2 class="text-3xl md:text-4xl text-white mt-3">
+                    Your fleet at a glance
+                  </h2>
+                  <p class="text-sm md:text-base mt-3 leading-relaxed" style="color: var(--text-muted)">
+                    Review application health, server assignments, and recent activity.
+                    Select a server or workload in the fleet navigator to focus
+                    your investigation and available controls.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <section id="operations-fleet-navigator" class="iv-fleet-navigator" aria-label="Fleet navigator">
+              <header class="iv-fleet-navigator-header">
+                <div class="iv-fleet-navigator-title">
+                  <span class="iv-section-label">Fleet Navigator</span>
+                  <div class="iv-fleet-breadcrumb" id="iv-fleet-breadcrumb">
+                    <button type="button" id="iv-fleet-back" class="iv-icon-button" title="Back to fleet" aria-label="Back to fleet" disabled>
+                      <i data-lucide="arrow-left"></i>
+                    </button>
+                    <strong id="iv-fleet-scope-title">Entire fleet</strong>
+                    <span id="iv-fleet-scope-meta">Loading topology</span>
+                  </div>
+                </div>
+                <div class="iv-fleet-navigator-actions">
+                  <label class="iv-fleet-search">
+                    <i data-lucide="search"></i>
+                    <input id="iv-fleet-search" type="search" placeholder="Find a server or workload" aria-label="Find a server or workload" autocomplete="off" />
+                  </label>
+                  <button type="button" id="iv-fleet-fit" class="iv-icon-button" title="Fit topology" aria-label="Fit topology">
+                    <i data-lucide="scan"></i>
+                  </button>
+                </div>
+              </header>
+              <div class="iv-fleet-navigator-body">
+                <div class="iv-fleet-stage" id="iv-fleet-stage" tabindex="0">
+                  <canvas id="iv-fleet-canvas" aria-label="Interactive launcher and workload topology"></canvas>
+                  <div id="iv-fleet-tooltip" class="iv-fleet-tooltip" hidden></div>
+                  <div id="iv-fleet-empty" class="iv-fleet-stage-empty" hidden>
+                    <i data-lucide="network"></i>
+                    <strong>No servers connected</strong>
+                    <span>Connect a server to view its assigned workloads.</span>
+                  </div>
+                  <div class="iv-fleet-canvas-key" aria-hidden="true">
+                    <span><i class="is-online"></i>Online</span>
+                    <span><i class="is-warning"></i>Attention</span>
+                    <span><i class="is-offline"></i>Offline</span>
+                  </div>
+                </div>
+                <aside id="iv-fleet-inspector" class="iv-fleet-inspector" aria-live="polite"></aside>
+              </div>
+            </section>
+            <div class="grid grid-cols-1 lg:grid-cols-[1.5fr_0.8fr] gap-6">
+              <div class="acrylic-panel rounded-2xl p-6">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold"
+                      style="color: var(--text-subtle)"
+                    >
+                      Operational Health
+                    </div>
+                    <h2 class="text-2xl text-white mt-2">Resource overview</h2>
+                    <p class="text-sm mt-2" style="color: var(--text-muted)">
+                      Reported CPU, memory, storage, and runtime errors.
+                      These measurements do not set resource limits.
+                    </p>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+                  <div
+                    class="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+                  >
+                    <div
+                      class="text-[9px] uppercase tracking-widest"
+                      style="color: var(--text-subtle)"
+                    >
+                      CPU Avg
+                    </div>
+                    <div
+                      id="overview-cpu"
+                      class="text-2xl font-mono-cli text-white mt-2"
+                    >
+                      0%
+                    </div>
+                  </div>
+                  <div
+                    class="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+                  >
+                    <div
+                      class="text-[9px] uppercase tracking-widest"
+                      style="color: var(--text-subtle)"
+                    >
+                      Memory Avg
+                    </div>
+                    <div
+                      id="overview-memory"
+                      class="text-2xl font-mono-cli text-white mt-2"
+                    >
+                      0%
+                    </div>
+                  </div>
+                  <div
+                    class="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+                  >
+                    <div
+                      class="text-[9px] uppercase tracking-widest"
+                      style="color: var(--text-subtle)"
+                    >
+                      Storage Status
+                    </div>
+                    <div
+                      id="overview-storage"
+                      class="text-2xl font-mono-cli text-white mt-2"
+                    >
+                      Live
+                    </div>
+                  </div>
+                  <div
+                    class="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+                  >
+                    <div
+                      class="text-[9px] uppercase tracking-widest"
+                      style="color: var(--text-subtle)"
+                    >
+                      Error Signals
+                    </div>
+                    <div
+                      id="overview-errors"
+                      class="text-2xl font-mono-cli text-white mt-2"
+                    >
+                      0
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="acrylic-panel rounded-2xl p-6">
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Usage Visibility
+                </div>
+                <div class="space-y-4 mt-5">
+                  <div>
+                    <div class="flex justify-between text-xs mb-1">
+                      <span style="color: var(--text-muted)"
+                        >Requests observed</span
+                      ><span
+                        id="overview-usage-requests"
+                        class="font-mono-cli text-white"
+                        >0</span
+                      >
+                    </div>
+                    <div class="h-2 rounded-full bg-white/5 overflow-hidden">
+                      <div
+                        id="overview-usage-requests-bar"
+                        class="h-full bg-blue-500 rounded-full transition-all"
+                        style="width: 0%"
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between text-xs mb-1">
+                      <span style="color: var(--text-muted)"
+                        >Security signals</span
+                      ><span
+                        id="overview-usage-security"
+                        class="font-mono-cli text-white"
+                        >0</span
+                      >
+                    </div>
+                    <div class="h-2 rounded-full bg-white/5 overflow-hidden">
+                      <div
+                        id="overview-usage-security-bar"
+                        class="h-full bg-emerald-500 rounded-full transition-all"
+                        style="width: 0%"
+                      ></div>
+                    </div>
+                  </div>
+                  <div
+                    class="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-[11px] leading-relaxed"
+                    style="color: var(--text-subtle)"
+                  >
+                    Activity reported to this workspace. These indicators do not
+                    represent billing limits.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="acrylic-panel rounded-2xl p-1">
+              <div
+                class="rounded-xl p-8"
+                style="
+                  background: var(--nav-hover);
+                  border: 1px solid var(--table-border);
+                "
+              >
+                <div class="flex justify-between items-end mb-6">
+                  <span
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                    >Recent Request Pressure</span
+                  >
+                  <div class="font-mono-cli text-xl text-blue-500">
+                    <span id="stat-throughput">0</span>
+                    <span class="text-xs" style="color: var(--text-muted)"
+                      >requests / 5m</span
+                    >
+                  </div>
+                </div>
+                <div
+                  id="overview-chart"
+                  class="h-48 flex items-end gap-1 w-full border-b pb-1"
+                  style="border-color: var(--table-border)"
+                ></div>
+                <div
+                  class="flex justify-between text-[9px] uppercase tracking-widest mt-2 font-mono-cli"
+                  style="color: var(--text-subtle)"
+                >
+                  <span>-5m</span> <span>-2.5m</span> <span>Now</span>
+                </div>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div class="acrylic-panel p-8 rounded-2xl">
+                <div class="flex justify-between items-start">
+                  <span
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                    >Recent Requests</span
+                  >
+                  <i
+                    data-lucide="activity"
+                    class="w-4 h-4"
+                    style="color: var(--text-subtle)"
+                  ></i>
+                </div>
+                <div
+                  id="stat-events"
+                  class="mt-4 text-4xl font-light font-mono-cli"
+                  style="color: var(--text-main)"
+                >
+                  -
+                </div>
+                <div class="text-[10px] mt-2" style="color: var(--text-subtle)">
+                  Requests seen in the last 5 minutes
+                </div>
+              </div>
+              <div class="acrylic-panel p-8 rounded-2xl">
+                <div class="flex justify-between items-start">
+                  <span
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                    >Connected Agents</span
+                  >
+                  <i
+                    data-lucide="cpu"
+                    class="w-4 h-4"
+                    style="color: var(--text-subtle)"
+                  ></i>
+                </div>
+                <div
+                  id="stat-agents"
+                  class="mt-4 text-4xl font-light font-mono-cli"
+                  style="color: var(--text-main)"
+                >
+                  0
+                  <span class="text-xl" style="color: var(--text-subtle)"
+                    >Connected</span
+                  >
+                </div>
+                <div class="text-[10px] mt-2" style="color: var(--text-subtle)">
+                  Agent heartbeats; app health is shown separately
+                </div>
+              </div>
+              <div class="acrylic-panel p-8 rounded-2xl">
+                <div class="flex justify-between items-start">
+                  <span
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                    >Live Risk Signals</span
+                  >
+                  <i
+                    data-lucide="server"
+                    class="w-4 h-4"
+                    style="color: var(--text-subtle)"
+                  ></i>
+                </div>
+                <div
+                  id="stat-uptime"
+                  class="mt-4 text-4xl font-light font-mono-cli"
+                  style="color: var(--text-main)"
+                >
+                  0
+                </div>
+                <div class="text-[10px] mt-2" style="color: var(--text-subtle)">
+                  Security &amp; health alerts right now
+                </div>
+              </div>
+            </div>
+          </div>

@@ -1,0 +1,822 @@
+        function renderSecurityUI() {
+          if (!_securityPolicy) return;
+          const e = _getEffectiveCfg(),
+            t = _securityPolicy.global || {};
+          (ensurePipelineStateFromPolicy(t),
+            (document.getElementById("sec-rl-enabled").checked =
+              !!e.rate_limit_enabled));
+          const n = e.rate_limit_rpm || 120;
+          ((document.getElementById("sec-rl-rpm").value = n),
+            (document.getElementById("sec-rl-rpm-val").textContent = n));
+          const o = e.rate_limit_burst || 30;
+          ((document.getElementById("sec-rl-burst").value = o),
+            (document.getElementById("sec-rl-burst-val").textContent = o),
+            (document.getElementById("sec-ab-enabled").checked =
+              !!e.auto_block_enabled),
+            (document.getElementById("sec-ab-threshold").value =
+              e.auto_block_threshold || 50),
+            (document.getElementById("sec-ab-window").value =
+              e.auto_block_window_seconds || 60));
+          const r = e.auto_block_duration_minutes || 30;
+          ((document.getElementById("sec-ab-duration").value = r),
+            (document.getElementById("sec-ab-dur-val").textContent =
+              r >= 60 ? Math.floor(r / 60) + "h " + (r % 60) + "m" : r + "m"),
+            (document.getElementById("sec-max-body-bytes").value =
+              e.max_body_bytes || 262144),
+            (document.getElementById("sec-blocked-methods").value = (
+              e.blocked_methods || ["TRACE", "TRACK", "CONNECT"]
+            ).join(", ")));
+          const waf = e.waf || {},
+            compiledWaf = e.compiled_waf || {},
+            wafInspection = waf.inspection || compiledWaf.inspection || {};
+          document.getElementById("sec-rl-enforcement").value =
+            e.rate_limit_enforcement_mode || "enforce";
+          document.getElementById("sec-rl-burst-multiplier").value =
+            e.rate_limit_burst_multiplier || 1;
+          document.getElementById("sec-rl-exempt-paths").value = (
+            e.rate_limit_exempt_paths || []
+          ).join("\n");
+          document.getElementById("sec-rl-whitelisted-paths").value = (
+            e.rate_limit_whitelisted_paths || []
+          ).join("\n");
+          document.getElementById("sec-rl-bypass-ips").value = (
+            e.rate_limit_bypass_ips || []
+          ).join("\n");
+          document.getElementById("sec-waf-enabled").checked = !!waf.enabled;
+          document.getElementById("sec-waf-mode").value = waf.mode || "off";
+          document.getElementById("sec-waf-sensitivity").value =
+            waf.sensitivity || "balanced";
+          document.getElementById("sec-waf-threshold").value =
+            waf.block_threshold || 60;
+          document.getElementById("sec-waf-package").value =
+            (waf.managed_rule_packages || compiledWaf.managed_rule_packages || [])[0] || "";
+          document.getElementById("sec-waf-inspection-bytes").value =
+            wafInspection.inspect_body_bytes ?? 262144;
+          document.getElementById("sec-waf-uninspected-action").value =
+            wafInspection.uninspected_body_action || "block";
+          document.getElementById("sec-waf-decode-rounds").value =
+            wafInspection.decode_rounds ?? 2;
+          document.getElementById("sec-waf-custom-rules").value = JSON.stringify(
+            waf.custom_rules || [],
+            null,
+            2,
+          );
+          document.getElementById("sec-waf-exclusions").value = JSON.stringify(
+            waf.exclusions || [],
+            null,
+            2,
+          );
+          document.getElementById("sec-waf-control-paths").value = (
+            waf.control_plane_exempt_paths || compiledWaf.control_plane_exempt_paths || []
+          ).join("\n");
+          document.getElementById("sec-waf-revision").textContent = compiledWaf.revision
+            ? `rev ${compiledWaf.revision.slice(0, 12)}`
+            : "not compiled";
+          const s = t.blocked_ips || [],
+            a = t.whitelisted_ips || [];
+          ((document.getElementById("sec-stat-blocked").textContent = s.length),
+            (document.getElementById("sec-stat-whitelisted").textContent =
+              a.length),
+            (document.getElementById("sec-ov-blocked").textContent = window.__ivSecurityOverview?.outcome_coverage ? window.__ivSecurityOverview.denied : "—"));
+          let i =
+            s.length +
+            (e.rate_limit_enabled ? 1 : 0) +
+            (e.auto_block_enabled ? 1 : 0) +
+            (e.geo_block_enabled ? 1 : 0) +
+            (e.honeypot_enabled ? 1 : 0);
+          document.getElementById("sec-ov-rules").textContent = i;
+          const l = !!e.rate_limit_enabled,
+            c = !!e.auto_block_enabled,
+            d = !!e.geo_block_enabled,
+            u = !!e.honeypot_enabled,
+            p = document.getElementById("sec-ov-mode"),
+            m = [l, c, d, u].filter(Boolean).length;
+          m >= 3
+            ? ((p.textContent = "Enforcing"), (p.style.color = "#34d399"))
+            : m >= 1
+              ? ((p.textContent = "Partial"), (p.style.color = "#fbbf24"))
+              : ((p.textContent = "Permissive"), (p.style.color = "#f87171"));
+          window.ivRenderSecurityOverview?.(window.__ivSecurityOverview);
+          const f = {
+            bruteforce: 0,
+            scanning: 0,
+            injection: 0,
+            ddos: 0,
+            enumeration: 0,
+          };
+          ((_securityEvents || []).forEach((e) => {
+            const t = e.pattern;
+            (t && void 0 !== f[t] && f[t]++,
+              "honeypot" === e.type && f.scanning++,
+              false /* A rate-limit event alone does not establish a DDoS attack. */);
+          }),
+            (_securityInsights?.summary?.pattern_detections || []).forEach(
+              (e) => {
+                const t = e.kind || "",
+                  n = e.count || 0;
+                "path" === t
+                  ? ((f.enumeration += n), (f.scanning += n))
+                  : "user-agent" === t
+                    ? (f.scanning += n)
+                    : "payload" === t
+                      ? (f.injection += n)
+                      : "header" === t && (f.enumeration += n);
+              },
+            ),
+            Object.entries(f).forEach(([e, t]) => {
+              const n = document.getElementById("sec-pat-" + e);
+              n && (n.textContent = t);
+            }),
+            renderIpTable(s, a),
+            renderTopThreats(),
+            (document.getElementById("sec-geo-enabled").checked =
+              !!e.geo_block_enabled));
+          const b = document.getElementById("sec-geo-mode");
+          (b && (b.value = e.geo_block_mode || "blocklist"),
+            (document.getElementById("sec-hp-enabled").checked =
+              !!e.honeypot_enabled));
+          const v =
+              e.honeypot_actions ||
+              (e.honeypot_action ? [e.honeypot_action] : []),
+            x = document.getElementById("sec-hp-act-block");
+          x && (x.checked = v.includes("block"));
+          const w = document.getElementById("sec-hp-act-tarpit");
+          w && (w.checked = v.includes("tarpit"));
+          const _ = document.getElementById("sec-hp-act-deceive");
+          _ && (_.checked = v.includes("deceive"));
+          const T = document.getElementById("sec-hp-fake-enabled");
+          T &&
+            (T.checked =
+              !!e.honeypot_fake_response_enabled || v.includes("deceive"));
+          const k = document.getElementById("sec-hp-fake-body");
+          // Prefill an actual default body (matches the agent's fallback) so "Serve Fake Data"
+          // serves what you SEE. Previously the value was empty and only a placeholder showed,
+          // so a saved-empty body looked configured but served the agent default. (BUG-5)
+          k && (k.value = e.honeypot_fake_response_body || '{"status":"ok","version":"1.0.0","debug":false}');
+          const E = e.honeypot_tarpit_delay || 15;
+          ((document.getElementById("sec-hp-tarpit-delay").value = E),
+            (document.getElementById("sec-hp-tarpit-val").textContent =
+              E + "s"),
+            lucide.createIcons());
+        }
+        function parseSecurityEventDate(e) {
+          const t = e?.time || e?.timestamp || e?.created_at || "";
+          if (!t) return null;
+          const n = new Date(t);
+          return Number.isNaN(n.getTime()) ? null : n;
+        }
+        function classifySecurityEvent(e) {
+          const t = String(e?.type || e?.event_type || e?.message || "").toLowerCase();
+          return t.includes("block") || t.includes("geo")
+            ? "blocked"
+            : t.includes("honeypot") || t.includes("ratelimit") || t.includes("rate_limit") || t.includes("rate limit")
+              ? "flagged"
+              : "observed";
+        }
+        function renderTrafficChart() {
+          const e = document.getElementById("sec-traffic-chart");
+          if (!e) return;
+          const overview = window.__ivSecurityOverview;
+          if (overview?.available && Array.isArray(overview.buckets)) {
+            const maximum = Math.max(1, ...overview.buckets.map((row) => Number(row.requests) || 0));
+            e.innerHTML = overview.buckets.map((row) => {
+              const count = Number(row.requests) || 0, denied = Number(row.denied) || 0;
+              const label = new Date(Number(row.start) * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+              return `<div class="flex-1 flex flex-col justify-end" title="${escapeHtml(label)}: ${count} requests; ${denied} denied"><div style="height:${Math.max(0, count - denied) / maximum * 176}px;background:var(--chart-one)"></div><div style="height:${denied / maximum * 176}px;background:var(--signal-critical)"></div></div>`;
+            }).join("");
+            return;
+          }
+          e.textContent = "Traffic totals are unavailable for this scope. Refresh to retry.";
+          return;
+        }
+        function renderTopThreats() {
+          const e = document.getElementById("sec-top-threats"),
+            t = {};
+          (_securityEvents || []).forEach((e) => {
+            e.ip && (t[e.ip] = (t[e.ip] || 0) + 1);
+          });
+          const n = Object.entries(t)
+            .sort((e, t) => t[1] - e[1])
+            .slice(0, 5);
+          0 !== n.length
+            ? (e.innerHTML = n
+                .map(([e, t], o) => {
+                  const r = n[0][1];
+                  return `<div class="flex items-center gap-3">\n                    <span class="font-mono-cli text-xs text-red-400 w-28 shrink-0">${e}</span>\n                    <div class="flex-1 h-2 rounded-full bg-gray-800"><div class="h-2 rounded-full bg-red-500/60" style="width:${Math.max(5, (t / r) * 100)}%"></div></div>\n                    <span class="font-mono-cli text-xs w-8 text-right" style="color:var(--text-muted)">${t}</span>\n                </div>`;
+                })
+                .join(""))
+            : (e.innerHTML =
+                '<div class="text-xs text-center py-6" style="color: var(--text-subtle)">No threats detected</div>');
+        }
+        function renderIpTable(e, t) {
+          const tbody = document.getElementById("sec-ip-tbody");
+          const blocked = Array.isArray(e) ? e : [];
+          const whitelisted = Array.isArray(t) ? t : [];
+          if (blocked.length === 0) {
+            tbody.innerHTML =
+              '<tr><td colspan="6" class="px-5 py-8 text-center text-xs" style="color: var(--text-subtle)"><div class="flex flex-col items-center gap-2"><i data-lucide="shield-check" class="w-6 h-6 opacity-40"></i>No blocked IPs</div></td></tr>';
+          } else {
+            tbody.innerHTML = blocked
+              .map((entry) => {
+                const ip = String(entry.ip || "").replace(/[^0-9a-fA-F:.]/g, "");
+                const agentId = String(entry.agent_id || "").replace(/[^a-zA-Z0-9_-]/g, "");
+                const agentLabel = agentId
+                  ? agentNames[agentId] || agentId.substring(0, 8)
+                  : "Global";
+                const blockedAt = entry.blocked_at
+                  ? new Date(entry.blocked_at).toLocaleString()
+                  : "-";
+                return `<tr class="hover:bg-white/5 transition-colors" style="border-top: 1px solid var(--table-border)">
+                        <td class="px-5 py-2.5"><span class="font-mono-cli text-sm text-red-400">${escapeHtml(ip)}</span></td>
+                        <td class="px-5 py-2.5"><span class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-red-400"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Blocked</span></td>
+                        <td class="px-5 py-2.5 text-xs" style="color:var(--text-muted)">${escapeHtml(agentLabel)}</td>
+                        <td class="px-5 py-2.5 text-xs" style="color:var(--text-muted)">${escapeHtml(entry.reason || "-")}</td>
+                        <td class="px-5 py-2.5 text-xs font-mono-cli" style="color:var(--text-subtle)">${escapeHtml(blockedAt)}</td>
+                        <td class="px-5 py-2.5 text-right"><button onclick="promptUnblockIp('${ip}',${agentId ? "'" + agentId + "'" : "null"})" class="text-[10px] uppercase tracking-widest font-bold text-gray-500 hover:text-emerald-400 transition-colors">Unblock</button></td>
+                    </tr>`;
+              })
+              .join("");
+          }
+          const tags = document.getElementById("sec-whitelist-tags");
+          if (whitelisted.length === 0) {
+            tags.innerHTML =
+              '<div class="text-xs px-3 py-1.5 rounded-lg" style="color:var(--text-subtle);border:1px dashed var(--table-border)">No whitelisted IPs</div>';
+          } else {
+            tags.innerHTML = whitelisted
+              .map((value) => {
+                const ip = String(value || "").replace(/[^0-9a-fA-F:.]/g, "");
+                return `<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono-cli" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);color:#34d399;">${escapeHtml(ip)}<button onclick="promptRemoveWhitelistIp('${ip}')" class="hover:text-white transition-colors ml-1"><i data-lucide="x" class="w-3 h-3"></i></button></div>`;
+              })
+              .join("");
+          }
+          lucide.createIcons();
+        }
+        function renderGeoCountryList() {
+          const e = document.getElementById("sec-geo-country-list"),
+            t = _securityPolicy?.global?.geo_block_countries || [];
+          e.innerHTML = SEC_COUNTRIES.map((e) => {
+            const n = t.includes(e.code) ? "checked" : "";
+            return `<label class="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-white/5 cursor-pointer group">\n                    <label class="custom-check"><input type="checkbox" class="sec-geo-check" value="${e.code}" ${n}><span class="check-box"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span></label>\n                    <span class="text-xs" style="color:var(--text-muted)">${e.code}</span>\n                    <span class="text-xs flex-1 group-hover:text-white transition-colors" style="color:var(--text-main)">${e.name}</span>\n                </label>`;
+          }).join("");
+          const n = document.getElementById("sec-geo-breakdown"),
+            o = _securityPolicy?.global?.geo_traffic || {},
+            r = Object.entries(o)
+              .sort((e, t) => t[1] - e[1])
+              .slice(0, 8);
+          if (0 === r.length)
+            n.innerHTML =
+              '<div class="text-xs text-center py-4" style="color:var(--text-subtle)">No regional data yet</div>';
+          else {
+            const e = r[0][1];
+            n.innerHTML = r
+              .map(([n, o]) => {
+                const r = SEC_COUNTRIES.find((e) => e.code === n),
+                  s = (r && r.name, Math.max(5, (o / e) * 100)),
+                  a = t.includes(n);
+                return `<div class="flex items-center gap-3">\n                        <span class="text-xs w-6 font-mono-cli" style="color:var(--text-muted)">${n}</span>\n                        <div class="flex-1 h-2 rounded-full bg-gray-800"><div class="h-2 rounded-full ${a ? "bg-red-500/60" : "bg-blue-500/50"}" style="width:${s}%"></div></div>\n                        <span class="text-[10px] w-12 text-right font-mono-cli" style="color:var(--text-muted)">${o}</span>\n                    </div>`;
+              })
+              .join("");
+          }
+          const s = document.getElementById("sec-geo-blocked-tags");
+          0 === t.length
+            ? (s.innerHTML =
+                '<div class="text-xs px-3 py-1.5 rounded-lg" style="color:var(--text-subtle);border:1px dashed var(--table-border)">None configured</div>')
+            : (s.innerHTML = t
+                .map((e) => {
+                  const t = SEC_COUNTRIES.find((t) => t.code === e);
+                  return `<div class="px-3 py-1 rounded-lg text-xs font-bold" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;">${t ? t.name : e}</div>`;
+                })
+                .join(""));
+        }
+        function renderHoneypotUI() {
+          const configuredRoutes = _getEffectiveCfg().honeypot_routes || [
+            { path: "/admin/phpmyadmin", method: "ANY" },
+            { path: "/.env", method: "ANY" },
+            { path: "/wp-login.php", method: "GET" },
+            { path: "/api/v1/debug", method: "POST" },
+            { path: "/xmlrpc.php", method: "POST" },
+          ];
+          const routes = Array.isArray(configuredRoutes) ? configuredRoutes : [];
+          document.getElementById("sec-hp-routes").innerHTML = routes
+            .map((route) => {
+              const entry = "string" === typeof route ? { path: route, method: "ANY" } : (route || {});
+              const method = ["ANY", "GET", "POST"].includes(String(entry.method || "").toUpperCase())
+                ? String(entry.method).toUpperCase()
+                : "ANY";
+              return `<div class="flex items-center gap-2 sec-hp-row">
+                    <select class="sec-hp-method ink-input rounded px-1.5 py-1.5 text-[10px] font-mono-cli font-bold w-16">
+                        <option value="ANY" ${"ANY" === method ? "selected" : ""}>ANY</option>
+                        <option value="GET" ${"GET" === method ? "selected" : ""}>GET</option>
+                        <option value="POST" ${"POST" === method ? "selected" : ""}>POST</option>
+                    </select>
+                    <input type="text" class="sec-hp-route ink-input flex-1 rounded px-3 py-1.5 text-xs font-mono-cli" value="${escapeHtml(entry.path || "")}">
+                    <button onclick="this.parentElement.remove()" class="text-gray-600 hover:text-red-400 transition-colors"><i data-lucide="x" class="w-3 h-3"></i></button>
+                </div>`;
+            })
+            .join("");
+          lucide.createIcons();
+
+          const captureFeed = document.getElementById("sec-hp-captures");
+          const captures = Array.isArray(_securityPolicy?.global?.honeypot_captures)
+            ? _securityPolicy.global.honeypot_captures
+            : [];
+          if (captures.length === 0) {
+            captureFeed.innerHTML =
+              '<div class="text-xs text-center py-6" style="color:var(--text-subtle)">No captures yet. Enable honeypot to start profiling threats.</div>';
+          } else {
+            const repeatCounts = {};
+            captures.forEach((capture) => {
+              const key = String(capture.ip || "");
+              repeatCounts[key] = (repeatCounts[key] || 0) + 1;
+            });
+            captureFeed.innerHTML = captures
+              .slice(0, 30)
+              .map((t) => {
+                const score = Number(t.threat_score) || 0;
+                const scoreTone =
+                  score >= 60 ? "text-red-400" : score >= 30 ? "text-amber-400" : "text-gray-400";
+                const repeatCount = repeatCounts[String(t.ip || "")] || 1;
+                const repeatBadge =
+                  repeatCount > 1
+                    ? `<span class="text-[8px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold">${repeatCount}x repeat</span>`
+                    : "";
+                const ip = String(t.ip || "").replace(/[^0-9a-fA-F:.]/g, "");
+                const method = String(t.method || "GET").toUpperCase();
+                const path = String(t.path || "/");
+                const headers =
+                  t.headers && typeof t.headers === "object"
+                    ? Object.entries(t.headers)
+                        .map(
+                          ([name, value]) =>
+                            `<div class="text-[9px] font-mono-cli"><span style="color:var(--text-subtle)">${escapeHtml(name)}:</span> <span style="color:var(--text-muted)">${escapeHtml(value)}</span></div>`,
+                        )
+                        .join("")
+                    : "";
+                return `<div class="rounded-xl overflow-hidden" style="background:var(--nav-hover);border:1px solid var(--table-border)">
+                    <div class="p-3 cursor-pointer hover:bg-white/5 transition-colors" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                        <div class="flex items-center justify-between mb-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono-cli text-xs text-red-400">${escapeHtml(ip)}</span>
+                                ${repeatBadge}
+                                <span class="text-[9px] font-bold ${scoreTone}">Score: ${score}/100</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[9px] font-mono-cli" style="color:var(--text-subtle)">${t.time ? escapeHtml(new Date(t.time).toLocaleString()) : "-"}</span>
+                                <i data-lucide="chevron-down" class="w-3 h-3" style="color:var(--text-subtle)"></i>
+                            </div>
+                        </div>
+                        <div class="text-[10px] font-mono-cli" style="color:var(--text-muted)">${escapeHtml(method)} ${escapeHtml(path)}</div>
+                    </div>
+                    <div class="hidden border-t px-3 py-3 space-y-2" style="border-color:var(--table-border);background:rgba(0,0,0,0.3)">
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                            <div><span class="text-[9px] uppercase tracking-widest" style="color:var(--text-subtle)">User-Agent</span><div class="text-[10px] font-mono-cli break-all" style="color:var(--text-muted)">${escapeHtml(t.user_agent || "(none)")}</div></div>
+                            <div><span class="text-[9px] uppercase tracking-widest" style="color:var(--text-subtle)">Content-Type</span><div class="text-[10px] font-mono-cli" style="color:var(--text-muted)">${escapeHtml(t.content_type || "(none)")}</div></div>
+                            <div><span class="text-[9px] uppercase tracking-widest" style="color:var(--text-subtle)">Content-Length</span><div class="text-[10px] font-mono-cli" style="color:var(--text-muted)">${Number(t.content_length) || 0} bytes</div></div>
+                            <div><span class="text-[9px] uppercase tracking-widest" style="color:var(--text-subtle)">Accept-Language</span><div class="text-[10px] font-mono-cli" style="color:var(--text-muted)">${escapeHtml(t.accept_lang || "(none)")}</div></div>
+                            <div><span class="text-[9px] uppercase tracking-widest" style="color:var(--text-subtle)">Referer</span><div class="text-[10px] font-mono-cli break-all" style="color:var(--text-muted)">${escapeHtml(t.referer || "(direct)")}</div></div>
+                            <div><span class="text-[9px] uppercase tracking-widest" style="color:var(--text-subtle)">Body SHA256</span><div class="text-[10px] font-mono-cli break-all" style="color:var(--text-muted)">${escapeHtml(t.body_hash || "(empty body)")}</div></div>
+                        </div>
+                        ${t.body_preview ? `<div><span class="text-[9px] uppercase tracking-widest" style="color:var(--text-subtle)">Body Preview</span><pre class="text-[10px] font-mono-cli mt-1 p-2 rounded-lg overflow-x-auto" style="background:rgba(0,0,0,0.4);color:var(--text-muted)">${escapeHtml(t.body_preview.substring(0, 256))}</pre></div>` : ""}
+                        ${headers ? `<div><span class="text-[9px] uppercase tracking-widest" style="color:var(--text-subtle)">Request Headers</span><div class="mt-1 space-y-0.5">${headers}</div></div>` : ""}
+                        <div class="flex gap-3 pt-1">
+                            <button onclick="promptBlockIpDirect('${ip}','Honeypot capture')" class="text-[9px] uppercase tracking-widest font-bold text-red-400 hover:text-red-300 transition-colors flex items-center gap-1"><i data-lucide="shield-off" class="w-3 h-3"></i>Block IP</button>
+                            <button onclick="promptWhitelistIpDirect('${ip}')" class="text-[9px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1"><i data-lucide="shield-check" class="w-3 h-3"></i>Whitelist</button>
+                        </div>
+                    </div>
+                </div>`;
+              })
+              .join("");
+          }
+
+          const stats = document.getElementById("sec-hp-stats");
+          const routeCounts = {};
+          captures.forEach((capture) => {
+            const path = String(capture.path || "/");
+            routeCounts[path] = (routeCounts[path] || 0) + 1;
+          });
+          const rankedRoutes = Object.entries(routeCounts).sort((left, right) => right[1] - left[1]);
+          if (rankedRoutes.length === 0) {
+            stats.innerHTML =
+              '<div class="text-xs text-center py-4" style="color:var(--text-subtle)">No data</div>';
+          } else {
+            const maxCount = rankedRoutes[0][1];
+            stats.innerHTML = rankedRoutes
+              .map(
+                ([path, count]) =>
+                  `<div class="flex items-center gap-3">
+                    <span class="font-mono-cli text-[10px] text-amber-400 w-32 truncate shrink-0">${escapeHtml(path)}</span>
+                    <div class="flex-1 h-1.5 rounded-full bg-gray-800"><div class="h-1.5 rounded-full bg-amber-500/60" style="width:${Math.max(5, (count / maxCount) * 100)}%"></div></div>
+                    <span class="font-mono-cli text-[10px] w-6 text-right" style="color:var(--text-muted)">${Number(count) || 0}</span>
+                </div>`,
+              )
+              .join("");
+          }
+        }
+        function addHoneypotRoute() {
+          _securityPolicyDirty = !0;
+          const e = document.getElementById("sec-hp-routes"),
+            t = document.createElement("div");
+          ((t.className = "flex items-center gap-2 sec-hp-row"),
+            (t.innerHTML =
+              '<select class="sec-hp-method ink-input rounded px-1.5 py-1.5 text-[10px] font-mono-cli font-bold w-16">\n                    <option value="ANY">ANY</option><option value="GET">GET</option><option value="POST">POST</option>\n                </select>\n                <input type="text" class="sec-hp-route ink-input flex-1 rounded px-3 py-1.5 text-xs font-mono-cli" value="" placeholder="/path/to/trap">\n                <button onclick="this.parentElement.remove()" class="text-gray-600 hover:text-red-400 transition-colors"><i data-lucide="x" class="w-3 h-3"></i></button>'),
+            e.appendChild(t),
+            lucide.createIcons());
+        }
+        function renderSecurityEvents() {
+          const feed = document.getElementById("sec-events-feed");
+          const filter = document.getElementById("sec-events-filter").value;
+          let events = Array.isArray(_securityEvents) ? _securityEvents : [];
+          if ("all" !== filter) events = events.filter((event) => event.type === filter);
+          if (events.length === 0) {
+            feed.innerHTML =
+              '<div class="p-8 text-center text-xs" style="color:var(--text-subtle)"><i data-lucide="scroll-text" class="w-8 h-8 mx-auto mb-3 opacity-30"></i><div>No events match this filter.</div></div>';
+            lucide.createIcons();
+            return;
+          }
+          const icons = {
+            block: "shield-off",
+            honeypot: "bug",
+            ratelimit: "gauge",
+            geo: "globe",
+            policy: "settings",
+          };
+          const tones = {
+            block: "red",
+            honeypot: "amber",
+            ratelimit: "orange",
+            geo: "purple",
+            policy: "blue",
+          };
+          feed.innerHTML = events
+            .slice(0, 100)
+            .map((e) => {
+              const type = String(e.type || "");
+              const tone = tones[type] || "gray";
+              const icon = icons[type] || "activity";
+              return `<div class="flex items-start gap-4 px-5 py-3 hover:bg-white/5 transition-colors" style="border-bottom:1px solid var(--table-border)">
+                    <div class="p-1.5 rounded-lg mt-0.5" style="background:rgba(var(--${tone}),0.1)"><i data-lucide="${icon}" class="w-3.5 h-3.5 text-${tone}-400"></i></div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs" style="color:var(--text-main)">${escapeHtml(e.message || e.type)}</div>
+                        <div class="text-[10px] font-mono-cli mt-0.5" style="color:var(--text-subtle)">${escapeHtml(e.ip || "")} ${e.path ? "-> " + escapeHtml(e.path) : ""}</div>
+                    </div>
+                    <div class="text-[10px] font-mono-cli shrink-0" style="color:var(--text-subtle)">${e.time ? escapeHtml(new Date(e.time).toLocaleString()) : "-"}</div>
+                </div>`;
+            })
+            .join("");
+          lucide.createIcons();
+        }
+        async function refreshSecurityEvents() {
+          try {
+            const e = await fetch(`/client/api/security/events${window.ivMacroAgentQuery?.("security") || ""}`);
+            if (e.ok) {
+              const t = await e.json();
+              ((_securityEvents = t.events || []),
+                updateJohnnyConfidence(null, null, t),
+                renderSecurityEvents(),
+                renderSecurityUI(),
+                renderTrafficChart());
+            }
+          } catch (e) {}
+        }
+        async function refreshSecurityInsights() {
+          try {
+            const e = await fetch("/client/api/security/insights");
+            e.ok && ((_securityInsights = await e.json()), renderSecurityUI());
+          } catch (e) {}
+        }
+        function saveSecuritySettings() {
+          const e = document.getElementById("sec-scope-select").value,
+            t = "global" === e;
+          showTotpPrompt(
+            t
+              ? "Update Global Security Policy"
+              : `Update Security for Agent ${e.substring(0, 8)}`,
+            async (n) => {
+              let wafCustomRules, wafExclusions;
+              try {
+                wafCustomRules = JSON.parse(
+                  document.getElementById("sec-waf-custom-rules").value || "[]",
+                );
+                wafExclusions = JSON.parse(
+                  document.getElementById("sec-waf-exclusions").value || "[]",
+                );
+                if (!Array.isArray(wafCustomRules) || !Array.isArray(wafExclusions))
+                  throw new Error("WAF custom rules and exclusions must be JSON arrays.");
+              } catch (error) {
+                showToast(error.message || "Invalid WAF JSON.", "error");
+                return;
+              }
+              const listField = (id) =>
+                (document.getElementById(id).value || "")
+                  .split(/[\n,]+/)
+                  .map((value) => value.trim())
+                  .filter(Boolean);
+              const o = {
+                rate_limit_enabled:
+                  document.getElementById("sec-rl-enabled").checked,
+                rate_limit_rpm: parseInt(
+                  document.getElementById("sec-rl-rpm").value,
+                ),
+                rate_limit_burst: parseInt(
+                  document.getElementById("sec-rl-burst").value,
+                ),
+                rate_limit_burst_multiplier: parseFloat(
+                  document.getElementById("sec-rl-burst-multiplier").value,
+                ),
+                rate_limit_enforcement_mode:
+                  document.getElementById("sec-rl-enforcement").value,
+                rate_limit_exempt_paths: listField("sec-rl-exempt-paths"),
+                rate_limit_whitelisted_paths: listField(
+                  "sec-rl-whitelisted-paths",
+                ),
+                rate_limit_bypass_ips: listField("sec-rl-bypass-ips"),
+                auto_block_enabled:
+                  document.getElementById("sec-ab-enabled").checked,
+                auto_block_threshold: parseInt(
+                  document.getElementById("sec-ab-threshold").value,
+                ),
+                auto_block_window_seconds: parseInt(
+                  document.getElementById("sec-ab-window").value,
+                ),
+                auto_block_duration_minutes: parseInt(
+                  document.getElementById("sec-ab-duration").value,
+                ),
+                max_body_bytes: parseInt(
+                  document.getElementById("sec-max-body-bytes").value,
+                ),
+                blocked_methods: (
+                  document.getElementById("sec-blocked-methods").value || ""
+                )
+                  .split(",")
+                  .map((e) => e.trim().toUpperCase())
+                  .filter(Boolean),
+                waf: {
+                  schema_version: 1,
+                  enabled: document.getElementById("sec-waf-enabled").checked,
+                  mode: document.getElementById("sec-waf-mode").value,
+                  sensitivity:
+                    document.getElementById("sec-waf-sensitivity").value,
+                  block_threshold: parseInt(
+                    document.getElementById("sec-waf-threshold").value,
+                  ),
+                  managed_rule_packages: [
+                    document.getElementById("sec-waf-package").value,
+                  ].filter(Boolean),
+                  custom_rules: wafCustomRules,
+                  exclusions: wafExclusions,
+                  inspection: {
+                    inspect_body_bytes: parseInt(
+                      document.getElementById("sec-waf-inspection-bytes").value,
+                    ),
+                    uninspected_body_action: document.getElementById(
+                      "sec-waf-uninspected-action",
+                    ).value,
+                    body_capture: "metadata",
+                    decode_rounds: parseInt(
+                      document.getElementById("sec-waf-decode-rounds").value,
+                    ),
+                  },
+                  control_plane_exempt_paths: listField("sec-waf-control-paths"),
+                },
+              };
+              try {
+                let r;
+                if (t)
+                  r = await fetch("/client/api/security/global", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "X-TOTP-Auth": n,
+                    },
+                    body: JSON.stringify(o),
+                  });
+                else {
+                  const t =
+                    document.getElementById("sec-inherit-toggle").checked;
+                  r = await fetch("/client/api/security/agent", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "X-TOTP-Auth": n,
+                    },
+                    body: JSON.stringify({
+                      agent_id: e,
+                      settings: { inherit: t, ...o },
+                    }),
+                  });
+                }
+                if (!r.ok) {
+                  const e = await r.json().catch(() => ({}));
+                  throw new Error(e.error || "Failed");
+                }
+                ((_securityPolicyDirty = !1),
+                  showToast("Security policy saved!", "info"),
+                  (demoTourMilestones.securitySavedAt = Date.now()),
+                  await fetchSecuritySettings());
+              } catch (e) {
+                showToast(e.message || "Failed to save", "error");
+              }
+            },
+          );
+        }
+        function saveGeoSettings() {
+          showTotpPrompt("Update Geo-Blocking Policy", async (e) => {
+            const t = [
+                ...document.querySelectorAll(".sec-geo-check:checked"),
+              ].map((e) => e.value),
+              n = {
+                geo_block_enabled:
+                  document.getElementById("sec-geo-enabled").checked,
+                geo_block_mode: document.getElementById("sec-geo-mode").value,
+                geo_block_countries: t,
+              };
+            try {
+              const t = await fetch("/client/api/security/global", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-TOTP-Auth": e,
+                },
+                body: JSON.stringify(n),
+              });
+              if (!t.ok) {
+                const e = await t.json().catch(() => ({}));
+                throw new Error(e.error || "Failed to save geo settings");
+              }
+              ((_securityPolicyDirty = !1),
+                showToast("Geo-blocking policy saved!", "info"),
+                await fetchSecuritySettings());
+            } catch (e) {
+              showToast(e.message || "Failed to save geo settings", "error");
+            }
+          });
+        }
+        function saveHoneypotSettings() {
+          showTotpPrompt("Update Honeypot Configuration", async (e) => {
+            const t = document.querySelectorAll(".sec-hp-row"),
+              n = [];
+            t.forEach((e) => {
+              const t = e.querySelector(".sec-hp-method")?.value || "ANY",
+                o = e.querySelector(".sec-hp-route")?.value?.trim();
+              o && n.push({ path: o, method: t });
+            });
+            const o = [];
+            (document.getElementById("sec-hp-act-block")?.checked &&
+              o.push("block"),
+              document.getElementById("sec-hp-act-tarpit")?.checked &&
+                o.push("tarpit"),
+              document.getElementById("sec-hp-act-deceive")?.checked &&
+                o.push("deceive"));
+            const a = !!document.getElementById("sec-hp-fake-enabled")?.checked,
+              i = document.getElementById("sec-hp-fake-body")?.value || "",
+              s = a || !!i.trim();
+            s && !o.includes("deceive") && o.push("deceive");
+            const r = {
+              honeypot_enabled:
+                document.getElementById("sec-hp-enabled").checked,
+              honeypot_actions: o,
+              honeypot_tarpit_delay: parseInt(
+                document.getElementById("sec-hp-tarpit-delay").value,
+              ),
+              honeypot_fake_response_enabled: s,
+              honeypot_fake_response_body: i,
+              honeypot_routes: n,
+            };
+            try {
+              const t = await fetch("/client/api/security/global", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-TOTP-Auth": e,
+                },
+                body: JSON.stringify(r),
+              });
+              if (!t.ok) {
+                const e = await t.json().catch(() => ({}));
+                throw new Error(e.error || "Failed to save honeypot config");
+              }
+              ((_securityPolicyDirty = !1),
+                showToast("Honeypot configuration saved!", "info"),
+                await fetchSecuritySettings());
+            } catch (e) {
+              showToast(e.message || "Failed to save honeypot config", "error");
+            }
+          });
+        }
+        function promptBlockIp() {
+          const e = document.getElementById("sec-scope-select").value;
+          createModal(
+            `<div class="p-6 space-y-5">\n                <h3 class="text-sm font-bold tracking-widest uppercase flex items-center gap-2 text-red-400"><i data-lucide="shield-off" class="w-4 h-4"></i> Block IP Address</h3>\n                <div><label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color:var(--text-subtle)">IP Address or CIDR</label>\n                <input type="text" id="ip-block-input" placeholder="e.g. 192.168.1.100 or 10.0.0.0/24" class="ink-input w-full rounded-lg px-4 py-3 text-sm font-mono-cli" autofocus></div>\n                <div><label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color:var(--text-subtle)">Reason</label>\n                <input type="text" id="ip-block-reason" placeholder="e.g. Suspicious scanning" class="ink-input w-full rounded-lg px-4 py-3 text-sm"></div>\n                <div class="text-[10px]" style="color:var(--text-muted)">Scope: <span class="text-white font-bold">${"global" === e ? "All Agents" : "Agent " + e.substring(0, 8)}</span></div>\n                <div class="flex gap-3 pt-2">\n                    <button onclick="executeBlockIp()" class="bg-red-500/80 hover:bg-red-500 border border-red-400/20 flex-1 py-3 rounded-lg text-xs font-bold uppercase tracking-widest text-white transition-colors">Block IP</button>\n                    <button onclick="closeModal()" class="btn-secondary flex-1 py-3 rounded-lg text-xs font-bold uppercase tracking-widest">Cancel</button>\n                </div></div>`,
+          );
+        }
+        function executeBlockIp() {
+          const e = document.getElementById("ip-block-input").value.trim();
+          if (!e) return showToast("IP required", "error");
+          const t =
+              document.getElementById("ip-block-reason")?.value ||
+              "Manual block",
+            n = document.getElementById("sec-scope-select").value;
+          (closeModal(),
+            showTotpPrompt(`Block IP ${e}`, async (o) => {
+              try {
+                if (
+                  !(
+                    await fetch("/client/api/security/ip/block", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-TOTP-Auth": o,
+                      },
+                      body: JSON.stringify({
+                        ip: e,
+                        reason: t,
+                        agent_id: "global" === n ? null : n,
+                      }),
+                    })
+                  ).ok
+                )
+                  throw new Error();
+                (showToast(`IP ${e} blocked!`, "info"),
+                  await fetchSecuritySettings());
+              } catch (e) {
+                showToast("Failed to block IP", "error");
+              }
+            }));
+        }
+        function promptUnblockIp(e, t) {
+          showTotpPrompt(`Unblock IP ${e}`, async (n) => {
+            try {
+              if (
+                !(
+                  await fetch("/client/api/security/ip/unblock", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "X-TOTP-Auth": n,
+                    },
+                    body: JSON.stringify({ ip: e, agent_id: t }),
+                  })
+                ).ok
+              )
+                throw new Error();
+              (showToast(`IP ${e} unblocked`, "info"),
+                await fetchSecuritySettings());
+            } catch (e) {
+              showToast("Failed to unblock", "error");
+            }
+          });
+        }
+        function promptWhitelistIp() {
+          createModal(
+            '<div class="p-6 space-y-5">\n                <h3 class="text-sm font-bold tracking-widest uppercase flex items-center gap-2 text-emerald-400"><i data-lucide="shield-check" class="w-4 h-4"></i> Whitelist IP</h3>\n                <div><label class="block text-[10px] uppercase font-bold tracking-widest mb-2" style="color:var(--text-subtle)">IP Address</label>\n                <input type="text" id="ip-wl-input" placeholder="e.g. 203.0.113.50" class="ink-input w-full rounded-lg px-4 py-3 text-sm font-mono-cli" autofocus></div>\n                <div class="flex gap-3 pt-2">\n                    <button onclick="executeWhitelistIp()" class="bg-emerald-500/80 hover:bg-emerald-500 border border-emerald-400/20 flex-1 py-3 rounded-lg text-xs font-bold uppercase tracking-widest text-white transition-colors">Whitelist</button>\n                    <button onclick="closeModal()" class="btn-secondary flex-1 py-3 rounded-lg text-xs font-bold uppercase tracking-widest">Cancel</button>\n                </div></div>',
+          );
+        }
+        function executeWhitelistIp() {
+          const e = document.getElementById("ip-wl-input").value.trim();
+          if (!e) return showToast("IP required", "error");
+          (closeModal(),
+            showTotpPrompt(`Whitelist IP ${e}`, async (t) => {
+              try {
+                if (
+                  !(
+                    await fetch("/client/api/security/ip/whitelist", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-TOTP-Auth": t,
+                      },
+                      body: JSON.stringify({ ip: e, action: "add" }),
+                    })
+                  ).ok
+                )
+                  throw new Error();
+                (showToast(`IP ${e} whitelisted!`, "info"),
+                  await fetchSecuritySettings());
+              } catch (e) {
+                showToast("Failed to whitelist", "error");
+              }
+            }));
+        }
+        function promptRemoveWhitelistIp(e) {
+          showTotpPrompt(`Remove ${e} from whitelist`, async (t) => {
+            try {
+              if (
+                !(
+                  await fetch("/client/api/security/ip/whitelist", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "X-TOTP-Auth": t,
+                    },
+                    body: JSON.stringify({ ip: e, action: "remove" }),
+                  })
+                ).ok
+              )
+                throw new Error();
+              (showToast(`${e} removed from whitelist`, "info"),
+                await fetchSecuritySettings());
+            } catch (e) {
+              showToast("Failed to update whitelist", "error");
+            }
+          });
+        }

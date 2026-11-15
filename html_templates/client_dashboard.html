@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Infraveil Console</title>
+    <link rel="preload" href="/static/enterprise/fonts/SourceSans3VF-Upright.ttf.woff2" as="font" type="font/woff2" crossorigin />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+    <script>
+      if ("undefined" == typeof lucide) {
+        var s = document.createElement("script");
+        ((s.src = "https://unpkg.com/lucide@0.469.0/dist/umd/lucide.js"),
+          document.head.appendChild(s));
+      }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="/client/dashboard-assets/{{ app_config.asset_version }}/console.css" />
+    <link rel="stylesheet" href="/static/dashboard-modern.css?v={{ app_config.asset_version }}" />
+  </head>
+  <body class="h-screen flex antialiased" data-demo-mode="{{ 'true' if app_config.demo_mode else 'false' }}">
+    {% if app_config.demo_mode %}
+    <div id="dashboard-loader" class="dashboard-loader" aria-label="Loading dashboard" role="status">
+      <div class="dashboard-loader-spinner" aria-hidden="true"></div>
+    </div>
+    {% endif %}
+    <div class="bg-overlay"></div>
+    <script src="/static/console/ui/live-dom.js?v={{ app_config.asset_version }}"></script>
+    <script id="app-config-json" type="application/json">{{ (app_config if app_config is defined else {}) | tojson | safe }}</script>
+    <script>
+      (() => {
+        window.ivLiveContent = window.InfraveilUI.liveDom.liveContent;
+        window.ivStableLogRows = window.InfraveilUI.liveDom.stableLogRows;
+        const e = document.getElementById("app-config-json");
+        try {
+          window.APP_CONFIG = JSON.parse(e?.textContent?.trim() || "{}");
+        } catch {
+          window.APP_CONFIG = {};
+        }
+        const csrfToken = window.APP_CONFIG.csrf_token || "";
+        const csrfHeader = window.APP_CONFIG.csrf_header || "X-Infraveil-CSRF";
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = (input, init = {}) => {
+          const requestUrl = "string" == typeof input ? input : input?.url || "";
+          const method = String(init?.method || ("string" == typeof input ? "GET" : input?.method || "GET")).toUpperCase();
+          let sameOrigin = false;
+          try {
+            sameOrigin = new URL(requestUrl, window.location.href).origin === window.location.origin;
+          } catch {
+            sameOrigin = false;
+          }
+          if (csrfToken && sameOrigin && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+            const headers = new Headers(init.headers || ("string" != typeof input && input?.headers) || {});
+            headers.set(csrfHeader, csrfToken);
+            init = { ...init, headers };
+          }
+          return originalFetch(input, init);
+        };
+      })();
+    </script>
+    <div id="demo-questionnaire-modal" class="questionnaire-modal hidden">
+      <div class="min-h-screen flex items-center justify-center p-6">
+        <div
+          class="questionnaire-card rounded-[2rem] w-full max-w-5xl p-8 lg:p-10"
+        >
+          <div class="flex items-start justify-between gap-6">
+            <div>
+              <div
+                class="text-[10px] uppercase tracking-[0.28em] font-bold text-slate-300"
+              >
+                Production Tour Setup
+              </div>
+              <h2 class="text-3xl text-white mt-3">
+                Shape the proof before we walk it.
+              </h2>
+              <p
+                class="text-sm mt-3 max-w-2xl"
+                style="color: var(--text-muted)"
+              >
+                Tell the workspace what you actually want to prove: one host or
+                many, one API or a stack, and whether the rollout should be
+                staggered instead of flat.
+              </p>
+            </div>
+            <button
+              type="button"
+              onclick="skipQuestionnaire()"
+              class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+            >
+              Skip
+            </button>
+          </div>
+          <div class="grid lg:grid-cols-2 gap-6 mt-8">
+            <div class="acrylic-panel rounded-2xl p-6 space-y-4">
+              <div
+                class="text-[10px] uppercase tracking-widest font-bold"
+                style="color: var(--text-subtle)"
+              >
+                Fleet Shape
+              </div>
+              <label class="questionnaire-option"
+                ><span class="custom-check mt-0.5"
+                  ><input id="questionnaire-multi-host" type="checkbox" />
+                  <span class="check-box"
+                    ><svg viewBox="0 0 24 24">
+                      <polyline points="20 6 9 17 4 12"></polyline></svg></span
+                ></span>
+                <div>
+                  <div class="text-white font-semibold">
+                    Do you want to test multi-host?
+                  </div>
+                  <div class="text-sm mt-1" style="color: var(--text-muted)">
+                    Separate server installs, recovery state, and deploy order.
+                  </div>
+                </div></label
+              >
+              <div>
+                <div
+                  class="text-[10px] uppercase tracking-widest mb-2"
+                  style="color: var(--text-subtle)"
+                >
+                  How many server hosts?
+                </div>
+                <input
+                  id="questionnaire-host-count"
+                  type="number"
+                  min="1"
+                  max="15"
+                  value="2"
+                  class="ink-input w-full rounded-xl px-4 py-3 text-sm font-mono-cli"
+                />
+              </div>
+            </div>
+            <div class="acrylic-panel rounded-2xl p-6 space-y-4">
+              <div
+                class="text-[10px] uppercase tracking-widest font-bold"
+                style="color: var(--text-subtle)"
+              >
+                API Shape
+              </div>
+              <label class="questionnaire-option"
+                ><span class="custom-check mt-0.5"
+                  ><input id="questionnaire-multiple-apis" type="checkbox" />
+                  <span class="check-box"
+                    ><svg viewBox="0 0 24 24">
+                      <polyline points="20 6 9 17 4 12"></polyline></svg></span
+                ></span>
+                <div>
+                  <div class="text-white font-semibold">
+                    Do you want to run multiple APIs?
+                  </div>
+                  <div class="text-sm mt-1" style="color: var(--text-muted)">
+                    Stage several starter APIs and route them through the same
+                    workspace.
+                  </div>
+                </div></label
+              >
+              <div>
+                <div
+                  class="text-[10px] uppercase tracking-widest mb-2"
+                  style="color: var(--text-subtle)"
+                >
+                  How many APIs?
+                </div>
+                <input
+                  id="questionnaire-api-count"
+                  type="number"
+                  min="1"
+                  max="15"
+                  value="3"
+                  class="ink-input w-full rounded-xl px-4 py-3 text-sm font-mono-cli"
+                />
+              </div>
+            </div>
+          </div>
+          <div
+            class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mt-8"
+          >
+            <div class="text-sm" style="color: var(--text-muted)">
+              The tour will use this to pre-stage hosts and API slots. If you
+              want a staggered deploy, use the real Deploy Order tab inside the
+              dashboard.
+            </div>
+            <button
+              type="button"
+              onclick="applyQuestionnaireAndStart()"
+              class="btn-primary px-8 py-3 rounded-xl text-[11px] font-bold uppercase tracking-widest"
+            >
+              Build My Tour
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bg-overlay"></div>
+    <div id="modal-container"></div>
+    <button
+      id="global-ai-access"
+      onclick="switchView('remediation')"
+      aria-label="AI Access"
+      class="fixed top-6 right-6 z-[160] w-11 h-11 rounded-full border border-white/10 bg-black/90 text-white hover:bg-zinc-900 flex items-center justify-center shadow-2xl"
+      title="AI Access — connect your MCP client"
+    >
+      <i data-lucide="plug-zap" class="w-5 h-5"></i><span class="sr-only">AI Access</span>
+    </button>
+    <div
+      id="alertBanner"
+      class="fixed top-6 right-6 z-[100] flex max-w-[calc(100vw-2rem)] w-[24rem] flex-col gap-3 pointer-events-none"
+    ></div>
+    <div
+      id="payment-lock-banner"
+      class="hidden mb-6 max-w-7xl mx-auto w-full rounded-2xl border border-amber-400/20 bg-amber-500/10 px-5 py-4"
+    >
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div
+            class="text-[10px] uppercase tracking-widest font-bold text-amber-300"
+          >
+            <span id="workspace-lock-title">Workspace access paused</span>
+          </div>
+          <div id="workspace-lock-message" class="text-sm text-amber-50 mt-1">
+            Background refresh is paused while this workspace is locked. Open billing or retry after access is restored.
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2 shrink-0">
+        <button
+          onclick="switchView('billing')"
+          class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+        >Open Billing</button>
+        <button
+          id="workspace-access-retry" onclick="retryDashboardAccess()"
+          class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+        >
+          Retry access
+        </button>
+        </div>
+      </div>
+    </div>
+    <div
+      id="demo-tour-card"
+      class="hidden fixed tour-card-anchor-right z-[190] w-[460px] max-w-[calc(100%-3rem)] overflow-hidden rounded-[1.75rem] border border-white/10 bg-slate-950/94 backdrop-blur-2xl shadow-[0_30px_90px_rgba(2,6,23,0.65)]"
+    >
+      <div class="relative p-5 max-h-[78vh] overflow-y-auto custom-scroll">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div
+              class="text-[10px] uppercase tracking-[0.28em] font-bold text-slate-300"
+              id="demo-tour-step-label"
+            >
+              Demo Tour
+            </div>
+            <h3
+              class="text-xl text-white mt-2 leading-tight"
+              id="demo-tour-title"
+            >
+              Welcome
+            </h3>
+          </div>
+          <div class="text-right">
+            <div class="text-[9px] uppercase tracking-[0.26em] text-slate-500">
+              Outcome
+            </div>
+            <div
+              class="text-xs font-semibold text-slate-200"
+              id="demo-tour-outcome"
+            >
+              Live infrastructure
+            </div>
+          </div>
+        </div>
+        <div class="mt-4 h-1.5 rounded-full bg-white/8 overflow-hidden">
+          <div
+            id="demo-tour-progress"
+            class="h-full rounded-full bg-slate-200/80 transition-all duration-500"
+            style="width: 8%"
+          ></div>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span
+            id="demo-tour-mode-badge"
+            class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-200"
+            >Production Tour</span
+          >
+          <span
+            id="demo-tour-proof-badge"
+            class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-300"
+            >Own server, real signals</span
+          >
+        </div>
+        <p
+          class="text-sm mt-4 leading-relaxed"
+          style="color: var(--text-muted)"
+          id="demo-tour-body"
+        ></p>
+        <div
+          class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
+        >
+          <div class="text-[9px] uppercase tracking-[0.24em] text-slate-500">
+            Why this matters
+          </div>
+          <div class="text-sm text-white/90 mt-1" id="demo-tour-why">
+            This step connects the workspace to a live host and makes the system
+            state visible.
+          </div>
+        </div>
+        <div
+          id="demo-tour-detail-box"
+          class="hidden mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-4"
+        >
+          <div
+            class="text-[9px] uppercase tracking-[0.24em] text-slate-500 mb-3"
+          >
+            Step Notes
+          </div>
+          <div
+            id="demo-tour-detail-content"
+            class="text-sm text-white/80 leading-relaxed"
+          ></div>
+        </div>
+        <div class="flex items-center justify-between mt-5">
+          <div class="flex items-center gap-2">
+            <button
+              id="demo-tour-skip"
+              class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+            >
+              End Tour
+            </button>
+            <button
+              id="demo-tour-back"
+              class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+            >
+              Back
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              id="demo-tour-step-skip"
+              class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+            >
+              Skip Step
+            </button>
+            <button
+              id="demo-tour-next"
+              class="btn-primary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside
+      class="dashboard-sidebar w-64 acrylic-panel border-r-0 border-y-0 border-l-0 flex flex-col z-20 h-full relative"
+    >
+      <div class="h-24 flex items-center px-8">
+        <div class="flex items-center gap-3">
+          <div
+            class="w-2.5 h-2.5 bg-blue-500 rounded-full dot-glow"
+            id="network-status-dot"
+          ></div>
+          <span
+            class="font-semibold text-lg tracking-[0.15em] uppercase"
+            style="color: var(--text-main)"
+            ><img class="iv-brand-wordmark" src="/static/enterprise/brand/wordmark.svg" alt="Infraveil" width="101" height="20" /></span
+          >
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto py-4 space-y-8 custom-scroll">
+        <div>
+          <div
+            class="px-8 mb-4 text-[10px] font-bold uppercase tracking-widest"
+            style="color: var(--text-subtle)"
+          >
+            Command
+          </div>
+          <nav class="space-y-1.5 px-4">
+            <button
+              onclick="switchView('overview')"
+              id="nav-overview"
+              class="nav-item active w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Operations Home
+            </button>
+            <button
+              onclick="switchView('incidents')"
+              id="nav-incidents"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="siren" class="w-4 h-4"></i> Incidents
+            </button>
+            <button
+              onclick="switchView('status-page')"
+              id="nav-status-page"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="radio-tower" class="w-4 h-4"></i> Status Page
+            </button>
+            <button
+              onclick="switchView('catalog')"
+              id="nav-catalog"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="boxes" class="w-4 h-4"></i> Service Catalog
+            </button>
+          </nav>
+        </div>
+        <div>
+          <div
+            class="px-8 mb-4 text-[10px] font-bold uppercase tracking-widest"
+            style="color: var(--text-subtle)"
+          >
+            Runtime
+          </div>
+          <nav class="space-y-1.5 px-4">
+            <button
+              onclick="switchView('deployments')"
+              id="nav-deployments"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="box" class="w-4 h-4"></i> Workloads
+            </button>
+            <button
+              onclick="switchView('launcher')"
+              id="nav-launcher"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="terminal" class="w-4 h-4"></i> Servers
+            </button>
+            <button
+              onclick="switchView('rollout')"
+              id="nav-rollout"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="git-branch" class="w-4 h-4"></i> Placement
+            </button>
+            <button
+              onclick="switchView('updates')"
+              id="nav-updates"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="arrow-up-circle" class="w-4 h-4"></i> Updates
+              <span id="nav-updates-dot" class="ml-auto hidden w-2 h-2 rounded-full" style="background:#60a5fa"></span>
+            </button>
+          </nav>
+        </div>
+        <div>
+          <div
+            class="px-8 mb-4 text-[10px] font-bold uppercase tracking-widest"
+            style="color: var(--text-subtle)"
+          >
+            Monitoring
+          </div>
+          <nav class="space-y-1.5 px-4">
+            <button
+              onclick="switchView('app-logs')"
+              id="nav-app-logs"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left group"
+            >
+              <i data-lucide="scroll-text" class="w-4 h-4"></i> App Logs
+            </button>
+            <button
+              onclick="switchView('console')"
+              id="nav-console"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left group"
+            >
+              <i data-lucide="terminal-square" class="w-4 h-4"></i> Runtime Logs
+            </button>
+            <button
+              onclick="switchView('api-reference')"
+              id="nav-api-reference"
+              data-demo-only="true"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="file-code-2" class="w-4 h-4"></i> API Surface
+            </button>
+            <button
+              onclick="switchView('network')"
+              id="nav-network"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="network" class="w-4 h-4"></i> Request Trace
+            </button>
+            <button
+              onclick="switchView('internal-network')"
+              id="nav-internal-network"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="waypoints" class="w-4 h-4"></i> Control Trace
+            </button>
+            <button
+              onclick="switchView('runtime-evidence')"
+              id="nav-runtime-evidence"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="fingerprint" class="w-4 h-4"></i> Runtime Control
+            </button>
+            <button
+              onclick="switchView('capacity-audit')"
+              id="nav-capacity-audit"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="gauge" class="w-4 h-4"></i> Capacity Audit
+            </button>
+            <button
+              onclick="switchView('cache-queue')"
+              id="nav-cache-queue"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="database-zap" class="w-4 h-4"></i> Cache & Queue
+            </button>
+            <button
+              onclick="switchView('process-supervisor')"
+              id="nav-process-supervisor"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="blocks" class="w-4 h-4"></i> Process Supervisor
+            </button>
+            <button
+              onclick="switchView('gateway-routes')"
+              id="nav-gateway-routes"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="route" class="w-4 h-4"></i> Gateway & Routes
+            </button>
+            <button
+              onclick="switchView('trust-receipts')"
+              id="nav-trust-receipts"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="receipt-text" class="w-4 h-4"></i> Connections & History
+            </button>
+          </nav>
+        </div>
+        <div>
+          <div
+            class="px-8 mb-4 text-[10px] font-bold uppercase tracking-widest"
+            style="color: var(--text-subtle)"
+          >
+            Policy
+          </div>
+          <nav class="space-y-1.5 px-4">
+            <button
+              onclick="switchView('security')"
+              id="nav-security"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="shield" class="w-4 h-4"></i> Security Policy
+            </button>
+            <button
+              onclick="switchView('pipelines')"
+              id="nav-pipelines"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="workflow" class="w-4 h-4"></i> Pipeline Builder
+            </button>
+            <button
+              onclick="switchView('pipeline-logs')"
+              id="nav-pipeline-logs"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="activity-square" class="w-4 h-4"></i> Pipeline Analytics
+            </button>
+            <button
+              onclick="switchView('remediation')"
+              id="nav-remediation"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="plug-zap" class="w-4 h-4"></i> MCP Control
+            </button>
+          </nav>
+        </div>
+        <div>
+          <div
+            class="px-8 mb-4 text-[10px] font-bold uppercase tracking-widest"
+            style="color: var(--text-subtle)"
+          >
+            Resources
+          </div>
+          <nav class="space-y-1.5 px-4">
+            <button
+              onclick="switchView('docs')"
+              id="nav-docs"
+              class="nav-item w-full flex items-center gap-4 px-4 py-3 text-sm text-left"
+            >
+              <i data-lucide="book-open" class="w-4 h-4"></i> Docs
+            </button>
+          </nav>
+        </div>
+      </div>
+      <div id="user-menu" class="user-menu-popover" hidden>
+        <div
+          class="px-3 py-2 border-b mb-1"
+          style="border-color: var(--table-border)"
+        >
+          <div
+            id="popover-name"
+            class="text-xs font-bold truncate"
+            style="color: var(--text-main)"
+          >
+            Loading...
+          </div>
+          <div
+            id="popover-email"
+            class="text-[10px] truncate"
+            style="color: var(--text-muted)"
+          >
+            Loading workspace...
+          </div>
+        </div>
+        <button type="button"
+          class="menu-item"
+          onclick="(switchView('auth-settings'), toggleUserMenu())"
+        >
+          <i data-lucide="shield-check" class="w-4 h-4"></i> Account Settings
+        </button>
+        <button type="button"
+          class="menu-item"
+          onclick="(switchView('usage'), toggleUserMenu())"
+        >
+          <i data-lucide="activity" class="w-4 h-4"></i> Usage
+        </button>
+        <button type="button"
+          class="menu-item"
+          onclick="(switchView('scale'), toggleUserMenu())"
+        >
+          <i data-lucide="server-cog" class="w-4 h-4"></i> Scale
+        </button>
+        <button type="button"
+          class="menu-item"
+          onclick="(switchView('billing'), toggleUserMenu())"
+        >
+          <i data-lucide="credit-card" class="w-4 h-4"></i> Billing
+        </button>
+        <button type="button"
+          class="menu-item"
+          onclick="(switchView('integrations'), toggleUserMenu())"
+        >
+          <i data-lucide="plug-zap" class="w-4 h-4"></i> Integrations
+        </button>
+        <button type="button"
+          class="menu-item"
+          onclick="(switchView('export-data'), toggleUserMenu())"
+        >
+          <i data-lucide="archive" class="w-4 h-4"></i> Export Data
+        </button>
+        <button type="button"
+          class="menu-item"
+          onclick="(switchView('feedback'), toggleUserMenu())"
+        >
+          <i data-lucide="message-square" class="w-4 h-4"></i> Feedback
+        </button>
+        <button type="button"
+          class="menu-item"
+          onclick="(switchView('support'), toggleUserMenu())"
+        >
+          <i data-lucide="life-buoy" class="w-4 h-4"></i> Support Center
+          <span
+            id="user-menu-support-badge"
+            class="ml-auto text-[10px] px-1.5 py-0.5 rounded-full hidden bg-blue-500/15 text-blue-300"
+            >0</span
+          >
+        </button>
+        <button type="button"
+          id="menu-item-hello"
+          class="menu-item hidden"
+          onclick="startPasskeySetup()"
+        >
+          <i data-lucide="fingerprint" class="w-4 h-4"></i>
+          <span id="menu-passkey-label">Add passkey or security key</span>
+        </button>
+        <button type="button" class="menu-item danger" onclick="performLogout()">
+          <i data-lucide="log-out" class="w-4 h-4"></i> Log Out
+        </button>
+      </div>
+      <div
+        class="p-4 border-t"
+        style="
+          border-color: var(--table-border);
+          background-color: var(--nav-hover);
+        "
+      >
+        <button type="button"
+          id="user-profile-btn"
+          aria-label="Workspace account menu"
+          aria-expanded="false"
+          aria-controls="user-menu"
+          onclick="toggleUserMenu()"
+          class="w-full text-left flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer group select-none"
+        >
+          <span
+            class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-900 to-slate-900 border border-white/10 flex items-center justify-center relative shadow-lg"
+          >
+            <span class="text-[10px] font-bold text-white">IV</span>
+            <span
+              id="user-status-dot"
+              class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-gray-500 rounded-full border-2"
+              style="border-color: var(--bg-body)"
+              role="status"
+              aria-label="No runtime configured"
+              title="No runtime configured"
+            ></span>
+          </span>
+          <span class="flex-1 overflow-hidden">
+            <span
+              id="user-profile-name"
+              class="block text-xs font-semibold truncate"
+              style="color: var(--text-main)"
+            >
+              Loading workspace...
+            </span>
+            <span
+              id="user-profile-id"
+              class="block text-[10px] truncate font-mono-cli tracking-wide"
+              style="color: var(--text-muted)"
+            >
+              ID: -
+            </span>
+          </span>
+          <i
+            data-lucide="chevron-up"
+            class="w-4 h-4 transition-transform duration-200"
+            id="user-menu-chevron"
+            style="color: var(--text-subtle)"
+          ></i>
+        </button>
+      </div>
+    </aside>
+    <div id="dashboard-content-shell" class="flex flex-1 min-w-0 overflow-hidden">
+      <main
+        class="dashboard-main flex-1 flex flex-col min-h-0 overflow-hidden relative"
+      >
+        <header
+          class="h-24 flex items-center justify-between px-10 z-10 shrink-0"
+        >
+          <div class="flex items-baseline gap-3">
+            <button
+              onclick="toggleMobileNav()"
+              aria-label="Open navigation"
+              class="mobile-menu-button w-10 h-10 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:bg-white/5 items-center justify-center"
+            >
+              <i data-lucide="menu" class="w-5 h-5"></i>
+            </button>
+            <h1
+              id="page-title"
+              class="text-2xl font-light tracking-wide"
+              style="color: var(--text-main)"
+            >
+              Overview
+            </h1>
+            <span
+              class="text-xs tracking-widest uppercase"
+              style="color: var(--text-subtle)"
+              >/ Console</span
+            >
+          </div>
+          <div class="flex items-center gap-4"></div>
+        </header>
+        <div id="dashboard-page-scroll" class="iv-dashboard-page-scroll flex-1 min-h-0 overflow-y-auto custom-scroll p-10 pt-4">
+          {% include "console/views/overview.html" %}
+          {% include "console/views/deployments.html" %}
+          {% include "console/views/incidents.html" %}
+          {% include "console/views/status-page.html" %}
+          {% include "console/views/catalog.html" %}
+          {% include "console/views/editor.html" %}
+          {% include "console/views/launcher.html" %}
+          {% include "console/views/capacity-audit.html" %}
+          {% include "console/views/console.html" %}
+          {% include "console/views/app-logs.html" %}
+          {% include "console/views/api-reference.html" %}
+          {% include "console/views/network.html" %}
+          {% include "console/views/remediation.html" %}
+          {% include "console/views/docs.html" %}
+          {% include "console/views/billing.html" %}
+          {% include "console/views/rollout.html" %}
+          {% include "console/views/updates.html" %}
+          {% include "console/views/security.html" %}
+          {% include "console/views/pipelines.html" %}
+          {% include "console/views/internal-network.html" %}
+          {% include "console/views/runtime-evidence.html" %}
+          {% include "console/views/cache-queue.html" %}
+          {% include "console/views/process-supervisor.html" %}
+          {% include "console/views/gateway-routes.html" %}
+          {% include "console/views/trust-receipts.html" %}
+          {% include "console/views/pipeline-logs.html" %}
+          {% include "console/views/support.html" %}
+          {% include "console/views/settings.html" %}
+          {% include "console/views/auth-settings.html" %}
+          {% include "console/views/feedback.html" %}
+          {% include "console/views/usage.html" %}
+          {% include "console/views/scale.html" %}
+          {% include "console/views/export-data.html" %}
+          {% include "console/views/integrations.html" %}
+        </div>
+      </main>
+      <script src="/static/console/features/customer-care/support.js?v={{ app_config.asset_version }}"></script>
+      <script src="/static/console/features/customer-care/feedback.js?v={{ app_config.asset_version }}"></script>
+      <script src="/static/console/features/runtime-setup.js?v={{ app_config.asset_version }}"></script>
+      <script src="/static/console/features/fleet/selection.js?v={{ app_config.asset_version }}"></script>
+      <script src="/client/dashboard-assets/{{ app_config.asset_version }}/console.js"></script>
+      <div
+        id="wh-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wh-title"
+        aria-describedby="wh-copy"
+        class="hidden fixed inset-0 z-[200] flex items-center justify-center modal-backdrop px-4 py-6"
+      >
+        <div class="iv-modal-card iv-auth-modal w-full max-w-md max-h-[88vh] overflow-y-auto">
+          <div class="iv-modal-header">
+            <div class="iv-modal-icon">
+              <i data-lucide="fingerprint"></i>
+            </div>
+            <div>
+              <div class="iv-modal-eyebrow">Account security</div>
+              <h3 id="wh-title">Add a passkey or security key</h3>
+              <p id="wh-copy">Choose the key you want to add. Confirm with an existing account factor when asked; existing keys stay registered.</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" role="group" aria-label="Choose a sign-in method">
+            <button
+              type="button"
+              data-dashboard-passkey-platform="passkey"
+              aria-pressed="false"
+              class="btn-secondary py-3 rounded-lg text-xs font-bold uppercase tracking-widest flex flex-col justify-center items-center gap-1 border border-white/10"
+            >
+              <span>Passkey</span>
+              <span class="text-[9px] normal-case tracking-normal font-medium opacity-70">Device / phone</span>
+            </button>
+            <button
+              type="button"
+              data-dashboard-passkey-platform="security-key"
+              aria-pressed="false"
+              class="btn-secondary py-3 rounded-lg text-xs font-bold uppercase tracking-widest flex flex-col justify-center items-center gap-1 border border-white/10"
+            >
+              <span>Security key</span>
+              <span class="text-[9px] normal-case tracking-normal font-medium opacity-70">USB / NFC</span>
+            </button>
+            <button
+              type="button"
+              data-dashboard-passkey-platform="windows"
+              aria-pressed="false"
+              class="btn-secondary py-3 rounded-lg text-xs font-bold uppercase tracking-widest flex flex-col justify-center items-center gap-1 border border-white/10"
+            >
+              <span>Windows Hello</span>
+              <span class="text-[9px] normal-case tracking-normal font-medium opacity-70">This device</span>
+            </button>
+          </div>
+          <div class="iv-modal-callout">
+            <i data-lucide="shield-check"></i>
+            <div>
+              <strong>Your passkey stays under your control</strong>
+              <span>Your browser handles the key's PIN, touch, or biometrics. Infraveil receives a public credential, not your device PIN or biometric data.</span>
+            </div>
+          </div>
+          <div id="wh-status" class="iv-modal-status" data-state="idle" aria-live="polite"></div>
+          <button
+            id="wh-btn"
+            class="btn-primary iv-modal-primary"
+            disabled
+          >
+            <i data-lucide="fingerprint" class="w-4 h-4"></i>
+            Add passkey
+          </button>
+          <button
+            onclick="closeHelloModal()"
+            class="btn-secondary iv-modal-secondary"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+    <script src="/client/dashboard-assets/{{ app_config.asset_version }}/release-approval.js"></script>
+    <script src="/client/dashboard-assets/{{ app_config.asset_version }}/runtime-update.js"></script>
+    <script src="/client/dashboard-assets/{{ app_config.asset_version }}/status-page.js"></script>
+    <script src="/client/dashboard-assets/{{ app_config.asset_version }}/dialog.js"></script>
+<script src="/static/console/ui/local-sections.js?v={{ app_config.asset_version }}"></script>
+<script src="/static/console/ui/manifest-editor.js?v={{ app_config.asset_version }}"></script>
+<script src="/static/console/ui/fleet-canvas.js?v={{ app_config.asset_version }}"></script>
+<script src="/static/console/features/fleet/navigator.js?v={{ app_config.asset_version }}"></script>
+<script src="/static/dashboard-modern.js?v={{ app_config.asset_version }}"></script>
+  </body>
+</html>

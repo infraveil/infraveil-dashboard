@@ -1,0 +1,184 @@
+
+      (function () {
+        var state = null, dismissed = "", toast = null;
+        function esc(s) {
+          return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+          });
+        }
+        function ver(x, key) {
+          return String(x[key] || (x.runtime_status || {})[key] || "").trim();
+        }
+        function summarize(d) {
+          var pub = String(d.published_runtime_version || "");
+          var hosts = d.launcher_hosts || [], agents = d.agents || [];
+          function counts(list, key, versions, total) {
+            if (versions && typeof versions === "object") {
+              var entries = Object.entries(versions), knownCount = entries.filter(function (entry) { return entry[0] && entry[0] !== "unknown"; }).reduce(function (sum, entry) { return sum + Number(entry[1] || 0); }, 0);
+              var currentCount = Number(versions[pub] || 0), totalCount = Number(total ?? entries.reduce(function (sum, entry) { return sum + Number(entry[1] || 0); }, 0));
+              return { total: totalCount, known: knownCount, behind: Math.max(0, knownCount - currentCount), unknown: Math.max(0, totalCount - knownCount) };
+            }
+            var known = list.filter(function (x) { return ver(x, key); });
+            var behind = known.filter(function (x) { return ver(x, key) !== pub; });
+            return { total: list.length, known: known.length, behind: behind.length, unknown: list.length - known.length };
+          }
+          var inventory = d.inventory || {};
+          var L = counts(hosts, "launcher_version", inventory.launcher_versions, inventory.hosts), A = counts(agents, "agent_version", inventory.agent_versions, inventory.agents);
+          return { pub: pub, L: L, A: A, behind: L.behind + A.behind,
+                   auto: d.auto_update !== false, veto: !!d.release_veto_active,
+                   rollout: d.runtime_rollout || {},
+                   changelog: d.changelog || (state && state.changelog) || [] };
+        }
+        window.ivUpdatesFromStatus = function (t) {
+          if (!t || !t.published_runtime_version) return;
+          var prev = state ? state.pub : "";
+          var keepChangelog = state ? state.changelog : [];
+          state = summarize(t);
+          if (!state.changelog.length) state.changelog = keepChangelog;
+          paintToast();
+          if (getCurrentViewId && getCurrentViewId() === "updates") window.renderUpdatesView();
+          if (prev && prev !== state.pub && window.showToast) showToast("Runtime updated to v" + state.pub + ".", "success");
+        };
+        function paintToast() {
+          if (!state) return;
+          if (!state.behind || dismissed === state.pub) { if (toast) toast.style.display = "none"; return; }
+          if (!toast) {
+            toast = document.createElement("div");
+            toast.id = "iv-update-toast";
+            toast.style.cssText = "position:fixed;right:20px;bottom:20px;z-index:70;max-width:330px;padding:14px 16px;border-radius:14px;background:var(--panel-bg);border:1px solid rgba(96,165,250,0.4);box-shadow:0 12px 40px rgba(0,0,0,0.45);color:var(--text-main,#e2e8f0);font-size:13px";
+            if (document.body) document.body.appendChild(toast);
+          }
+          var parts = [];
+          if (state.A.behind) parts.push(state.A.behind + " agent" + (state.A.behind > 1 ? "s" : ""));
+          if (state.L.behind) parts.push(state.L.behind + " server" + (state.L.behind > 1 ? "s" : ""));
+          toast.innerHTML =
+            '<div style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:4px">' +
+            '<span style="width:8px;height:8px;border-radius:99px;background:#60a5fa;display:inline-block"></span>' +
+            'Update available &mdash; v' + esc(state.pub) + '</div>' +
+            '<div style="color:var(--text-muted,#94a3b8);line-height:1.4">' + parts.join(" + ") +
+            ' on an older version. ' + (state.veto ? "Review the named releases in your installed setup console." : state.auto ? "Automatic updates are enabled; waiting for sync." : "Paused — review to apply.") + '</div>' +
+            '<div style="display:flex;gap:14px;margin-top:10px">' +
+            '<a href="#" onclick="switchView(\'updates\');return false;" style="font-weight:600;color:#60a5fa;text-decoration:none">View updates</a>' +
+            '<a href="#" onclick="window.__ivUpdDismiss();return false;" style="color:var(--text-subtle,#64748b);text-decoration:none">Dismiss</a></div>';
+          toast.style.display = "block";
+          var dot = document.getElementById("nav-updates-dot");
+          if (dot) dot.classList.remove("hidden");
+        }
+        window.__ivUpdDismiss = function () {
+          if (state) dismissed = state.pub;
+          if (toast) toast.style.display = "none";
+        };
+        window.renderUpdatesView = function () {
+          var vEl = document.getElementById("upd-version");
+          if (!vEl) return;
+          if (!state) { vEl.textContent = "Loading…"; refresh(true); return; }
+          var s = state;
+          vEl.textContent = "v" + s.pub;
+          var pill = document.getElementById("upd-status-pill");
+          if (pill) {
+            var P = function (bg, col, txt) { return '<span style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;background:' + bg + ';color:' + col + '">' + txt + "</span>"; };
+            if (s.A.unknown || s.L.unknown) pill.innerHTML = P("rgba(245,158,11,0.12)", "#fcd34d", "Awaiting version reports");
+            else if (!s.behind) pill.innerHTML = P("rgba(34,197,94,0.16)", "#86efac", "Up to date");
+            else if (s.A.behind === 0) pill.innerHTML = P("rgba(245,158,11,0.16)", "#fcd34d", "Server updates pending");
+            else pill.innerHTML = P("rgba(37,99,235,0.18)", "#93c5fd", s.A.behind + " agent" + (s.A.behind > 1 ? "s" : "") + " updating");
+          }
+          var fl = document.getElementById("upd-fleet-line");
+          if (fl) {
+            fl.textContent =
+              (s.A.known - s.A.behind) + " of " + s.A.total + " agents report v" + s.pub +
+              " · " + (s.L.known - s.L.behind) + " of " + s.L.total + " servers current" +
+              (s.A.unknown || s.L.unknown ? " — some versions have not been reported." : s.behind ? " — approved updates are still pending." : " — all reported versions are current.");
+          }
+          var rl = document.getElementById("upd-relaunch-wrap");
+          if (rl) rl.classList.toggle("hidden", !s.L.behind);
+
+          var rollout = s.rollout || {}, phase = String(rollout.phase || (s.behind ? "preparing" : "complete"));
+          var phaseLabel = { canary: "Canary", batch: "Expanding", halted: "Paused", complete: "Complete", preparing: "Preparing" }[phase] || phase;
+          var rolloutTitle = document.getElementById("upd-rollout-title");
+          var rolloutCopy = document.getElementById("upd-rollout-copy");
+          var rolloutPill = document.getElementById("upd-rollout-pill");
+          var rolloutProgress = document.getElementById("upd-rollout-progress");
+          var rolloutMetrics = document.getElementById("upd-rollout-metrics");
+          var rolloutDetails = document.getElementById("upd-rollout-details");
+          var eligible = Number(rollout.eligible || s.A.known || 0), current = Number(rollout.current || (s.A.known - s.A.behind) || 0);
+          var blocked = Number(rollout.blocked || 0), pending = Number(rollout.pending || Math.max(0, eligible - current));
+          if (rolloutTitle) rolloutTitle.textContent = phase === "halted" ? "Rollout stopped safely" : phase === "complete" ? "Release is healthy across the fleet" : phase === "canary" ? "Validating the first agent" : "Expanding to the next group";
+          if (rolloutCopy) rolloutCopy.textContent = phase === "halted" ? (rollout.halted_reason || "A candidate rolled back. No additional agents will update until the release changes.") : phase === "complete" ? "Every eligible agent has confirmed the published runtime." : "Candidates must stay healthy before the next group receives the release.";
+          if (rolloutPill) { rolloutPill.textContent = phaseLabel; rolloutPill.dataset.state = phase === "halted" ? "danger" : phase === "complete" ? "success" : "active"; }
+          if (rolloutProgress) rolloutProgress.style.width = (eligible ? Math.round(current / eligible * 100) : 100) + "%";
+          if (rolloutMetrics) rolloutMetrics.innerHTML = [["Current", current], ["Waiting", pending], ["Rolled back", blocked], ["Eligible", eligible]].map(function (m) { return '<div><strong>' + m[1] + '</strong><span>' + m[0] + '</span></div>'; }).join("");
+          if (rolloutDetails) rolloutDetails.innerHTML = [
+            ["Release", "v" + s.pub], ["Phase", phaseLabel], ["Health window", String(rollout.healthy_seconds || 60) + " seconds"], ["Batch size", String(rollout.batch_percent || 25) + "%"], ["Targets", (rollout.targets || []).join(", ") || "None"], ["Started", rollout.started_at ? new Date(Number(rollout.started_at) * 1000).toLocaleString() : "Not reported"]
+          ].map(function (m) { return '<div><span>' + esc(m[0]) + '</span><code>' + esc(m[1]) + '</code></div>'; }).join("");
+
+          var demo = window.APP_STATE && APP_STATE.demo_mode;
+          var tgl = document.getElementById("upd-auto-toggle"), knob = document.getElementById("upd-auto-knob");
+          if (tgl && knob) {
+            tgl.setAttribute("aria-checked", s.auto ? "true" : "false");
+            tgl.style.background = s.auto ? "#2563eb" : "var(--panel-border)";
+            knob.style.transform = s.auto ? "translateX(20px)" : "translateX(0)";
+            tgl.style.opacity = demo ? "0.55" : "1";
+            tgl.style.cursor = demo ? "not-allowed" : "pointer";
+          }
+          var note = document.getElementById("upd-veto-note");
+          if (note) {
+            var msg = "";
+            if (demo) msg = "Demo runtimes check for approved updates automatically. Viewing this page does not approve a release; your release-approval policy still applies.";
+            else if (s.veto) msg = "Offline approval is active — new releases wait for your signed approval no matter what this is set to.";
+            note.textContent = msg;
+            note.classList.toggle("hidden", !msg);
+          }
+          var cl = document.getElementById("upd-changelog");
+          if (cl) {
+            cl.innerHTML = s.changelog.map(function (rel) {
+              var current = rel.version === s.pub;
+              var notes = (rel.notes || []).map(function (n) {
+                return '<li style="display:flex;gap:8px;margin-top:6px"><span style="color:#60a5fa">·</span><span>' + esc(n) + "</span></li>";
+              }).join("");
+              return '<div class="rounded-2xl p-5" style="background:var(--panel-bg);border:1px solid ' +
+                (current ? "rgba(96,165,250,0.45)" : "var(--panel-border)") + '">' +
+                '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+                '<span style="font-size:15px;font-weight:600;color:var(--text-main)">v' + esc(rel.version) + "</span>" +
+                (current ? '<span style="padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;background:rgba(37,99,235,0.18);color:#93c5fd">CURRENT</span>' : "") +
+                '<span style="margin-left:auto;font-size:12px;color:var(--text-subtle)">' + esc(rel.date) + "</span></div>" +
+                '<div style="margin-top:4px;font-size:13px;color:var(--text-muted)">' + esc(rel.title) + "</div>" +
+                '<ul style="margin-top:8px;font-size:13px;color:var(--text-muted);line-height:1.45">' + notes + "</ul></div>";
+            }).join("");
+          }
+        };
+        window.toggleAutoUpdate = function () {
+          if (window.APP_STATE && APP_STATE.demo_mode) {
+            if (window.showToast) showToast("Demo workspaces always auto-update.", "error");
+            return;
+          }
+          if (!state) return;
+          var next = !state.auto;
+          fetch("/client/api/updates/auto", {
+            method: "POST", credentials: "same-origin",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ enabled: next }),
+          }).then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (res) {
+              if (res && res.success) {
+                state.auto = !!res.auto_update;
+                window.renderUpdatesView();
+                paintToast();
+                if (window.showToast) showToast(state.auto ? "Auto-updates on." : "Auto-updates paused.", "success");
+              } else if (window.showToast) { showToast("Couldn't change auto-updates.", "error"); }
+            }).catch(function () { if (window.showToast) showToast("Couldn't change auto-updates.", "error"); });
+        };
+        function refresh(thenRender) {
+          if (window.ivDashboardAccess?.paused) return;
+          fetch("/client/api/audit/evidence", { credentials: "same-origin", headers: { Accept: "application/json" } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+              if (!d || !d.published_runtime_version) return;
+              state = summarize(d);
+              paintToast();
+              if (thenRender) window.renderUpdatesView();
+            }).catch(function () {});
+        }
+        setTimeout(function () { refresh(false); }, 2500);
+        setInterval(function () { refresh(false); }, 60000);
+      })();
+    

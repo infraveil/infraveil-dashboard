@@ -1,0 +1,117 @@
+<div
+            id="view-trust-receipts"
+            class="view-section hidden max-w-7xl mx-auto space-y-6"
+          >
+            <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
+              <div>
+                <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Connections &amp; change history</div>
+                <h2 class="text-2xl mt-2" style="color: var(--text-main)">Connect servers and review changes</h2>
+                <p class="text-sm mt-2 max-w-4xl" style="color: var(--text-muted)">
+                  Connect a server, review the apps and updates it will run, and follow its reports and action history. Technical verification details stay available under Advanced.
+                </p>
+              </div>
+              <div id="trust-export-actions" class="flex flex-wrap gap-3">
+                <button onclick="exportAuditEvidence()" class="btn-primary px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Export Audit</button>
+                <button onclick="exportProofPacket()" class="btn-secondary px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Proof Packet</button>
+              </div>
+            </div>
+            <div id="release-approval-panel" class="iv-evidence-panel space-y-5">
+              <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
+                <div>
+                  <div class="iv-eyebrow">Server connection</div>
+                  <h3 class="text-lg mt-1" style="color: var(--text-main)">Connect your server</h3>
+                  <p class="text-sm mt-2 max-w-3xl" style="color: var(--text-muted)">Copy one command into your Linux server's terminal. Setup checks and installs the server software, then asks which apps you want to run.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span id="ra-enforcement" class="text-[10px] uppercase tracking-widest font-bold px-3 py-1 rounded-full border border-white/10" style="color: var(--text-muted)">Checking</span>
+                  <button onclick="ivApproval.refresh()" class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Refresh</button>
+                </div>
+              </div>
+              <div id="ra-required-note" class="rounded-lg border px-4 py-3 text-xs" style="border-color: var(--panel-border); background: var(--panel-soft); color: var(--text-muted)">
+                You choose what runs. Getting a command does not connect a server or approve an app. Existing workloads are not stopped just because setup is incomplete.
+              </div>
+              <div class="iv-approval-flow" aria-label="Connect a Linux server">
+                <div><span>1</span><strong>Open your server's terminal</strong><p>Use SSH or your hosting provider's web console. Sign in as a regular Linux user with sudo access—not as root.</p></div>
+                <div><span>2</span><strong>Copy and run the command</strong><p>Get a setup command below. Copy it, paste it into that terminal and press Enter. No file transfer needed.</p></div>
+                <div><span>3</span><strong>Choose your apps</strong><p>Follow the terminal prompts. Allow only the apps you want to start. This page updates when your server connects.</p></div>
+              </div>
+              <div class="grid xl:grid-cols-2 gap-4">
+                <div class="iv-evidence-step space-y-3">
+                  <div class="iv-eyebrow">Your server's setup command</div>
+                  <p class="text-[11px]" style="color: var(--text-muted)">Run this in the Linux server's terminal, not on your PC. Setup installs on the machine where this command runs.</p>
+                  <button id="trust-console-download" type="button" onclick="ivTrustConsole.command()" class="btn-primary w-full px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Get setup command</button>
+                  <button id="trust-console-copy" type="button" onclick="ivTrustConsole.copy()" disabled class="btn-secondary w-full px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Copy command</button>
+                  <details id="trust-console-command-details"><summary class="text-xs cursor-pointer" style="color: var(--text-muted)">View command</summary><pre class="iv-trust-command mt-2" style="white-space: pre-wrap; overflow-wrap: anywhere; max-height: 15rem; overflow: auto"><code id="trust-console-command" tabindex="0"></code></pre></details>
+                  <div id="trust-console-download-status" role="status" aria-live="polite" class="text-[11px]" style="color: var(--text-muted)">Select your server, then get its command. It expires after five minutes. Keep it private.</div>
+                </div>
+                <div class="iv-evidence-step space-y-3">
+                  <div class="iv-eyebrow">No manual keys or signatures</div>
+                  <p class="text-[11px]" style="color: var(--text-muted)">Setup handles verification for you. Keep its terminal open until it confirms installation. If this workspace already has an approval key on another machine, setup will explain how to use that key; it cannot silently replace it.</p>
+                  <div id="ra-enrollment-status" class="text-[11px]" style="color: var(--text-muted)">Waiting for setup. The server is connected only when it reports in.</div>
+                </div>
+              </div>
+              <div class="grid xl:grid-cols-[0.8fr_1.2fr] gap-4">
+                <div class="iv-evidence-step space-y-2">
+                  <div class="iv-eyebrow">You choose what runs</div>
+                  <p class="text-[11px]" style="color: var(--text-muted)">Review the named changes in setup on your server. Keep manual approval to decide each change yourself. Viewing or refreshing this list never approves anything.</p>
+                </div>
+                <div class="iv-evidence-step">
+                  <div class="iv-eyebrow mb-2">Changes awaiting your review</div>
+                  <div id="ra-pending" class="space-y-2"><div class="text-xs" style="color: var(--text-muted)">Loading</div></div>
+                </div>
+              </div>
+              <section class="iv-approval-bulk" aria-labelledby="ra-approve-all-title">
+                <div class="iv-approval-bulk-head">
+                  <div>
+                    <div class="iv-eyebrow">Change review</div>
+                    <h4 id="ra-approve-all-title">Review named changes on your server</h4>
+                    <p>Initial setup presents the pending apps and updates by name. For later changes, use the review option in the same installed console. Your approval key stays on its machine, not in this browser.</p>
+                  </div>
+                  <span id="ra-approve-all-count" class="iv-status-pill" data-state="active">Checking</span>
+                </div>
+                <div class="iv-approval-bulk-actions">
+                  <button type="button" onclick="ivApproval.refresh()" class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Refresh changes</button>
+                </div>
+              </section>
+              <details id="ra-advanced-details" class="iv-technical-details">
+                <summary>Advanced: verification, approval policy &amp; separate admin setup</summary>
+                <div class="iv-detail-grid">
+                  <p class="iv-section-copy">Setup generates the private Ed25519 approval key locally and proves possession automatically. Only its public key and signatures reach Infraveil. The downloaded bootstrap is bound to the selected server, expires after five minutes, and can be used once. Launcher installation remains locked until this verification succeeds, including in the interactive demo.</p>
+                  <p class="iv-section-copy">Basic setup keeps the approval console and launcher on the same Linux server. It is convenient but shares that machine's security boundary. For the strongest independent release veto, use the separate admin-workstation arrangement and its existing key instead. A fresh console must not replace a workspace's previously registered key.</p>
+                  <p class="iv-section-copy">Manual review retains your veto. Allowlist is available from the console. Auto approval is deliberately opt-in and requires typing <strong>AUTO</strong> because it signs all requested changes and gives up that practical veto while enabled.</p>
+                  <p class="iv-section-copy">The console manages its isolated folder, hash-locked dependencies, scoped approval token, and signed launcher checks. Existing workloads are never stopped solely because enrollment is incomplete.</p>
+                  <button type="button" onclick="runtimeCopy('python3 infraveil.py --once', 'Trust Console command')" class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Copy later review command</button>
+                  <a href="https://infraveil.com/tools/infraveil.py" target="_blank" rel="noopener" class="btn-secondary block text-center px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Inspect public setup source</a>
+                </div>
+              </details>
+            </div>
+            <div id="trust-receipts-summary" class="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div class="iv-evidence-card"><div class="iv-eyebrow">Server identity</div><div class="iv-evidence-value">Waiting</div><div class="iv-evidence-copy">Connected servers reporting a code identity.</div></div>
+              <div class="iv-evidence-card"><div class="iv-eyebrow">Agent identity</div><div class="iv-evidence-value">Waiting</div><div class="iv-evidence-copy">Agents reporting the code they are running.</div></div>
+              <div class="iv-evidence-card"><div class="iv-eyebrow">Runtime contracts</div><div class="iv-evidence-value">Waiting</div><div class="iv-evidence-copy">Workloads with a traceable contract hash.</div></div>
+              <div class="iv-evidence-card"><div class="iv-eyebrow">Recorded actions</div><div class="iv-evidence-value">Waiting</div><div class="iv-evidence-copy">Recent integrity-linked operator receipts.</div></div>
+            </div>
+            <div id="trust-receipts-grid" class="grid xl:grid-cols-[1fr_0.9fr] gap-6">
+              <div class="iv-evidence-panel space-y-5">
+                <div><div class="iv-eyebrow">Identity report</div><h3 class="text-lg mt-1" style="color: var(--text-main)">Servers and agents</h3><p class="iv-section-copy">Readable assurance first. Open technical evidence only when you need exact hashes and fingerprints.</p></div>
+                <div class="grid md:grid-cols-2 gap-3">
+                  <select id="trust-identity-filter" onchange="renderTrustReceipts(window.__latestStatusPayload || {})" class="ink-input text-xs rounded-lg px-3 py-2">
+                    <option value="all">Launchers and agents</option>
+                    <option value="launchers">Launchers only</option>
+                    <option value="agents">Agents only</option>
+                    <option value="missing">Missing proof only</option>
+                  </select>
+                  <button onclick="copyTrustSummary()" class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Copy Summary</button>
+                </div>
+                <div id="trust-identity-list" class="space-y-3">
+                  <div class="iv-empty-state">Connect a server or agent and its identity proof appears here.</div>
+                </div>
+              </div>
+              <div class="iv-evidence-panel space-y-5">
+                <div><div class="iv-eyebrow">Action receipts</div><h3 class="text-lg mt-1" style="color: var(--text-main)">Recent controlled actions</h3><p class="iv-section-copy">Each receipt connects an operator command to the target that acknowledged it.</p></div>
+                <div id="trust-receipt-list" class="space-y-3 max-h-[28rem] overflow-y-auto pr-2 custom-scroll">
+                  <div class="iv-empty-state">Run a controlled action and its integrity-linked receipt appears here.</div>
+                </div>
+              </div>
+            </div>
+          </div>

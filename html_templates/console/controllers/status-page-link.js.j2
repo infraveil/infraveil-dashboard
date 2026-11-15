@@ -1,0 +1,68 @@
+
+      (function () {
+        function applyStatusLink(d) {
+          var row = document.getElementById("status-link-row");
+          var enable = document.getElementById("status-link-enable");
+          var input = document.getElementById("status-link-input");
+          var open = document.getElementById("status-link-open");
+          if (!row || !enable) return;
+          if (d && d.enabled && d.url) {
+            row.classList.remove("hidden");
+            row.style.display = "flex";
+            if (input) input.value = d.url;
+            if (open) open.href = d.url;
+            enable.textContent = "Live";
+            enable.disabled = true;
+            enable.style.opacity = "0.6";
+            enable.style.cursor = "default";
+          } else {
+            row.classList.add("hidden");
+            row.style.display = "none";
+            enable.textContent = "Generate link";
+            enable.disabled = false;
+            enable.style.opacity = "1";
+            enable.style.cursor = "pointer";
+          }
+        }
+        window.loadStatusLink = function () {
+          fetch("/client/api/status-page", { credentials: "same-origin", headers: { Accept: "application/json" } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) { if (d) applyStatusLink(d); })
+            .catch(function () {});
+        };
+        function rotate(disable) {
+          return fetch("/client/api/status-page/rotate", {
+            method: "POST", credentials: "same-origin",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ disable: !!disable }),
+          }).then(function (r) { return r.ok ? r.json() : null; });
+        }
+        window.generateStatusLink = function () {
+          rotate(false).then(function (d) {
+            if (d && d.success) { applyStatusLink(d); if (window.showToast) showToast("Public status link generated.", "success"); }
+            else if (window.showToast) showToast("Couldn't generate link.", "error");
+          });
+        };
+        window.rotateStatusLink = async function () {
+          if (!(await ivConfirm("Revoke the current link and generate a new one? The old link will stop working immediately.", { confirmText: "Revoke & regenerate", danger: true }))) return;
+          rotate(false).then(function (d) {
+            if (d && d.success) { applyStatusLink(d); if (window.showToast) showToast("Old link revoked — new link is live.", "success"); }
+            else if (window.showToast) showToast("Couldn't regenerate link.", "error");
+          });
+        };
+        window.disableStatusLink = async function () {
+          if (!(await ivConfirm("Disable the public status page? The link will stop working until you generate a new one.", { confirmText: "Disable", danger: true }))) return;
+          rotate(true).then(function (d) {
+            if (d && d.success) { applyStatusLink(d); if (window.showToast) showToast("Public status page disabled.", "success"); }
+            else if (window.showToast) showToast("Couldn't disable link.", "error");
+          });
+        };
+        window.copyStatusLink = function () {
+          var input = document.getElementById("status-link-input");
+          if (!input || !input.value) return;
+          var done = function () { if (window.showToast) showToast("Link copied.", "success"); };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(input.value).then(done, function () { input.select(); document.execCommand("copy"); done(); });
+          else { input.select(); document.execCommand("copy"); done(); }
+        };
+      })();
+    

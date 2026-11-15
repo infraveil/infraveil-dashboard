@@ -1,0 +1,748 @@
+<div
+            id="view-pipelines"
+            class="view-section hidden w-full px-6 xl:px-8 pb-8 space-y-6"
+          >
+            <div class="flex items-end justify-between gap-6">
+              <div>
+                <h2 class="text-xl font-light" style="color: var(--text-main)">
+                  Monitoring Pipelines
+                </h2>
+                <p
+                  class="text-sm mt-2 max-w-3xl"
+                  style="color: var(--text-muted)"
+                >
+                  Build the exact data flow you want: what to capture, how to
+                  score it, what to do next, and how to validate it live across
+                  one API or a full fleet.
+                </p>
+              </div>
+              <div class="flex flex-wrap gap-2.5 items-center">
+                <button
+                  onclick="exportPipelineStack()"
+                  class="btn-secondary px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5"
+                  title="Download this pipeline as a JSON file you can back up or reuse"
+                >
+                  <i data-lucide="download" class="w-3.5 h-3.5"></i> Export
+                </button>
+                <button
+                  onclick="triggerPipelineImport()"
+                  class="btn-secondary px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5"
+                  title="Load a pipeline from a JSON file"
+                >
+                  <i data-lucide="upload" class="w-3.5 h-3.5"></i> Import
+                </button>
+                <button
+                  onclick="resetPipelineBuilderToDefault()"
+                  class="btn-secondary px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5"
+                  title="Clear everything and start over from the default pipeline"
+                >
+                  <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Reset
+                </button>
+                <button
+                  onclick="savePipelineBuilder()"
+                  class="btn-primary px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2"
+                >
+                  <i data-lucide="save" class="w-4 h-4"></i> Save All Changes
+                </button>
+              </div>
+            </div>
+            <div class="acrylic-panel rounded-2xl overflow-hidden">
+              <div
+                class="flex items-center border-b"
+                style="border-color: var(--table-border)"
+              >
+                <button
+                  onclick="switchPipelineTab('builder')"
+                  id="pipeline-tab-builder"
+                  class="pipeline-tab active flex-1 px-6 py-3.5 text-[10px] uppercase tracking-widest font-bold text-center transition-colors"
+                  style="
+                    color: var(--text-main);
+                    background: var(--nav-active-bg);
+                    border-bottom: 2px solid var(--accent);
+                  "
+                >
+                  <i
+                    data-lucide="workflow"
+                    class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"
+                  ></i
+                  >Pipeline Builder
+                </button>
+                <button
+                  onclick="togglePipelineAdvanced()"
+                  id="pipeline-advanced-toggle"
+                  class="px-6 py-3.5 text-[10px] uppercase tracking-widest font-bold transition-colors inline-flex items-center gap-1.5 shrink-0"
+                  style="color: var(--text-muted)"
+                  title="Power-user surfaces: AI suggestions, custom modules, connected tools, and per-workload stacks. Most people never need these."
+                >
+                  <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i
+                  >Advanced<i
+                    data-lucide="chevron-down"
+                    id="pipeline-advanced-chevron"
+                    class="w-3 h-3 transition-transform"
+                  ></i>
+                </button>
+              </div>
+              <div
+                id="pipeline-advanced-row"
+                class="hidden flex border-b"
+                style="
+                  border-color: var(--table-border);
+                  background: var(--nav-hover);
+                "
+              >
+                <button
+                  onclick="switchPipelineTab('adaptive')"
+                  id="pipeline-tab-adaptive"
+                  class="pipeline-tab flex-1 px-6 py-3 text-[10px] uppercase tracking-widest font-bold text-center transition-colors"
+                  style="color: var(--text-muted)"
+                >
+                  <i
+                    data-lucide="brain"
+                    class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"
+                  ></i
+                  >AI Suggestions
+                </button>
+                <button
+                  onclick="switchPipelineTab('modules')"
+                  id="pipeline-tab-modules"
+                  class="pipeline-tab flex-1 px-6 py-3 text-[10px] uppercase tracking-widest font-bold text-center transition-colors"
+                  style="color: var(--text-muted)"
+                >
+                  <i
+                    data-lucide="puzzle"
+                    class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"
+                  ></i
+                  >Custom Modules
+                </button>
+                <button
+                  onclick="switchPipelineTab('tools')"
+                  id="pipeline-tab-tools"
+                  class="pipeline-tab flex-1 px-6 py-3 text-[10px] uppercase tracking-widest font-bold text-center transition-colors"
+                  style="color: var(--text-muted)"
+                >
+                  <i
+                    data-lucide="plug"
+                    class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"
+                  ></i
+                  >Connected Tools
+                </button>
+                <button
+                  onclick="switchPipelineTab('stacks')"
+                  id="pipeline-tab-stacks"
+                  class="pipeline-tab flex-1 px-6 py-3 text-[10px] uppercase tracking-widest font-bold text-center transition-colors"
+                  style="color: var(--text-muted)"
+                >
+                  <i
+                    data-lucide="layers"
+                    class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"
+                  ></i
+                  >Per-Workload Stacks
+                </button>
+              </div>
+            </div>
+            <div id="pipeline-panel-builder" class="pipeline-panel space-y-6">
+              <div
+                id="pipeline-empty-state"
+                class="acrylic-panel rounded-2xl p-12 text-center"
+              >
+                <i
+                  data-lucide="workflow"
+                  class="w-16 h-16 mx-auto mb-4 opacity-30"
+                ></i>
+                <h3
+                  class="text-2xl font-light mb-2"
+                  style="color: var(--text-main)"
+                >
+                  What should we do with your traffic?
+                </h3>
+                <p
+                  class="text-sm mb-8 max-w-xl mx-auto"
+                  style="color: var(--text-muted)"
+                >
+                  Pick an outcome — we set up the right steps for you, no config
+                  needed. You can fine-tune everything afterward, or build from
+                  scratch.
+                </p>
+                <div class="max-w-3xl mx-auto text-left space-y-6">
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-3 flex items-center gap-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      <i data-lucide="eye" class="w-3.5 h-3.5"></i> Watch your
+                      traffic
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button onclick="(applySimpleAction('preset-observability'), showPipelineBuilder())" class="group text-left rounded-xl border px-4 py-3.5 transition-colors hover:bg-white/[0.05]" style="border-color: var(--table-border); background: var(--nav-hover)">
+                        <div class="flex items-start gap-3">
+                          <div class="rounded-lg p-2 shrink-0" style="background: var(--nav-active-bg)"><i data-lucide="route" class="w-4 h-4" style="color: var(--accent)"></i></div>
+                          <div><div class="text-sm font-medium" style="color: var(--text-main)">See every page &amp; route</div><div class="text-xs mt-0.5 leading-snug" style="color: var(--text-muted)">Record what each request hits, grouped by route and country.</div></div>
+                        </div>
+                      </button>
+                      <button onclick="(applySimpleAction('watch-payloads'), showPipelineBuilder())" class="group text-left rounded-xl border px-4 py-3.5 transition-colors hover:bg-white/[0.05]" style="border-color: var(--table-border); background: var(--nav-hover)">
+                        <div class="flex items-start gap-3">
+                          <div class="rounded-lg p-2 shrink-0" style="background: var(--nav-active-bg)"><i data-lucide="file-search" class="w-4 h-4" style="color: var(--accent)"></i></div>
+                          <div><div class="text-sm font-medium" style="color: var(--text-main)">Inspect payloads</div><div class="text-xs mt-0.5 leading-snug" style="color: var(--text-muted)">Track body type and size bands — never stores raw data.</div></div>
+                        </div>
+                      </button>
+                      <button onclick="(applySimpleAction('watch-countries'), showPipelineBuilder())" class="group text-left rounded-xl border px-4 py-3.5 transition-colors hover:bg-white/[0.05]" style="border-color: var(--table-border); background: var(--nav-hover)">
+                        <div class="flex items-start gap-3">
+                          <div class="rounded-lg p-2 shrink-0" style="background: var(--nav-active-bg)"><i data-lucide="globe" class="w-4 h-4" style="color: var(--accent)"></i></div>
+                          <div><div class="text-sm font-medium" style="color: var(--text-main)">Break down by country</div><div class="text-xs mt-0.5 leading-snug" style="color: var(--text-muted)">See where your traffic is coming from.</div></div>
+                        </div>
+                      </button>
+                      <button onclick="(applySimpleAction('watch-fingerprint'), showPipelineBuilder())" class="group text-left rounded-xl border px-4 py-3.5 transition-colors hover:bg-white/[0.05]" style="border-color: var(--table-border); background: var(--nav-hover)">
+                        <div class="flex items-start gap-3">
+                          <div class="rounded-lg p-2 shrink-0" style="background: var(--nav-active-bg)"><i data-lucide="fingerprint" class="w-4 h-4" style="color: var(--accent)"></i></div>
+                          <div><div class="text-sm font-medium" style="color: var(--text-main)">Fingerprint visitors</div><div class="text-xs mt-0.5 leading-snug" style="color: var(--text-muted)">Group repeat visitors with a privacy-safe signature.</div></div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold mb-3 flex items-center gap-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      <i data-lucide="shield" class="w-3.5 h-3.5"></i> Protect
+                      your app
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button onclick="(applySimpleAction('respond-score'), showPipelineBuilder())" class="group text-left rounded-xl border px-4 py-3.5 transition-colors hover:bg-white/[0.05]" style="border-color: var(--table-border); background: var(--nav-hover)">
+                        <div class="flex items-start gap-3">
+                          <div class="rounded-lg p-2 shrink-0" style="background: var(--nav-active-bg)"><i data-lucide="gauge" class="w-4 h-4" style="color: var(--accent)"></i></div>
+                          <div><div class="text-sm font-medium" style="color: var(--text-main)">Score each request's risk</div><div class="text-xs mt-0.5 leading-snug" style="color: var(--text-muted)">Attach a risk score so trouble stands out.</div></div>
+                        </div>
+                      </button>
+                      <button onclick="(applySimpleAction('respond-block-scanners'), showPipelineBuilder())" class="group text-left rounded-xl border px-4 py-3.5 transition-colors hover:bg-white/[0.05]" style="border-color: var(--table-border); background: var(--nav-hover)">
+                        <div class="flex items-start gap-3">
+                          <div class="rounded-lg p-2 shrink-0" style="background: var(--nav-active-bg)"><i data-lucide="shield-ban" class="w-4 h-4" style="color: var(--accent)"></i></div>
+                          <div><div class="text-sm font-medium" style="color: var(--text-main)">Block scanners &amp; bots</div><div class="text-xs mt-0.5 leading-snug" style="color: var(--text-muted)">Auto-respond 403 to known attack tools and probes.</div></div>
+                        </div>
+                      </button>
+                      <button onclick="(applySimpleAction('respond-slow'), showPipelineBuilder())" class="group text-left rounded-xl border px-4 py-3.5 transition-colors hover:bg-white/[0.05]" style="border-color: var(--table-border); background: var(--nav-hover)">
+                        <div class="flex items-start gap-3">
+                          <div class="rounded-lg p-2 shrink-0" style="background: var(--nav-active-bg)"><i data-lucide="hourglass" class="w-4 h-4" style="color: var(--accent)"></i></div>
+                          <div><div class="text-sm font-medium" style="color: var(--text-main)">Slow suspicious traffic</div><div class="text-xs mt-0.5 leading-snug" style="color: var(--text-muted)">Tarpit likely-hostile requests instead of denying.</div></div>
+                        </div>
+                      </button>
+                      <button onclick="(applySimpleAction('respond-log'), showPipelineBuilder())" class="group text-left rounded-xl border px-4 py-3.5 transition-colors hover:bg-white/[0.05]" style="border-color: var(--table-border); background: var(--nav-hover)">
+                        <div class="flex items-start gap-3">
+                          <div class="rounded-lg p-2 shrink-0" style="background: var(--nav-active-bg)"><i data-lucide="scroll-text" class="w-4 h-4" style="color: var(--accent)"></i></div>
+                          <div><div class="text-sm font-medium" style="color: var(--text-main)">Just log — change nothing</div><div class="text-xs mt-0.5 leading-snug" style="color: var(--text-muted)">Record everything, touch nothing. A safe place to start.</div></div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    class="pt-4 flex items-center justify-center gap-3 border-t"
+                    style="border-color: var(--table-border)"
+                  >
+                    <span class="text-xs" style="color: var(--text-muted)">Want full control?</span>
+                    <button onclick="showPipelineBuilder()" class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest inline-flex items-center gap-1.5">
+                      <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i> Build from scratch
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div id="pipeline-builder-content" class="space-y-6 hidden">
+                <section class="acrylic-panel p-6 rounded-xl space-y-4" aria-label="Guided pipeline setup">
+                  <h3 class="text-lg">Start with the outcome you want</h3>
+                  <p class="text-sm" style="color:var(--text-muted)">1. Add a draft below. 2. Choose its workloads and adjust the labeled settings. 3. Enable it, review the exact changes, then save. Drafts do not affect live traffic.</p>
+                  <div class="flex flex-wrap gap-3"><button class="btn-secondary px-4 py-3 rounded-lg" onclick="startPipelineRecipe('observe')">Track requests</button><button class="btn-secondary px-4 py-3 rounded-lg" onclick="startPipelineRecipe('score')">Flag suspicious requests</button><button class="btn-secondary px-4 py-3 rounded-lg" onclick="startPipelineRecipe('block')">Block above a risk threshold</button></div>
+                  <p class="text-xs" style="color:var(--text-muted)">Capture steps collect signals. Action steps use those signals. Steps run top-to-bottom. Existing stacks, custom modules and advanced settings are preserved; JSON editing is optional.</p>
+                </section>
+                <div
+                  class="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-5"
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Pipeline Execution Order
+                  </div>
+                  <div class="grid lg:grid-cols-3 gap-4 mt-4 text-sm">
+                    <div
+                      class="rounded-xl border border-white/10 bg-black/20 px-4 py-4"
+                    >
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold text-slate-300"
+                      >
+                        1. Capture
+                      </div>
+                      <div class="mt-2" style="color: var(--text-muted)">
+                        Data collection stages run from top to bottom. This is
+                        where you decide what every request records and exposes
+                        to the rest of the system.
+                      </div>
+                    </div>
+                    <div
+                      class="rounded-xl border border-white/10 bg-black/20 px-4 py-4"
+                    >
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold text-slate-300"
+                      >
+                        2. Decide
+                      </div>
+                      <div class="mt-2" style="color: var(--text-muted)">
+                        Custom modules and scoring logic take the captured data,
+                        attach risk, and decide whether traffic is clean,
+                        suspicious, or hostile.
+                      </div>
+                    </div>
+                    <div
+                      class="rounded-xl border border-white/10 bg-black/20 px-4 py-4"
+                    >
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold text-slate-300"
+                      >
+                        3. Respond
+                      </div>
+                      <div class="mt-2" style="color: var(--text-muted)">
+                        Response stages run after capture. Log, slow, deceive,
+                        block, or call internal tools in the exact order shown
+                        below.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+                  <div
+                    class="acrylic-panel p-6 rounded-2xl xl:col-span-1 space-y-5 security-scroll-card xl:sticky xl:top-6"
+                  >
+                    <div>
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                        style="color: var(--text-subtle)"
+                      >
+                        Quick Presets
+                      </div>
+                      <p class="text-xs" style="color: var(--text-muted)">
+                        Choose common traffic tracking and protection behaviors,
+                        then refine them only if needed.
+                      </p>
+                    </div>
+                    <div class="space-y-4">
+                      <div>
+                        <div
+                          class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                          style="color: var(--text-subtle)"
+                        >
+                          Watch Traffic
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                          <button
+                            onclick="applySimpleAction('watch-pages')"
+                            class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                          >
+                            Page Flow
+                          </button>
+                          <button
+                            onclick="applySimpleAction('watch-payloads')"
+                            class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                          >
+                            Body Shape
+                          </button>
+                          <button
+                            onclick="applySimpleAction('watch-countries')"
+                            class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                          >
+                            Countries
+                          </button>
+                          <button
+                            onclick="applySimpleAction('watch-fingerprint')"
+                            class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                          >
+                            Fingerprints
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <div
+                          class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                          style="color: var(--text-subtle)"
+                        >
+                          Take Action
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                          <button
+                            onclick="applySimpleAction('respond-log')"
+                            class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                          >
+                            Just Log
+                          </button>
+                          <button
+                            onclick="applySimpleAction('respond-score')"
+                            class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                          >
+                            Score Risk
+                          </button>
+                          <button
+                            onclick="
+                              applySimpleAction('respond-block-scanners')
+                            "
+                            class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                          >
+                            Block Scanners
+                          </button>
+                          <button
+                            onclick="applySimpleAction('respond-slow')"
+                            class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                          >
+                            Slow Suspicious
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <details
+                      class="rounded-xl border p-4"
+                      style="
+                        border-color: var(--table-border);
+                        background: var(--nav-hover);
+                      "
+                    >
+                      <summary
+                        class="cursor-pointer text-[10px] uppercase tracking-widest font-bold"
+                        style="color: var(--text-subtle)"
+                      >
+                        Advanced Stage Catalog
+                      </summary>
+                      <div
+                        class="mt-4 text-xs mb-3"
+                        style="color: var(--text-muted)"
+                      >
+                        Use individual stages when you need full customization.
+                      </div>
+                      <div
+                        id="sec-pipeline-catalog"
+                        class="space-y-3 custom-scroll scroll-fill pr-2 xl:min-h-[540px] xl:max-h-[calc(100vh-20rem)]"
+                      ></div>
+                    </details>
+                  </div>
+                  <div class="space-y-6 xl:col-span-2">
+                    <div class="acrylic-panel p-6 rounded-2xl space-y-4">
+                      <div class="flex items-center justify-between">
+                        <div>
+                          <div
+                            class="text-[10px] uppercase tracking-widest font-bold"
+                            style="color: var(--text-subtle)"
+                          >
+                            Capture Stages
+                          </div>
+                          <div
+                            class="text-xs mt-1"
+                            style="color: var(--text-muted)"
+                          >
+                            Choose what each request should record, label,
+                            count, or attach before any decision is made.
+                          </div>
+                        </div>
+                        <button
+                          onclick="
+                            addPipelineStage('telemetry', 'observe_request')
+                          "
+                          class="btn-secondary px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                        >
+                          Add Stage
+                        </button>
+                      </div>
+                      <div>
+                        <label
+                          class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                          style="color: var(--text-subtle)"
+                          >Fields To Track</label
+                        >
+                        <input
+                          id="sec-telemetry-dimensions"
+                          class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli"
+                          placeholder="path, method, country, ip, user_agent, route_group, tenant, feature_flag"
+                        />
+                      </div>
+                      <div id="sec-telemetry-pipeline" class="space-y-3"></div>
+                    </div>
+                    <div class="acrylic-panel p-6 rounded-2xl space-y-4">
+                      <div class="flex items-center justify-between">
+                        <div>
+                          <div
+                            class="text-[10px] uppercase tracking-widest font-bold"
+                            style="color: var(--text-subtle)"
+                          >
+                            Response Stages
+                          </div>
+                          <div
+                            class="text-xs mt-1"
+                            style="color: var(--text-muted)"
+                          >
+                            Choose what happens after a request is inspected:
+                            log it, score it, slow it down, block it, fake it,
+                            or hand it off.
+                          </div>
+                        </div>
+                        <button
+                          onclick="
+                            addPipelineStage('response', 'block_request')
+                          "
+                          class="btn-secondary px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                        >
+                          Add Stage
+                        </button>
+                      </div>
+                      <div id="sec-response-pipeline" class="space-y-3"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div
+              id="pipeline-panel-adaptive"
+              class="pipeline-panel hidden space-y-6"
+            >
+              <div class="acrylic-panel p-6 rounded-2xl space-y-4">
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Adaptive Analysis Engine
+                  </div>
+                  <div class="text-xs mt-1" style="color: var(--text-muted)">
+                    Looks at live traffic and captured events, then suggests
+                    additions you may want to enable.
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div class="space-y-4">
+                    <label class="flex items-center justify-between"
+                      ><span
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: var(--text-subtle)"
+                        >Enable Adaptive Engine</span
+                      >
+                      <label class="toggle-switch"
+                        ><input type="checkbox" id="sec-learn-enabled" /><span
+                          class="toggle-track"
+                        ></span></label
+                    ></label>
+                    <div>
+                      <label
+                        class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                        style="color: var(--text-subtle)"
+                        >Analysis Mode</label
+                      >
+                      <select
+                        id="sec-learn-mode"
+                        class="ink-input w-full rounded-lg px-3 py-2 text-sm font-bold"
+                      >
+                        <option value="recommend">Recommend Only</option>
+                        <option value="draft_modules">Draft Modules</option>
+                        <option value="draft_pipelines">
+                          Draft Pipeline Updates
+                        </option>
+                      </select>
+                    </div>
+                    <div>
+                      <label
+                        class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                        style="color: var(--text-subtle)"
+                        >Allowed Suggestion Types</label
+                      >
+                      <input
+                        id="sec-learn-tools"
+                        class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli"
+                        placeholder="suggest_pipeline_stage, suggest_module, suggest_honeypot_route"
+                      />
+                    </div>
+                  </div>
+                  <div class="space-y-4">
+                    <div>
+                      <label
+                        class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                        style="color: var(--text-subtle)"
+                        >Data Sources</label
+                      >
+                      <input
+                        id="sec-learn-sources"
+                        class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli"
+                        placeholder="network_trace, security_events, honeypot_captures"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                        style="color: var(--text-subtle)"
+                        >Focus Areas</label
+                      >
+                      <input
+                        id="sec-learn-objectives"
+                        class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli"
+                        placeholder="identify_top_routes, detect_attack_patterns, recommend_custom_modules"
+                      />
+                    </div>
+                    <label class="flex items-center justify-between"
+                      ><span
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: var(--text-subtle)"
+                        >Auto-Apply Safe Suggestions</span
+                      >
+                      <label class="toggle-switch"
+                        ><input type="checkbox" id="sec-learn-autoapply" /><span
+                          class="toggle-track"
+                        ></span></label
+                    ></label>
+                  </div>
+                </div>
+                <div>
+                  <label
+                    class="block text-[10px] uppercase font-bold tracking-widest mb-2"
+                    style="color: var(--text-subtle)"
+                    >Guidance Notes</label
+                  >
+                  <textarea
+                    id="sec-learn-notes"
+                    rows="4"
+                    class="ink-input w-full rounded-lg px-3 py-3 text-sm font-mono-cli"
+                    placeholder="Focus on /settings, prefer telemetry-first stages, avoid auth modifications, use my custom modules where possible."
+                  ></textarea>
+                </div>
+                <div
+                  class="rounded-xl border p-4 space-y-3"
+                  style="
+                    border-color: var(--table-border);
+                    background: var(--nav-hover);
+                  "
+                >
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Quick-Pick Common Values
+                  </div>
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Analysis Tools
+                    </div>
+                    <div
+                      id="sec-learn-tools-quick"
+                      class="flex flex-wrap gap-2"
+                    ></div>
+                  </div>
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Analysis Sources
+                    </div>
+                    <div
+                      id="sec-learn-sources-quick"
+                      class="flex flex-wrap gap-2"
+                    ></div>
+                  </div>
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest mb-2"
+                      style="color: var(--text-subtle)"
+                    >
+                      Analysis Objectives
+                    </div>
+                    <div
+                      id="sec-learn-objectives-quick"
+                      class="flex flex-wrap gap-2"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+              <div class="acrylic-panel p-6 rounded-2xl space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold"
+                      style="color: var(--text-subtle)"
+                    >
+                      Suggested Additions
+                    </div>
+                    <div class="text-xs mt-1" style="color: var(--text-muted)">
+                      Optional ideas based on what the pipeline is seeing right
+                      now. These are not active until you add them.
+                    </div>
+                  </div>
+                  <span class="inline-flex items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Auto Suggestions
+                  </span>
+                </div>
+                <div id="sec-learning-suggestions" class="space-y-3"></div>
+              </div>
+            </div>
+            <div
+              id="pipeline-panel-modules"
+              class="pipeline-panel hidden space-y-6"
+            >
+              <div class="acrylic-panel p-6 rounded-2xl space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold"
+                      style="color: var(--text-subtle)"
+                    >
+                      Custom Defense Modules
+                    </div>
+                    <div class="text-xs mt-1" style="color: var(--text-muted)">
+                      Add your own reusable logic packs with custom fields,
+                      decisions, and dashboard output.
+                    </div>
+                  </div>
+                  <button
+                    onclick="addCustomDefenseModule()"
+                    class="btn-secondary px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                  >
+                    Add Module
+                  </button>
+                </div>
+                <div id="sec-custom-modules" class="space-y-4"></div>
+              </div>
+            </div>
+            <div
+              id="pipeline-panel-tools"
+              class="pipeline-panel hidden space-y-6"
+            >
+              <div class="acrylic-panel p-6 rounded-2xl space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold"
+                      style="color: var(--text-subtle)"
+                    >
+                      Connected Tools
+                    </div>
+                    <div class="text-xs mt-1" style="color: var(--text-muted)">
+                      Register internal services or webhooks your modules and
+                      analysis layer can call.
+                    </div>
+                  </div>
+                  <button
+                    onclick="addLearningTool()"
+                    class="btn-secondary px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                  >
+                    Add Tool
+                  </button>
+                </div>
+                <div id="sec-learning-tools" class="space-y-4"></div>
+              </div>
+            </div>
+            <div
+              id="pipeline-panel-stacks"
+              class="pipeline-panel hidden space-y-6"
+            >
+              <div id="pipeline-stack-manager" class="space-y-5"></div>
+            </div>
+            <input
+              type="file"
+              id="sec-pipeline-import"
+              accept=".json"
+              class="hidden"
+              onchange="handlePipelineImport(event)"
+            />
+          </div>

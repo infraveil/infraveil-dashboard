@@ -1,0 +1,181 @@
+<div
+            id="view-console"
+            class="view-section hidden operator-log-page flex flex-col w-full px-6 xl:px-8"
+          >
+            <div class="flex flex-col gap-4 mb-4 shrink-0">
+              <div
+                class="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4"
+              >
+                <div class="flex items-center gap-4">
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest"
+                      style="color: var(--text-subtle)"
+                    >
+                      Agent Runtime
+                    </div>
+                    <div class="text-sm mt-1" style="color: var(--text-muted)">
+                    Inspect launcher and agent activity, process supervision, restarts, and diagnostics.
+                    Application stdout and stderr are available in App Logs.
+                    </div>
+                  </div>
+                  <div
+                    id="log-integrity-badge"
+                    class="relative group flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest border cursor-help"
+                    style="
+                      border-color: var(--table-border);
+                      color: var(--text-subtle);
+                    "
+                  >
+                    <div
+                      id="log-integrity-dot"
+                      class="w-1.5 h-1.5 rounded-full bg-gray-500"
+                    ></div>
+                    <span id="log-integrity-text">Fleet Scope</span>
+                    <div
+                      class="absolute left-0 top-full mt-2 w-72 p-3 rounded-lg text-[10px] normal-case tracking-normal font-normal hidden group-hover:block z-50"
+                      style="
+                        background: #0a0a0a;
+                        border: 1px solid var(--panel-border);
+                        color: var(--text-muted);
+                        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+                      "
+                    >
+                      This console stream is cryptographically chained. Any
+                      modification to historical log entries would be detected
+                      automatically.
+                    </div>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <select
+                    id="console-level-filter"
+                    class="ink-input text-xs font-mono-cli rounded px-3 py-2 w-40 appearance-none cursor-pointer"
+                    onchange="renderConsole()"
+                  >
+                    <option value="all">All Levels</option>
+                    <option value="error">Errors Only</option>
+                    <option value="warn">Warnings</option>
+                    <option value="security">Security</option>
+                    <option value="important">Important Only</option>
+                  </select>
+                  <select
+                    id="console-limit"
+                    class="ink-input text-xs font-mono-cli rounded px-3 py-2 w-32 appearance-none cursor-pointer"
+                    onchange="renderConsole()"
+                  >
+                    <option value="60">Latest 60</option>
+                    <option value="120" selected="selected">Latest 120</option>
+                    <option value="200">Latest 200</option>
+                    <option value="500">Latest 500</option>
+                    <option value="1000">Latest 1000</option>
+                    <option value="0">All loaded</option>
+                  </select>
+                  <input
+                    id="console-search"
+                    placeholder="Search node, service, error, port..."
+                    class="ink-input text-xs font-mono-cli rounded px-3 py-2 w-64"
+                    oninput="renderConsole()"
+                  />
+                  <button
+                    onclick="focusConsoleIncidents()"
+                    class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                  >
+                    <i data-lucide="siren" class="w-3 h-3"></i> Focus Incidents
+                  </button>
+                  <button
+                    onclick="clearConsoleLogs()"
+                    class="text-[10px] font-bold text-gray-400 hover:text-white flex items-center gap-2 uppercase tracking-widest transition-colors"
+                  >
+                    <i data-lucide="trash-2" class="w-3 h-3"></i> Clear
+                  </button>
+                  <span
+                    class="operator-quiet-status px-3 py-2 rounded-lg text-[10px] font-bold flex items-center gap-2 uppercase tracking-widest"
+                  >
+                    <span class="operator-status-dot bg-emerald-400"></span> Auto Sync
+                  </span>
+                </div>
+              </div>
+              <div
+                id="console-summary-bar"
+                class="grid grid-cols-2 xl:grid-cols-5 gap-3"
+              ></div>
+<details class="iv-runtime-charts"><summary>Show log activity charts</summary>              <div id="runtime-analytics-workbench" class="iv-analytics-workbench iv-runtime-analytics" aria-label="Runtime log analytics">
+                <section class="iv-analysis-panel iv-analysis-panel-wide">
+                  <div class="iv-analysis-heading"><div><span>Log activity</span><small>Volume and severity over the visible time window</small></div><i data-lucide="chart-no-axes-combined"></i></div>
+                  <div id="runtime-activity-chart" class="iv-chart-stage"></div>
+                </section>
+                <section class="iv-analysis-panel">
+                  <div class="iv-analysis-heading"><div><span>Severity mix</span><small>Current filtered output</small></div><i data-lucide="circle-dot-dashed"></i></div>
+                  <div id="runtime-severity-chart" class="iv-chart-stage"></div>
+                </section>
+                <section class="iv-analysis-panel">
+                  <div class="iv-analysis-heading"><div><span>Node volume</span><small>Where log pressure is concentrated</small></div><i data-lucide="server"></i></div>
+                  <div id="runtime-node-chart" class="iv-chart-stage"></div>
+                </section>
+              </div></details>
+              <div class="acrylic-panel rounded-2xl overflow-hidden">
+                <div
+                  class="px-5 py-4 border-b flex items-center justify-between gap-4"
+                  style="border-color: var(--table-border)"
+                >
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold"
+                      style="color: var(--text-subtle)"
+                    >
+                      Priority Rail
+                    </div>
+                    <div class="text-xs mt-1" style="color: var(--text-muted)">
+                      Critical lines from the current filter.
+                    </div>
+                  </div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Newest first
+                  </div>
+                </div>
+                <div
+                  id="console-priority-feed"
+                  class="divide-y"
+                  style="border-color: var(--table-border)"
+                >
+                  <div
+                    class="px-5 py-4 text-xs"
+                    style="color: var(--text-subtle)"
+                  >
+                    No incidents highlighted yet.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div
+              class="flex-1 acrylic-panel operator-log-shell rounded-2xl overflow-hidden flex flex-col min-h-0"
+            >
+              <div
+                class="operator-log-header grid grid-cols-[9rem_6rem_4rem_minmax(0,1fr)_2rem] gap-3 px-6 py-3 text-[10px] font-bold uppercase tracking-widest shrink-0"
+                style="
+                  color: var(--text-subtle);
+                "
+              >
+                <div>Time</div>
+                <div>Node</div>
+                <div>Level</div>
+                <div>Output</div>
+                <div></div>
+              </div>
+              <div
+                id="console-feed"
+                class="operator-log-feed flex-1 custom-scroll"
+              >
+                <div
+                  class="p-4 text-center text-xs"
+                  style="color: var(--text-subtle)"
+                >
+                  Waiting for stream...
+                </div>
+              </div>
+            </div>
+          </div>

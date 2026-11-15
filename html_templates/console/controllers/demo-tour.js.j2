@@ -1,0 +1,758 @@
+        const PRODUCTION_DEMO_STEPS = [
+          {
+            view: "overview",
+            title: "See it. Control it. Prove it.",
+            outcome: "Understand the whole platform in two minutes",
+            why: "Backend ops got scattered across a dozen tools, and you became the integration layer holding it together. This shows the opposite: one place that watches everything running, acts on it live, and can prove every claim. It is a map, not a test.",
+            body: "Here is the deal. Most teams stitch metrics, logs, traces, dashboards, and alerts across four or more tools, and still get blindsided by outages. Infraveil is the layer underneath all of it: it sees what is actually running on your machines, it shapes and blocks live traffic the second something is wrong, and it proves every bit of it with signed receipts instead of screenshots. The next few minutes take you from a bare host to live, inspectable, provable infrastructure. Go at your own pace, and skip anything you do not need.",
+            proofBadge: "Start here",
+            nextLabel: "Show me",
+            welcome: !0,
+            detailHtml:
+              '\n                <div class="grid md:grid-cols-3 gap-3">\n                    <div class="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-4">\n                        <div class="text-[10px] uppercase tracking-[0.22em] font-bold text-emerald-300">See</div>\n                        <div class="text-sm text-white/80 mt-2">Every request, process, log, and trace from your real machines, pulled into one place. No more SSH archaeology.</div>\n                    </div>\n                    <div class="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-4">\n                        <div class="text-[10px] uppercase tracking-[0.22em] font-bold text-blue-300">Control</div>\n                        <div class="text-sm text-white/80 mt-2">Block scanners, rate-limit abuse, tarpit or feed fake data to attackers, enforced inline in the request path, not bolted on after.</div>\n                    </div>\n                    <div class="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-4">\n                        <div class="text-[10px] uppercase tracking-[0.22em] font-bold text-amber-300">Prove</div>\n                        <div class="text-sm text-white/80 mt-2">Signed hashes, host fingerprints, and command receipts. When someone says prove it, you export a packet, not a screenshot.</div>\n                    </div>\n                </div>',
+          },
+          {
+            view: "trust-receipts",
+            target: "#release-approval-panel",
+            title: "Hold the kill-key",
+            outcome: "Nothing runs unless you signed it",
+            why: "This is the strongest control on the platform, and it runs on your machine, not ours. Register an offline key and every release an agent runs must carry your signature or it refuses. Even a fully compromised Infraveil cannot push code to you.",
+            body: "Register your public key, generate a token for the self-hosted approver, and approve releases on your terms. The private key never leaves your infrastructure. This is the difference between trusting us and not having to.",
+            proofBadge: "Customer-held veto",
+            scrollOffset: 0,
+          },
+          {
+            view: "launcher",
+            target: "#launcher-user",
+            title: "1. Create Service Account",
+            outcome: "Harden the install target",
+            why: "Lead with an operational best practice so the install already feels production-ready.",
+            body: "Start on the host. Create the dedicated service account, switch into the runtime directory, then come straight back here.",
+            highlightButton: !1,
+            scrollOffset: 150,
+            proofBadge: "Dedicated runtime",
+            detailHtml:
+              '\n                <pre class="text-xs font-mono-cli text-slate-200 overflow-x-auto rounded-xl border border-white/10 bg-black/30 p-3">sudo adduser --system --group --home /opt/infraveil-demo infraveil-demo\nsudo mkdir -p /opt/infraveil-demo\nsudo chown -R infraveil-demo:infraveil-demo /opt/infraveil-demo\ncd /opt/infraveil-demo</pre>',
+          },
+          {
+            view: "launcher",
+            target: "#launcher-user",
+            title: "2. Generate Launcher Action",
+            outcome: "Get a one-time installer for this exact host",
+            why: "This turns the workspace into a live install surface, not a mock command block. The launcher is what joins your machine to the control plane; it is not a source-code upload step.",
+            body: "The demo account is already loaded. Hit Authenticate & Generate and we will stamp a single-use launcher for this exact workspace. In production, this command goes on your server and keeps your application code on that server.",
+            highlightButton: !0,
+            scrollOffset: 150,
+            proofBadge: "Signed install token",
+          },
+          {
+            view: "launcher",
+            target: "#launcher-output-section",
+            title: "3. Run The Installer",
+            outcome: "Connect the host",
+            why: "Use the generated installer to attach the host to this workspace. After that, you define a runtime contract: start command, port, gateway, and optional health behavior.",
+            body: "Copy the Linux or Windows launcher, run it on your host, and return here. You do not paste your whole server.py, Node app, or private repository into the dashboard. The launcher supervises what already lives on the machine.",
+            highlightButton: !1,
+            scrollOffset: 200,
+            proofBadge: "Host handshake",
+          },
+          {
+            view: "launcher",
+            target: "#daemon-status-section",
+            title: "4. Watch The Daemon Connect",
+            outcome: "Prove machine identity",
+            why: "A live connection is only the first layer. The launcher also reports version, source hash, host fingerprint, platform, process state, sync failures, cached agents, and machine resource state.",
+            body: "Stay on this status card. We are waiting for the launcher to move from OFFLINE to ONLINE. Once it connects, treat this as the first evidence chain: the dashboard is now receiving signed launcher sync from a real machine.",
+            highlightButton: !1,
+            scrollOffset: 100,
+            waitForDaemonOnline: !0,
+            proofBadge: "Signed host proof",
+          },
+          {
+            view: "capacity-audit",
+            target: "#capacity-audit-list",
+            title: "5. Review Capacity Audit",
+            outcome: "Understand machine headroom",
+            why: "A server being online is not the same thing as knowing what it can safely carry. Capacity Diagnostic samples the launcher host itself and turns CPU, memory, disk, running agents, and per-agent memory into a readable placement estimate.",
+            body: "If a diagnostic has already run, this page is where the report belongs: safe API capacity, burst capacity, current usage, limiting resource, CPU, memory, disk, and recommendations per server. If there is no report yet, use the Diagnose action from Servers when you are ready.",
+            scrollOffset: 60,
+            proofBadge: "Host sizing",
+            detailHtml:
+              '\n                <button type="button" onclick="switchView(\'launcher\')" class="btn-secondary w-full py-3 rounded-lg text-[11px] font-bold uppercase tracking-widest">Open Servers To Diagnose</button>\n                <div class="text-[11px] mt-3" style="color: var(--text-subtle)">The tour will not auto-run another diagnostic. Capacity Audit is the report page; Servers is where you intentionally start or rerun the test.</div>',
+          },
+          {
+            view: "deployments",
+            target: "#deployments-tbody",
+            title: "6. Confirm Runtime Registration",
+            outcome: "Your API becomes inspectable without source custody",
+            why: "Registration is not just a row. Each workload carries host assignment, runtime type, contract hash, status, and the agent heartbeat that proves the service is being supervised.",
+            body: "The workload should appear under Workloads (Your deployed APIs) as soon as the launcher finishes connecting. This is where your existing API becomes an inspectable runtime object: host, contract, status, logs, request traces, and agent identity all converge without handing us your intellectual property.",
+            waitForNode: !0,
+            scrollOffset: 0,
+            proofBadge: "Payload identity",
+          },
+          {
+            view: "console",
+            target: "#console-feed",
+            title: "7. Read The Process Evidence",
+            outcome: "See stdout, stderr, startup, exits, and tracebacks",
+            why: "This is the first place operators usually need SSH. Infraveil pulls process output into the workspace as structured runtime evidence, including service name, stream, level, message, and phase.",
+            body: "Watch the feed for service startup, runtime process events, tracebacks, health failures, and crash-loop noise. The point is not that logs exist. The point is that logs are tied to a specific agent, payload, host, and service.",
+            scrollOffset: 0,
+            proofBadge: "Process evidence",
+          },
+          {
+            view: "network",
+            target: "#network-feed",
+            title: "8. Trace The Request Path",
+            outcome: "See exactly what hit your backend",
+            why: "When a backend breaks, the fastest question is usually: what request hit it, where did it go, and what did the runtime see?",
+            body: "Request Trace shows method, path, IP, user agent, selected headers, payload preview, and pipeline telemetry. This is the bridge from external traffic to internal runtime evidence.",
+            scrollOffset: 0,
+            proofBadge: "Traffic evidence",
+          },
+          {
+            view: "internal-network",
+            target: "#internal-network-feed",
+            title: "9. Inspect Control Trace",
+            outcome: "Separate user traffic from platform traffic",
+            why: "Public request logs are not enough. Control Trace shows internal platform traffic so operators can distinguish customer behavior from control-plane synchronization and runtime calls.",
+            body: "Use this page when something feels off between dashboard state and runtime state. It helps answer whether the app is failing, the agent is failing, or the control plane is failing.",
+            scrollOffset: 0,
+            proofBadge: "Control evidence",
+          },
+          {
+            view: "runtime-evidence",
+            target: "#runtime-evidence-chain-grid",
+            title: "10. Open Runtime Control",
+            outcome: "Find the right control fast",
+            why: "The launcher and agent report machine identity, host sizing, running code, processes, requests, security, commands, cache, and queue pressure. This page keeps that map simple.",
+            body: "Use this as the operator index. If something breaks, start here, see which area is reporting, then jump into the exact page that controls it. Capacity Diagnostic belongs in this same map because placement decisions should be based on actual machine headroom.",
+            scrollOffset: 0,
+            proofBadge: "Evidence map",
+          },
+          {
+            view: "cache-queue",
+            target: "#cache-queue-grid",
+            title: "11. Check Cache And Queue",
+            outcome: "See fallback pressure before it becomes an outage",
+            why: "The agent reports runtime contract state, event queue pressure, dropped events, contract hashes, and last-known-good behavior. That is exactly the kind of evidence an operator usually has to SSH in to find.",
+            body: "This page answers whether the runtime is operating from the current contract, cached fallback, or queue pressure. If anything looks wrong, jump straight to logs, doctor, or restart from the row actions.",
+            scrollOffset: 0,
+            proofBadge: "Cache evidence",
+          },
+          {
+            view: "process-supervisor",
+            target: "#process-supervisor-grid",
+            title: "12. Inspect Process Supervision",
+            outcome: "See every supervised service",
+            why: "The agent is not just running one script. It can supervise manifest-defined services, track PIDs, restart counts, health failures, runtime, ports, and service liveness.",
+            body: "Use this when a workload is half-working. You can tell whether the service is alive, flapping, restarted, crash-looping, or missing entirely.",
+            scrollOffset: 0,
+            proofBadge: "Supervisor proof",
+          },
+          {
+            view: "gateway-routes",
+            target: "#gateway-routes-grid",
+            title: "13. Map Gateway Routes",
+            outcome: "Connect public paths to runtime services",
+            why: "Gateway and route evidence ties external paths to internal services and the runtime manifest. That keeps traffic debugging tied to actual code placement.",
+            body: "Search a path, inspect the route, then jump to trace, pipeline, or logs. This is how Infraveil turns routing into a visible control surface.",
+            scrollOffset: 0,
+            proofBadge: "Route map",
+          },
+          {
+            view: "trust-receipts",
+            target: "#trust-receipts-grid",
+            title: "14. Verify Trust Receipts",
+            outcome: "Prove identity without screenshots",
+            why: "Trust is not a claim. It is launcher hash, agent hash, runtime contract hash, host fingerprint, action receipts, and signed runtime state lining up.",
+            body: "Copy hashes, compare fingerprints, and export the proof packet. This is the boring but serious layer that proves what ran without requiring the customer to upload private source code.",
+            scrollOffset: 0,
+            proofBadge: "Trust packet",
+          },
+          {
+            view: "launcher",
+            target:
+              "#daemon-status-section button[onclick=\"sendLauncherCommand('restart')\"]",
+            title: "15. Restart The Launcher",
+            outcome: "Prove command and recovery integrity",
+            why: "Recovery is not just a button. Actions are scoped, tracked, acknowledged through launcher sync, and reflected back into action receipts and runtime state.",
+            body: "Use the restart action below. We will wait for the action to dispatch and for the daemon to report ONLINE again. Afterward, the audit export can show the action trail and runtime state around the recovery.",
+            scrollOffset: 80,
+            waitForDaemonRestart: !0,
+            proofBadge: "Action receipt",
+            detailHtml:
+              '\n                <button type="button" onclick="sendLauncherCommand(\'restart\')" class="btn-primary w-full py-3 rounded-lg text-[11px] font-bold uppercase tracking-widest">Restart Daemon Now</button>\n                <div class="text-[11px] mt-3" style="color: var(--text-subtle)">This sends the same launcher restart command as the status card. The tour unlocks when the daemon comes back online.</div>',
+          },
+          {
+            view: "security",
+            target: "#sec-panel-ratelimit",
+            title: "16. Set A Rate Limit",
+            outcome: "Turn on live protection",
+            why: "Policy is useful because it becomes evidence, but not every enforcement event is an incident. The agent sees traffic, applies the rule, emits request/security telemetry, and the dashboard keeps micro noise separate from macro impact.",
+            body: "Open Security, review the staged rate-limit settings, then save the policy to enable protection. A single noisy source should show in the event log as contained enforcement, not scream as critical unless it actually contributes to runtime degradation.",
+            scrollOffset: 0,
+            proofBadge: "Policy enforcement",
+            securityTab: "ratelimit",
+            highlightActionSelector: "#sec-save-btn",
+            presetRateLimit: {
+              enabled: !0,
+              rpm: 90,
+              burst: 20,
+              autoBlock: !0,
+              threshold: 24,
+              window: 60,
+              duration: 45,
+            },
+            waitForSecuritySave: !0,
+          },
+          {
+            view: "rollout",
+            target: "#rollout-launcher-list",
+            title: "17. Review Rollout Order",
+            outcome: "See how the fleet comes up",
+            why: "If you are running multiple hosts or APIs, this is where you decide sequence instead of hoping launch order behaves. Capacity Diagnostic tells you what a host can carry; Placement decides where the work actually goes.",
+            body: "Review the launcher order first, then the API order below it. This page controls who comes online first, where each API lands, and how to stage recovery cleanly. Use host capacity estimates as inputs, not vibes.",
+            scrollOffset: 0,
+            proofBadge: "Fleet sequencing",
+          },
+          {
+            view: "pipelines",
+            target: "#pipeline-empty-state",
+            title: "18. Build A Monitoring Pipeline",
+            outcome: "Define how traffic becomes evidence",
+            why: "The agent can run telemetry stages, scoring stages, honeypot stages, response stages, tool calls, and custom modules. This page turns that power into named, understandable stacks.",
+            body: "Think of pipelines as outcomes, not code. The page opens with a gallery: pick what you want to happen to your traffic, like 'See every page and route' or 'Block scanners and bots', and Infraveil wires the right steps for you. Need full control? 'Build from scratch', and the Advanced tab lets you place each capture and response stage by hand, no JSON required.",
+            scrollOffset: 0,
+            proofBadge: "Programmable policy",
+            detailHtml:
+              '\n                <div class="grid gap-3">\n                    <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3">\n                        <div class="text-[10px] uppercase tracking-[0.22em] font-bold text-slate-300">1. Watch</div>\n                        <div class="text-sm text-white/80 mt-1">Choose what traffic details matter, like routes, countries, payload shape, or scanners.</div>\n                    </div>\n                    <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3">\n                        <div class="text-[10px] uppercase tracking-[0.22em] font-bold text-slate-300">2. Decide</div>\n                        <div class="text-sm text-white/80 mt-1">Let the preset score or label the request so the dashboard can explain what happened.</div>\n                    </div>\n                    <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3">\n                        <div class="text-[10px] uppercase tracking-[0.22em] font-bold text-slate-300">3. Respond</div>\n                        <div class="text-sm text-white/80 mt-1">Log it, slow it down, block it, or just keep watching. You can stay simple.</div>\n                    </div>\n                </div>',
+          },
+          {
+            view: "pipeline-logs",
+            target: "#pipeline-log-feed",
+            title: "19. Read Pipeline Decisions",
+            outcome: "See the exact reason behind a traffic outcome",
+            why: "This is where policy stops being a black box. Each row ties a request to stack name, phase, decision, risk score, and low-level stage logs.",
+            body: "Open a row when traffic gets challenged, blocked, deceived, or allowed. The detail view shows the request, the decision, and the internal pipeline logs that explain why.",
+            scrollOffset: 0,
+            proofBadge: "Decision evidence",
+          },
+          {
+            view: "security",
+            target: "#sec-panel-events",
+            title: "20. Review The Security Surface",
+            outcome: "Review recorded security activity",
+            why: "Security events are the agent's micro pressure log: honeypots, suspicious paths, scanners, geo rules, blocks, rate limits, and other policy-driven outcomes.",
+            body: "Use this event rail to review protection activity, flagged requests, and policy-driven actions. This is where one noisy source belongs. Incident Command only escalates when the pressure becomes broad, sustained, or tied to runtime impact.",
+            scrollOffset: 0,
+            proofBadge: "Security evidence",
+            securityTab: "events",
+          },
+          {
+            view: "remediation",
+            target: "#rem-permission-grid",
+            title: "21. Configure AI Remediation",
+            outcome: "Give the AI authority deliberately",
+            why: "AI Remediation has enough evidence to be extremely useful: logs, traffic, traces, doctor receipts, hashes, manifests, incidents, and runtime state. The point is not blind autonomy. The point is controlled autonomy with audit and revert.",
+            body: "Set how many errors trigger AI analysis and within what window, require doctor receipts, and decide exactly what it is allowed to do: inspect runtime evidence, inspect optional package files, patch optional package files, restart agents, restart launchers, change policy, change placement, deploy, or clear logs. You decide how much authority exists.",
+            scrollOffset: 0,
+            proofBadge: "AI governance",
+          },
+          {
+            view: "incidents",
+            target: "#incident-list",
+            title: "22. Open Incident Command",
+            outcome: "See the incidents that actually matter",
+            why: "Incidents are where runtime, policy, telemetry, and recovery become one operational story, but the page is macro-first by design.",
+            body: "This page separates Macro Incidents from Contained Noise. One person hammering a route can be visible in security logs without degrading public status. Escalation is based on blast radius: runtime errors, offline/degraded workloads, broad source spread, sustained pressure, or real machine impact.",
+            scrollOffset: 0,
+            proofBadge: "Incident command",
+          },
+          {
+            view: "status-page",
+            target: "#status-page-shell",
+            title: "23. Check Public Status",
+            outcome: "See the customer-facing version",
+            why: "A startup should be able to communicate outages cleanly without exposing internal traces or overreacting to contained enforcement.",
+            body: "The status page compresses macro incidents into a public operational view. Contained rate-limit noise can stay private while public status remains operational, because customers should see impact, not every blocked nuisance.",
+            scrollOffset: 0,
+            proofBadge: "Public status",
+          },
+          {
+            view: "catalog",
+            target: "#catalog-list",
+            title: "24. Review The Service Catalog",
+            outcome: "Know what runs, where, and who owns it",
+            why: "A real platform needs a source of truth for what exists, where it runs, and who operates it.",
+            body: "The catalog pulls connected workloads into one place with runtime, host, payload, status, and ownership context. This is the bridge between deployment and operations.",
+            scrollOffset: 0,
+            proofBadge: "Service catalog",
+          },
+          {
+            view: "integrations",
+            target: "#integrations-grid",
+            title: "25. Connect Edge Integrations",
+            outcome: "Push alerts to your tools, keep the source of truth here",
+            why: "Slack, Teams, incident.io, GitHub, webhooks, and OpenTelemetry references are useful when they receive the right evidence at the right time. They should not become the runtime source of truth.",
+            body: "Use Edge Integrations to notify operators, create incident records, open GitHub issues, send signed webhooks, or store OpenTelemetry export references. The important boundary is simple: Infraveil owns the launcher state, agent state, logs, traces, policy, incidents, recovery receipts, and audit packets. Integrations receive bounded evidence from that operating layer.",
+            scrollOffset: 0,
+            proofBadge: "Outbound bridge",
+            detailHtml:
+              '\n                <div class="grid gap-3">\n                    <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3">\n                        <div class="text-[10px] uppercase tracking-[0.22em] font-bold text-slate-300">Slack / Teams</div>\n                        <div class="text-sm text-white/80 mt-1">Post macro incidents, emergency actions, and audit events into the channel operators already watch.</div>\n                    </div>\n                    <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3">\n                        <div class="text-[10px] uppercase tracking-[0.22em] font-bold text-slate-300">incident.io / GitHub</div>\n                        <div class="text-sm text-white/80 mt-1">Create incident records or work items from verified runtime evidence without letting another tool own runtime truth.</div>\n                    </div>\n                    <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3">\n                        <div class="text-[10px] uppercase tracking-[0.22em] font-bold text-slate-300">Signed Webhooks / OpenTelemetry</div>\n                        <div class="text-sm text-white/80 mt-1">Send bounded, signed evidence to your own receiver or keep vendor-neutral export references for downstream telemetry.</div>\n                    </div>\n                </div>',
+          },
+          {
+            view: "settings",
+            target: "#settings-trust-panel",
+            title: "26. Export The Evidence Packet",
+            outcome: "Package the proof",
+            why: "The audit export is the answer to 'prove it without asking me to believe the UI.' It includes launcher and agent versions, launcher/agent source hashes, runtime contract hashes, manifest summary, cache state, action receipts, capacity diagnostic receipts, billing lock state, and the signed runtime release manifest.",
+            body: "Export runtime reports for review, run diagnostics to investigate an issue, or request a capacity report from the selected server. Inspect the reported result before taking further action.",
+            scrollOffset: 0,
+            proofBadge: "Exportable proof",
+          },
+          {
+            view: "api-reference",
+            target: "#johnny-confidence-card",
+            title: "27. Make Johnny Believe It",
+            outcome: "Trigger real signals",
+            why: "Dashboards are easy to fake. A linked evidence chain is harder: traffic, policy, logs, pipeline decisions, security events, runtime state, capacity state, and recovery all have to agree.",
+            body: "Johnny does not trust dashboards. Good. Copy the Johnny test, run it against the host you launched, and make him happy by triggering real traffic, honeypots, rate pressure, runtime logs, request traces, pipeline decisions, and the rollout/security surfaces you just configured. Notice that rate pressure is proof of enforcement, not automatically proof of an outage.",
+            scrollOffset: 40,
+            proofBadge: "Interactive proof",
+            highlightActionSelector: "#johnny-confidence-card button",
+          },
+          {
+            view: "api-reference",
+            target: "#johnny-confidence-card",
+            title: "28. Prove The Live Stack",
+            outcome: "Check the selected request and runtime observations",
+            why: "The confidence meter only moves when the workspace sees real signals. No fake checklist, no sandbox theater.",
+            body: "Take a minute here. Hit the core endpoints, trigger a honeypot, burst the API, and if you launched more than one API, repeat the proof across the stack. Johnny should move because the system saw real conditions, not because the UI handed out free checkmarks.",
+            scrollOffset: 40,
+            proofBadge: "Live proof",
+            nextLabel: "I'm Back",
+            waitForJohnnyHappy: !0,
+          },
+          {
+            view: "overview",
+            target: "#user-profile-btn",
+            title: "29. Now Let Us Get You Into Your Own Account",
+            outcome: "Move from the demo into your workspace",
+            why: "The next step is creating your own account and taking the same control flow into production.",
+            body: "Create your account when you are ready to connect your own server. Check Billing for the current plan and included capacity.",
+            scrollOffset: 80,
+            proofBadge: "Own account",
+            nextLabel: "Finish",
+            detailHtml:
+              '\n                <div class="space-y-3">\n                    <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-4">\n                        <div class="text-[10px] uppercase tracking-[0.22em] font-bold text-slate-300">Next Move</div>\n                        <div class="text-sm text-white mt-2">Open signup and create your workspace.</div>\n                    </div>\n                    <div class="grid grid-cols-1 gap-3">\n                        <button type="button" onclick="endDemoAndGoToSignup()" class="btn-primary w-full py-3 rounded-lg text-[11px] font-bold uppercase tracking-widest">Create My Account</button>\n                    </div>\n                    <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-center">\n                        <div class="text-[10px] uppercase tracking-[0.2em] font-bold text-emerald-300">$99 / Month</div>\n                        <div class="text-sm text-white mt-1">Production workspace, live launcher, telemetry, security controls, recovery tools, and no artificial usage limits.</div>\n                    </div>\n                </div>',
+          },
+        ];
+        let demoTourIndex = 0,
+          currentTourTarget = null,
+          demoTypeTimer = null,
+          demoLauncherAutoStarted = !1,
+          demoTourWaitTimer = null,
+          lastDemoBodyText = "";
+        const DEMO_TOUR_INDEX_KEY = "infraveil-demo-tour-index",
+          DEMO_TOUR_CLOSED_KEY = "infraveil-demo-tour-closed",
+          DEMO_TOUR_SESSION_KEY = "infraveil-demo-tour-session";
+        let demoTourMilestones = {
+          securitySavedAt: 0,
+          launcherRestartSentAt: 0,
+        };
+        function currentDemoSteps() {
+          return PRODUCTION_DEMO_STEPS;
+        }
+        function updateDemoMissionUI() {}
+        function clearTourHighlight() {
+          (currentTourTarget &&
+            currentTourTarget.classList.remove("tour-focus"),
+            (currentTourTarget = null));
+        }
+        function clearDemoTourWaitState() {
+          demoTourWaitTimer &&
+            (clearInterval(demoTourWaitTimer), (demoTourWaitTimer = null));
+        }
+        function spotlightTarget(e, t = 0) {
+          if ((clearTourHighlight(), !e)) return;
+          const n = document.querySelector(e);
+          if (!n) return;
+          ((currentTourTarget = n),
+            n.classList.add("tour-focus"),
+            positionTourCard(n));
+          const o = n.getBoundingClientRect().top + window.pageYOffset - t - 84;
+          window.scrollTo({ top: Math.max(0, o), behavior: "smooth" });
+        }
+        function typeDemoBody(e, t = 18) {
+          const n = document.getElementById("demo-tour-body");
+          if (!n) return;
+          if (e === lastDemoBodyText) return;
+          ((lastDemoBodyText = e),
+            clearInterval(demoTypeTimer),
+            (n.innerText = ""),
+            n.classList.add("typing-caret"));
+          let o = 0;
+          demoTypeTimer = setInterval(() => {
+            ((o += 1),
+              (n.innerText = e.slice(0, o)),
+              o >= e.length &&
+                (clearInterval(demoTypeTimer),
+                n.classList.remove("typing-caret")));
+          }, t);
+        }
+        function pulseTourAction(e) {
+          if (!e) return;
+          const t = document.querySelector(e);
+          t &&
+            (t.classList.add(
+              "ring-2",
+              "ring-blue-500",
+              "ring-offset-2",
+              "ring-offset-slate-900",
+              "tour-glow-pulse",
+            ),
+            setTimeout(() => {
+              t.classList.remove(
+                "ring-2",
+                "ring-blue-500",
+                "ring-offset-2",
+                "ring-offset-slate-900",
+                "tour-glow-pulse",
+              );
+            }, 1800));
+        }
+        function prepareRateLimitTourStep(e) {
+          if (!e.presetRateLimit) return;
+          switchSecTab("ratelimit");
+          const t = e.presetRateLimit,
+            n = document.getElementById("sec-rl-enabled"),
+            o = document.getElementById("sec-rl-rpm"),
+            r = document.getElementById("sec-rl-rpm-val"),
+            s = document.getElementById("sec-rl-burst"),
+            a = document.getElementById("sec-rl-burst-val"),
+            i = document.getElementById("sec-ab-enabled"),
+            l = document.getElementById("sec-ab-threshold"),
+            c = document.getElementById("sec-ab-window"),
+            d = document.getElementById("sec-ab-duration"),
+            u = document.getElementById("sec-ab-dur-val");
+          (n && (n.checked = !!t.enabled),
+            o && (o.value = String(t.rpm)),
+            r && (r.textContent = String(t.rpm)),
+            s && (s.value = String(t.burst)),
+            a && (a.textContent = String(t.burst)),
+            i && (i.checked = !!t.autoBlock),
+            l && (l.value = String(t.threshold)),
+            c && (c.value = String(t.window)),
+            d && (d.value = String(t.duration)),
+            u &&
+              (u.textContent =
+                t.duration >= 60
+                  ? `${Math.floor(t.duration / 60)}h ${t.duration % 60}m`
+                  : `${t.duration}m`));
+        }
+        function prepareDemoTourStep(e) {
+          (e.securityTab && switchSecTab(e.securityTab),
+            e.presetRateLimit && prepareRateLimitTourStep(e));
+        }
+        function dismissDashboardLoader() {
+          const e = document.getElementById("dashboard-loader");
+          e &&
+            requestAnimationFrame(() => {
+              (e.classList.add("hidden"),
+                setTimeout(() => e.remove(), 220));
+            });
+        }
+        function maybeAutoGenerateDemoLauncher() {
+          if (!isProductionDemo() || demoLauncherAutoStarted) return;
+          const e = document.getElementById("launcher-user"),
+            t = window.__demoUsername || APP_STATE.demo_username || "";
+          if (e && t) e.value = t;
+          if (
+            !e ||
+            !t ||
+            (APP_STATE.release_approval_required &&
+              !APP_STATE.release_approval_enrolled)
+          )
+            return;
+          demoLauncherAutoStarted = !0;
+          setTimeout(() => generateLauncherCommand(), 180);
+        }
+        function positionTourCard(e) {
+          const t = document.getElementById("demo-tour-card");
+          if (!t || !e) return;
+          if (t.classList.contains("tour-card-welcome")) return;
+          t.classList.remove(
+            "tour-card-anchor-left",
+            "tour-card-anchor-right",
+            "tour-card-anchor-top",
+          );
+          const n = e.getBoundingClientRect(),
+            o = window.innerWidth,
+            r = window.innerHeight,
+            s = n.bottom > r - 230,
+            a = n.right > o - 460;
+          s && a
+            ? t.classList.add("tour-card-anchor-left")
+            : s
+              ? t.classList.add("tour-card-anchor-top")
+              : t.classList.add("tour-card-anchor-right");
+        }
+        function renderDemoTourStep() {
+          const e = currentDemoSteps(),
+            t = e[demoTourIndex];
+          if (!t) return;
+          (clearDemoTourWaitState(), (lastDemoBodyText = ""));
+          const l = document.getElementById("demo-tour-card");
+          l &&
+            (l.classList.toggle("tour-card-welcome", !!t.welcome),
+            l.classList.toggle("tour-card-anchor-right", !t.welcome));
+          document.body.classList.toggle("tour-welcome-blur", !!t.welcome);
+          const n = t.scrollOffset || 0;
+          ((document.getElementById("demo-tour-step-label").innerText =
+            t.welcome
+              ? `Production Tour Step 0 / ${e.length - 1}`
+              : `Production Tour ${demoTourIndex} / ${e.length - 1}`),
+            (document.getElementById("demo-tour-title").innerText = t.title),
+            typeDemoBody(t.body),
+            (document.getElementById("demo-tour-outcome").innerText =
+              t.outcome || "Live infrastructure"),
+            (document.getElementById("demo-tour-why").innerText =
+              t.why ||
+              "This step updates the current workspace state and keeps the flow visible."),
+            (document.getElementById("demo-tour-proof-badge").innerText =
+              t.proofBadge || "Live workspace"),
+            (document.getElementById("demo-tour-mode-badge").innerText =
+              "Production Tour"),
+            (document.getElementById("demo-tour-progress").style.width =
+              ((demoTourIndex + 1) / e.length) * 100 + "%"));
+          const o = document.getElementById("demo-tour-detail-box"),
+            r = document.getElementById("demo-tour-detail-content");
+          o &&
+            r &&
+            (t.detailHtml
+              ? ((r.innerHTML = t.detailHtml), o.classList.remove("hidden"))
+              : ((r.innerHTML = ""), o.classList.add("hidden")));
+          const s = document.getElementById("demo-tour-back");
+          s &&
+            ((s.disabled = 0 === demoTourIndex),
+            s.classList.toggle("opacity-50", 0 === demoTourIndex),
+            s.classList.toggle("cursor-not-allowed", 0 === demoTourIndex));
+          const a = document.getElementById("demo-tour-next");
+          a &&
+            ((a.disabled = !1),
+            a.classList.remove("opacity-50", "cursor-not-allowed"),
+            (a.innerText =
+              t.nextLabel ||
+              (demoTourIndex === e.length - 1 ? "Finish" : "Next")));
+          const i = document.getElementById("demo-tour-step-skip");
+          if (i) {
+            const t = demoTourIndex >= e.length - 1;
+            (i.classList.toggle("hidden", t), (i.disabled = t));
+          }
+          if (
+            (sessionStorage.setItem(DEMO_TOUR_INDEX_KEY, String(demoTourIndex)),
+            switchView(t.view),
+            prepareDemoTourStep(t),
+            setTimeout(() => {
+              (t.target ? spotlightTarget(t.target, n) : clearTourHighlight(),
+                t.highlightButton &&
+                  pulseTourAction(
+                    'button[onclick="generateLauncherCommand()"]',
+                  ),
+                t.highlightActionSelector &&
+                  pulseTourAction(t.highlightActionSelector));
+            }, 90),
+            isProductionDemo() && t.waitForDaemonOnline)
+          ) {
+            const e = document.getElementById("demo-tour-next");
+            ((e.disabled = !0),
+              e.classList.add("opacity-50", "cursor-not-allowed"),
+              (e.innerText = "Waiting for daemon..."),
+              (demoTourWaitTimer = setInterval(() => {
+                const t = document.getElementById("launcher-status-text");
+                t && t.innerText.includes("ONLINE")
+                  ? (clearDemoTourWaitState(),
+                    (e.disabled = !1),
+                    e.classList.remove("opacity-50", "cursor-not-allowed"),
+                    (e.innerText = "Next"),
+                    typeDemoBody(
+                      "Daemon is ONLINE. The dashboard has a live host now. Click Next and we will size the machine before trusting it with more work.",
+                      14,
+                    ),
+                    showToast("Launcher connected. Daemon is live.", "success"))
+                  : typeDemoBody(
+                      "Waiting for daemon to connect. Run the launcher on your server and keep your eyes on this status card.",
+                      14,
+                    );
+              }, 2e3)));
+          }
+          if (isProductionDemo() && t.waitForDaemonRestart) {
+            const e = document.getElementById("demo-tour-next");
+            ((e.disabled = !0),
+              e.classList.add("opacity-50", "cursor-not-allowed"),
+              (e.innerText = "Restart the launcher..."));
+            const t = Date.now();
+            demoTourWaitTimer = setInterval(() => {
+              const n = document.getElementById("launcher-status-text"),
+                o = n ? n.innerText : "",
+                r = o.includes("ONLINE"),
+                s = o.includes("RESTARTING");
+              if (demoTourMilestones.launcherRestartSentAt > t)
+                return s
+                  ? (typeDemoBody(
+                      "Daemon is restarting. Wait for it to come back ONLINE.",
+                      20,
+                    ),
+                    void (e.innerText = "Waiting for daemon..."))
+                  : void (r &&
+                    Date.now() - demoTourMilestones.launcherRestartSentAt > 1500
+                      ? (clearDemoTourWaitState(),
+                        (e.disabled = !1),
+                        e.classList.remove("opacity-50", "cursor-not-allowed"),
+                        (e.innerText = "Next"),
+                        typeDemoBody(
+                          "Restart confirmed. The launcher recovered and returned ONLINE. Click Next and we will turn on a live protection control.",
+                          18,
+                        ),
+                        showToast("Daemon restart confirmed.", "success"))
+                      : ((e.innerText = "Waiting for daemon..."),
+                        typeDemoBody(
+                          "Restart command sent. Waiting for the daemon to report ONLINE again.",
+                          18,
+                        )));
+              typeDemoBody(
+                "Click Restart Daemon Now in this card, or use Restart Daemon in the status panel. We will verify recovery after the command is sent.",
+                18,
+              );
+            }, 1e3);
+          }
+          if (isProductionDemo() && t.waitForNode) {
+            const e = document.getElementById("demo-tour-next");
+            ((e.disabled = !0),
+              e.classList.add("opacity-50", "cursor-not-allowed"),
+              (e.innerText = "Waiting for node..."));
+            let t = !1;
+            demoTourWaitTimer = setInterval(() => {
+              const n = document.getElementById("deployments-tbody"),
+                o =
+                  (n ? n.querySelectorAll("tr") : []).length > 0 &&
+                  !n.innerText.includes("No active nodes"),
+                r = n && n.innerText.includes("ONLINE");
+              o && r
+                ? ((t = !0),
+                  clearDemoTourWaitState(),
+                  (e.disabled = !1),
+                  e.classList.remove("opacity-50", "cursor-not-allowed"),
+                  (e.innerText = "Next"),
+                  typeDemoBody(
+                    "Your node is ONLINE and registered. Click Next and we will open the live runtime stream.",
+                    16,
+                  ),
+                  showToast("Node registered in the workspace.", "success"))
+                : t && !o
+                  ? (e.innerText = "Waiting for reconnect...")
+                  : o ||
+                    typeDemoBody(
+                      "Waiting for your node to connect. Paste the launcher install on your server and run it. This may take 10 to 30 seconds.",
+                      16,
+                    );
+            }, 2e3);
+          }
+          if (isProductionDemo() && t.waitForSecuritySave) {
+            const e = document.getElementById("demo-tour-next");
+            ((e.disabled = !0),
+              e.classList.add("opacity-50", "cursor-not-allowed"),
+              (e.innerText = "Apply the policy..."));
+            const t = Date.now();
+            demoTourWaitTimer = setInterval(() => {
+              demoTourMilestones.securitySavedAt > t
+                ? (clearDemoTourWaitState(),
+                  (e.disabled = !1),
+                  e.classList.remove("opacity-50", "cursor-not-allowed"),
+                  (e.innerText = "Next"),
+                  typeDemoBody(
+                    "Policy live. Rate limiting is enabled and the workspace is now enforcing controls. Click Next to see where those events land.",
+                    16,
+                  ),
+                  showToast("Rate-limit policy applied.", "success"))
+                : typeDemoBody(
+                    "The rate-limit controls are ready. Hit Save Rate Limit Policy to apply protection.",
+                    16,
+                  );
+            }, 800);
+          }
+          isProductionDemo() &&
+            t.waitForJohnnyHappy &&
+            (updateJohnnyTourGate(),
+            johnnyConfidenceScore < 100 &&
+              !johnnyProofSkipped &&
+              typeDemoBody(
+                "Make Johnny happy before continuing. Copy the test, run it locally, and watch the proof checklist turn green. If you need to move on, use Skip Proof on the card.",
+                16,
+              ));
+        }
+        function startDemoTour() {
+          if (!APP_STATE.demo_mode) return;
+          if ("1" === sessionStorage.getItem(DEMO_TOUR_CLOSED_KEY)) return;
+          if (
+            isProductionDemo() &&
+            !APP_STATE.questionnaire_defaults?.configured &&
+            "1" !==
+              sessionStorage.getItem("infraveil-demo-questionnaire-complete")
+          )
+            return void openQuestionnaire();
+          const e = document.getElementById("demo-tour-card");
+          (e.classList.remove("hidden"),
+            e.classList.remove("tour-card-live"),
+            e.offsetWidth,
+            e.classList.add("tour-card-live"),
+            renderDemoTourStep());
+        }
+        function advanceDemoTourStep({ skipped: e = !1 } = {}) {
+          const t = currentDemoSteps();
+          clearDemoTourWaitState();
+          if (t[demoTourIndex]?.welcome)
+            document.body.classList.remove("tour-welcome-blur");
+          const n = document.getElementById("demo-tour-next");
+          (n &&
+            ((n.disabled = !1),
+            n.classList.remove("opacity-50", "cursor-not-allowed")),
+            demoTourIndex >= t.length - 1
+              ? closeDemoTour()
+              : ((demoTourIndex += 1),
+                e &&
+                  showToast(
+                    "Skipped this tour step. You can come back to it later.",
+                    "info",
+                  ),
+                t[demoTourIndex - 1]?.welcome
+                  ? setTimeout(renderDemoTourStep, 260)
+                  : renderDemoTourStep()));
+        }
+        async function endDemoAndGoToSignup() {
+          window.dispatchEvent(new CustomEvent("infraveil:session-expired"));
+          (sessionStorage.setItem(DEMO_TOUR_CLOSED_KEY, "1"),
+            sessionStorage.removeItem(DEMO_TOUR_INDEX_KEY));
+          try {
+            await fetch("/client/logout", {
+              method: "POST",
+              credentials: "same-origin",
+              cache: "no-store",
+              headers: {
+                "Cache-Control": "no-cache, no-store, max-age=0",
+                Pragma: "no-cache",
+              },
+            });
+          } catch (e) {}
+          window.location.replace("/client/signup");
+        }
+        function closeDemoTour() {
+          (document.getElementById("demo-tour-card").classList.add("hidden"),
+            document.body.classList.remove("tour-welcome-blur"),
+            clearTourHighlight(),
+            clearDemoTourWaitState(),
+            clearInterval(demoTypeTimer),
+            sessionStorage.setItem(DEMO_TOUR_CLOSED_KEY, "1"));
+        }

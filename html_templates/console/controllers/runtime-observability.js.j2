@@ -1,0 +1,1151 @@
+        async function fetchPipelineLogs() {
+          try {
+            const e = await freshFetch(`${API.pipelineLogs}${window.ivMacroAgentQuery?.("pipeline-logs") || ""}`);
+            if (!e.ok) throw new Error();
+            const t = await e.json();
+            _pipelineLogs = Array.isArray(t.logs) ? t.logs : [];
+          } catch (e) {
+            ((_pipelineLogs = []),
+              showToast("Failed to load pipeline analytics feed", "error"));
+          }
+          renderPipelineLogs();
+        }
+        function clearPipelineAnalytics() {
+          APP_STATE.demo_mode
+            ? clearPipelineAnalyticsDirect()
+            : showTotpPrompt("Clear pipeline analytics", async (e) => {
+                clearPipelineAnalyticsDirect(e);
+              });
+        }
+        async function clearPipelineAnalyticsDirect(e = "") {
+          const t = document.getElementById("pipeline-log-feed"),
+            n = document.getElementById("pipeline-log-stats"),
+            o = document.getElementById("pipeline-analytics-status");
+          (t &&
+            (t.innerHTML =
+              '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)">Clearing pipeline analytics...</div>'),
+            n && (n.innerHTML = ""),
+            o && (o.innerHTML = "Clearing request-derived analytics..."));
+          try {
+            const n = { "Content-Type": "application/json" };
+            !APP_STATE.demo_mode && e && (n["X-TOTP-Auth"] = e);
+            if (
+              !(
+                await fetch(API.pipelineLogsClear, {
+                  method: "POST",
+                  headers: n,
+                  body: JSON.stringify({}),
+                })
+              ).ok
+            )
+              throw new Error("Failed to clear pipeline analytics");
+            ((_pipelineLogs = []),
+              (_securityInsights = _securityInsights
+                ? {
+                    ..._securityInsights,
+                    summary: {
+                      ...(_securityInsights.summary || {}),
+                      network_events: 0,
+                      top_routes: [],
+                      top_methods: [],
+                      top_countries: [],
+                      hot_ips: [],
+                      custom_signals: [],
+                      custom_dimensions: [],
+                      fingerprints: [],
+                      pattern_detections: [],
+                      risk_distribution: [],
+                      decision_distribution: [],
+                      stack_activity: [],
+                    },
+                  }
+                : null),
+              renderLearningInsights(),
+              renderPipelineLogs(),
+              t &&
+                (t.innerHTML = `<div class="p-4 text-center text-xs" style="color: var(--text-subtle)"><i data-lucide="check-circle" class="w-6 h-6 mx-auto mb-2 text-emerald-500"></i>${APP_STATE.demo_mode ? "Demo: Pipeline analytics cleared." : "Pipeline analytics cleared."}</div>`),
+              lucide.createIcons());
+          } catch (e) {
+            (t &&
+              (t.innerHTML =
+                '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)">Pipeline analytics clear failed.</div>'),
+              showToast(
+                e.message || "Failed to clear pipeline analytics",
+                "error",
+              ));
+          }
+        }
+        function togglePipelineLogDetails(e) {
+          const t = document.getElementById(`pipeline-log-detail-${e}`),
+            n = document.getElementById(`pipeline-log-icon-${e}`);
+          t &&
+            (t.classList.contains("hidden")
+              ? (t.classList.remove("hidden"),
+                expandedPipelineLogIds.add(e),
+                n && (n.style.transform = "rotate(180deg)"))
+              : (t.classList.add("hidden"),
+                expandedPipelineLogIds.delete(e),
+                n && (n.style.transform = "rotate(0deg)")));
+        }
+        function formatPipelineLogTime(e) {
+          const t = String(e || "").trim();
+          if (!t) return "--";
+          const n = new Date(t);
+          return Number.isNaN(n.getTime())
+            ? t
+            : n.toLocaleTimeString([], {
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+              });
+        }
+        function captureFeedScroll(e) {
+          if (!e) return null;
+          const t = e.getBoundingClientRect(),
+            n = Array.from(e.children).find(
+              (e) => e.id && e.getBoundingClientRect().bottom > t.top,
+            );
+          return {
+            top: e.scrollTop,
+            left: e.scrollLeft,
+            pinnedToTop: e.scrollTop <= 2,
+            anchorId: n?.id || "",
+            anchorOffset: n ? n.getBoundingClientRect().top - t.top : null,
+          };
+        }
+        function restoreFeedScroll(e, t) {
+          if (!(e && t)) return;
+          if (t.pinnedToTop) {
+            e.scrollTop = 0;
+            e.scrollLeft = t.left;
+            return;
+          }
+          const n = t.anchorId ? document.getElementById(t.anchorId) : null;
+          if (n && null !== t.anchorOffset) {
+            const o = e.getBoundingClientRect();
+            e.scrollTop += n.getBoundingClientRect().top - o.top - t.anchorOffset;
+          } else e.scrollTop = t.top;
+          e.scrollLeft = t.left;
+        }
+        function renderPipelineLogs() {
+          const e = document.getElementById("pipeline-log-feed"),
+            t = document.getElementById("pipeline-log-stats"),
+            n = document.getElementById("pipeline-log-stack-filter"),
+            o = document.getElementById("pipeline-log-decision-filter"),
+            r = document.getElementById("pipeline-log-agent-filter"),
+            s = (document.getElementById("pipeline-log-search")?.value || "")
+              .toLowerCase()
+              .trim();
+          if (!(e && t && n && o && r)) return;
+          const pipelineScroll = captureFeedScroll(e);
+          const a = Array.from(
+              new Set(
+                (_pipelineLogs || []).map((e) => e.stack_name).filter(Boolean),
+              ),
+            ).sort(),
+            i = Array.from(
+              new Set(
+                (_pipelineLogs || []).map((e) => e.agent_id).filter(Boolean),
+              ),
+            ).sort(),
+            l = n.value,
+            c = r.value,
+            pipelineLimit = getLogLimitValue("pipeline-log-limit", 500);
+          ((n.innerHTML = `<option value="">All Stacks</option>${a.map((e) => `<option value="${escapeHtml(e)}" ${l === e ? "selected" : ""}>${escapeHtml(e)}</option>`).join("")}`),
+            (r.innerHTML = `<option value="">All Nodes</option>${i.map((e) => `<option value="${escapeHtml(e)}" ${c === e ? "selected" : ""}>${escapeHtml(agentNames[e] || e)}</option>`).join("")}`));
+          const d = (_pipelineLogs || []).filter((e) => {
+              if (l && e.stack_name !== l) return !1;
+              if (c && e.agent_id !== c) return !1;
+              if (o.value && (e.final_decision || e.decision || e.stack_decision) !== o.value)
+                return !1;
+              if (!s) return !0;
+              return JSON.stringify(e).toLowerCase().includes(s);
+            }),
+            u = d.reduce((e, t) => {
+              const n = t.final_decision || t.decision || t.stack_decision || "unknown";
+              return ((e[n] = (e[n] || 0) + 1), e);
+            }, {});
+          if (
+            ((t.innerHTML = [
+              _renderMetricCard(
+                "workflow",
+                "Log Rows",
+                d.length,
+                `${Number.isFinite(pipelineLimit) ? Math.min(d.length, pipelineLimit) : "all"} rendered`,
+              ),
+              _renderMetricCard(
+                "layers-3",
+                "Stacks",
+                new Set(d.map((e) => e.stack_name)).size,
+                "visible after filters",
+              ),
+              _renderMetricCard(
+                "shield-alert",
+                "Blocked",
+                u.block || 0,
+                "rows ending in block",
+                "text-red-400",
+              ),
+              _renderMetricCard(
+                "gauge",
+                "Highest risk score",
+                d.reduce((e, t) => Math.max(e, t.risk_score ?? t.stack_risk_score ?? 0), 0),
+                "unbounded score; not a percentage",
+                "text-amber-400",
+              ),
+            ].join("")),
+            window.renderPipelineVisualizations?.(d),
+            !d.length)
+          )
+            return (
+              (e.innerHTML =
+                '<div class="p-8 text-center text-xs" style="color: var(--text-subtle)"><i data-lucide="workflow" class="w-8 h-8 mx-auto mb-3 opacity-30"></i><div>No pipeline analytics match the current filters.</div></div>'),
+              restoreFeedScroll(e, pipelineScroll),
+              void lucide.createIcons()
+            );
+          const pipelineRows = document.createDocumentFragment();
+          (
+            d.slice(0, pipelineLimit).forEach((t, n) => {
+              const o =
+                  `pipeline-log-${hashCode(JSON.stringify([t.time || "", t.agent_id || "", t.stack_name || "", t.method || "", t.path || "", t.stack_decision || t.decision || ""]))}`,
+                r = expandedPipelineLogIds.has(o),
+                s = t.final_decision || t.decision || t.stack_decision || "unknown",
+                a =
+                  "block" === s
+                    ? "text-red-400"
+                    : "deceive" === s
+                      ? "text-amber-400"
+                      : "text-emerald-400",
+                i = document.createElement("div");
+              ((i.id = o),
+                (i.className = "operator-log-row pipeline-log-row"),
+                (i.style.borderColor = "var(--table-border)"),
+                (i.innerHTML = `\n                    <div class="px-5 py-4 cursor-pointer" onclick="togglePipelineLogDetails('${o}')">\n                        <div class="grid grid-cols-[140px_1fr_140px_120px_24px] gap-4 items-center text-xs">\n                            <span class="font-mono-cli" style="color: var(--text-subtle)">${escapeHtml(formatPipelineLogTime(t.time))}</span>\n                            <div class="min-w-0">\n                                <div class="font-bold truncate" style="color: var(--text-main)">${escapeHtml(t.stack_name || "Unnamed Stack")}</div>\n                                <div class="operator-log-line truncate" style="color: var(--text-muted)">${escapeHtml(t.method)} ${escapeHtml(t.path)} · ${escapeHtml(agentNames[t.agent_id] || t.agent_id || "Unknown Node")}</div>\n                            </div>\n                            <span class="font-mono-cli ${a}">${escapeHtml(s)}</span>\n                            <span class="font-mono-cli" style="color: var(--text-muted)">risk ${t.risk_score ?? t.stack_risk_score ?? 0}</span>\n                            <i data-lucide="chevron-down" class="w-4 h-4 text-gray-500 transition-transform ${r ? "rotate-180" : ""}" id="pipeline-log-icon-${o}"></i>\n                        </div>\n                    </div>\n                    <div id="pipeline-log-detail-${o}" class="${r ? "" : "hidden"} px-5 py-4 border-t" style="border-color: var(--table-border)">\n                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">\n                            <div>\n                                <div class="text-[10px] uppercase tracking-widest font-bold mb-2" style="color: var(--text-subtle)">Request</div>\n                                <pre class="operator-code-block text-blue-300">${escapeHtml(JSON.stringify({ method: t.method, path: t.path, agent: agentNames[t.agent_id] || t.agent_id, ip: t.ip }, null, 2))}</pre>\n                            </div>\n                            <div>\n                                <div class="text-[10px] uppercase tracking-widest font-bold mb-2" style="color: var(--text-subtle)">Decision</div>\n                                <pre class="operator-code-block text-amber-300">${escapeHtml(JSON.stringify({ decision: s, reason: t.final_reason || t.decision_reason || "", stack_decision: t.stack_decision, stack_reason: t.stack_reason, risk_score: t.risk_score ?? t.stack_risk_score ?? 0, phase: t.phase || "" }, null, 2))}</pre>\n                            </div>\n                            <div>\n                                <div class="text-[10px] uppercase tracking-widest font-bold mb-2" style="color: var(--text-subtle)">Low-Level Logs</div>\n                                <pre class="operator-code-block text-emerald-300">${escapeHtml(JSON.stringify(t.logs || [], null, 2))}</pre>\n                            </div>\n                        </div>\n                    </div>\n                `),
+                pipelineRows.appendChild(i));
+            }),
+            window.ivStableLogRows(e, pipelineRows),
+            restoreFeedScroll(e, pipelineScroll),
+            lucide.createIcons());
+        }
+        function toggleConsoleDetails(e) {
+          const t = document.getElementById(`console-detail-${e}`),
+            n = document.getElementById(`console-icon-${e}`);
+          t &&
+            (t.classList.contains("hidden")
+              ? (t.classList.remove("hidden"),
+                expandedConsoleIds.add(e),
+                n && (n.style.transform = "rotate(180deg)"))
+              : (t.classList.add("hidden"),
+                expandedConsoleIds.delete(e),
+                n && (n.style.transform = "rotate(0deg)")));
+        }
+        function renderConsole(e = null) {
+          const t = document.getElementById("console-feed");
+          if (!t) return;
+          const consoleScroll = captureFeedScroll(t);
+          e && (_consoleLogs = normalizeConsoleEntries(e));
+          const n = (document.getElementById("console-search")?.value || "")
+              .toLowerCase()
+              .trim(),
+            r = getSelectValue("console-level-filter", "all"),
+            s = getLogLimitValue("console-limit", 120),
+            a = _consoleLogs.filter((e) => {
+              const fleetIds = window.getFleetAgentScope?.();
+              if (fleetIds && fleetIds.size && !fleetIds.has(e.agent_id)) return !1;
+              if ("error" === r && !e.isError) return !1;
+              if ("warn" === r && !e.isWarn) return !1;
+              if ("security" === r && !e.isSecurity) return !1;
+              if ("important" === r && !isConsoleIncident(e)) return !1;
+              if (!n) return !0;
+              return `${e.displayName} ${e.rawLevel} ${e.cleanContent} ${e.agent_id}`
+                .toLowerCase()
+                .includes(n);
+            }),
+            dedupedLogs = [];
+          a.forEach((e) => {
+            const t = `${e.agent_id}|${e.rawLevel}|${String(e.cleanContent || "")
+                .replace(/\s+/g, " ")
+                .trim()}`,
+              n = dedupedLogs[dedupedLogs.length - 1],
+              o = n
+                ? Math.abs(new Date(n.timestamp).getTime() - new Date(e.timestamp).getTime())
+                : Number.POSITIVE_INFINITY;
+            if (n && n._dedupeKey === t && o <= 9e4)
+              n.repeatCount = (n.repeatCount || 1) + 1;
+            else dedupedLogs.push(Object.assign({}, e, { _dedupeKey: t, repeatCount: 1 }));
+          });
+          if (0 === dedupedLogs.length) {
+            if (
+              (renderConsoleSummary(_consoleLogs, []),
+              window.renderRuntimeVisualizations?.([]),
+              consoleClearedNoticeActive)
+            )
+              return;
+            t.innerHTML = '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)">No runtime output matches this scope and filter.</div>';
+            return;
+          }
+          ((consoleClearedNoticeActive = !1),
+            renderConsoleSummary(_consoleLogs, dedupedLogs),
+            window.renderRuntimeVisualizations?.(dedupedLogs));
+          const i = document.createDocumentFragment();
+          (dedupedLogs.slice(0, s).forEach((e) => {
+            const t = e.displayName,
+              r = "log-" + hashCode(e.agent_id + e.timestamp + e.content),
+              s = e.rawLevel,
+              a = e.isError,
+              l = e.isWarn,
+              c = e.isSecurity,
+              d = e.isDebug;
+            let u, p, m;
+            a
+              ? ((u = "bg-red-500/10 border-red-500/20 text-red-400"),
+                (p = "ERROR"),
+                (m = "text-red-300"))
+              : l
+                ? ((u = "bg-amber-500/10 border-amber-500/20 text-amber-400"),
+                  (p = "WARN"),
+                  (m = "text-amber-300"))
+                : c
+                  ? ((u =
+                      "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"),
+                    (p = "SECURITY"),
+                    (m = "text-emerald-300"))
+                  : d
+                    ? ((u =
+                        "bg-purple-500/10 border-purple-500/20 text-purple-400"),
+                      (p = "DEBUG"),
+                      (m = "text-purple-300"))
+                    : ((u = "bg-white/[0.04] border-white/10 text-gray-300"),
+                      (p = s || "INFO"),
+                      (m = "text-gray-300"));
+            let g = a
+                ? "text-red-400"
+                : l
+                  ? "text-amber-400"
+                  : c
+                    ? "text-emerald-400"
+                    : d
+                      ? "text-purple-400"
+                      : "text-gray-400",
+              h = e.cleanContent,
+              y = e.firstLine,
+              f = y,
+              b = h.includes("\n");
+            const v = expandedConsoleIds.has(r),
+              x = escapeHtml(t),
+              w = escapeHtml(y),
+              _ = escapeHtml(f),
+              T = escapeHtml(h),
+              A =
+                e.repeatCount && e.repeatCount > 1
+                  ? `<span class="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest" style="color: var(--text-subtle)">x${e.repeatCount}</span>`
+                  : "",
+              k = document.createElement("div");
+            ((k.id = e.uniqueId),
+              k.setAttribute(
+                "data-search-content",
+                (e.content + " " + e.agent_id + " " + t).toLowerCase(),
+              ),
+              k.setAttribute("data-agent-id", e.agent_id));
+            const E = !n || k.getAttribute("data-search-content").includes(n);
+            (E || (k.style.display = "none"),
+              (k.className =
+                "operator-log-row group text-xs console-log-item"),
+              (k.style.borderColor = "var(--table-border)"),
+              (k.innerHTML = `\n                    <div class="grid grid-cols-[9rem_6rem_4rem_minmax(0,1fr)_2rem] gap-3 px-6 py-2.5 cursor-pointer items-start" onclick="${b ? `toggleConsoleDetails('${r}')` : ""}">\n                        <div class="font-mono-cli text-[10px] whitespace-nowrap" style="color: var(--text-subtle)">${new Date(e.timestamp).toLocaleTimeString()}</div>\n                        <div class="font-bold truncate pr-2 ${g}" title="${x}">${x}</div>\n                        <div><span class="px-2 py-0.5 rounded text-[9px] font-bold border ${u}">${p}</span></div>\n                        <div class="min-w-0 font-mono-cli flex items-start gap-2 ${m}">\n                            <span class="operator-log-line leading-relaxed" title="${w}">${_}</span>${A}\n                        </div>\n                        <div class="text-right">\n                            ${b ? `<i data-lucide="chevron-down" class="w-4 h-4 text-gray-500 transition-transform ${v ? "rotate-180" : ""}" id="console-icon-${r}"></i>` : ""}\n                        </div>\n                    </div>\n                    ${b ? `\n                    <div id="console-detail-${r}" class="${v ? "" : "hidden"} border-t p-4 font-mono-cli text-[10px]" style="border-color: var(--table-border)">\n                        <pre class="operator-code-block ${m}">${T}</pre>\n                    </div>\n                    ` : ""}\n                `),
+              i.appendChild(k));
+          }),
+            window.ivStableLogRows(t, i),
+            restoreFeedScroll(t, consoleScroll),
+            lucide.createIcons());
+        }
+        function traceDisplayKeyIsSensitive(e) {
+          const t = String(e || "")
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "");
+          if (!t || t.endsWith("_signature_version")) return !1;
+          return (
+            [
+              "authorization", "proxy_authorization", "cookie", "set_cookie",
+              "api_key", "apikey", "x_api_key", "private_key", "secret_key",
+              "encryption_key", "client_secret", "access_key", "session",
+              "session_id", "credential", "credentials", "password", "passphrase",
+              "token", "secret", "nonce", "signature",
+              "totp", "totp_code", "recovery_code", "verification_code",
+              "email_code", "access_code", "cf_turnstile_response",
+            ].includes(t) ||
+            ["_token", "_secret", "_password", "_passphrase", "_nonce", "_cookie", "_credential", "_credentials", "_private_key", "_encryption_key", "_recovery_code", "_verification_code", "_signature"].some((e) => t.endsWith(e))
+          );
+        }
+        function redactTraceForDisplay(e, t = "") {
+          if (traceDisplayKeyIsSensitive(t)) return "[REDACTED]";
+          if (Array.isArray(e)) return e.map((e) => redactTraceForDisplay(e, t));
+          if (e && "object" == typeof e)
+            return Object.fromEntries(
+              Object.entries(e).map(([e, t]) => [e, redactTraceForDisplay(t, e)]),
+            );
+          return e;
+        }
+        function sanitizeTraceLogList(e) {
+          return Array.isArray(e)
+            ? e.map((e) => ({
+                ...e,
+                details: redactTraceForDisplay(e?.details || {}),
+              }))
+            : [];
+        }
+        function renderNetwork(e = null) {
+          const t = document.getElementById("network-feed");
+          if (!t) return;
+          const networkScroll = captureFeedScroll(t);
+          e && (_networkLogs = sanitizeTraceLogList(e?.logs));
+          const n = (document.getElementById("network-search")?.value || "")
+              .toLowerCase()
+              .trim(),
+            o = getSelectValue("network-focus-filter", "all"),
+            r = getLogLimitValue("network-limit", 120);
+          if (!_networkLogs.length) {
+            if ((renderNetworkSummary([], []), networkClearedNoticeActive))
+              return;
+            return (
+              (t.innerHTML = '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)">No requests match this scope.</div>'),
+              void updateNetworkChart(Array(30).fill(0), 0)
+            );
+          }
+          networkClearedNoticeActive = !1;
+          const s = _networkLogs.filter((e) => {
+            const t = e.details || {},
+              r = t.endpoint || "/unknown",
+              s = t.telemetry || {},
+              a = Array.isArray(s.stack_runs) ? s.stack_runs : [],
+              i = ["block", "ratelimit"].includes(String(s.decision || "").toLowerCase()),
+              l = a.length > 0,
+              c =
+                /\/\.env|\/wp-login\.php|\/phpmyadmin\/|\/\.git\/config/i.test(
+                  r,
+                );
+            if ("blocked" === o && !i) return !1;
+            if ("honeypot" === o && !c) return !1;
+            if ("stacked" === o && !l) return !1;
+            if (!n) return !0;
+            return `${e.category} ${t.method || "POST"} ${r} ${JSON.stringify(t)}`
+              .toLowerCase()
+              .includes(n);
+          });
+          renderNetworkSummary(_networkLogs, s);
+          const a = document.createDocumentFragment();
+          (s.slice(0, r).forEach((e) => {
+            const t = e.details || {},
+              n = t.method || "POST",
+              o = t.endpoint || "/unknown",
+              r = "GET" === n ? "text-emerald-400" : "text-gray-300",
+              s = e.category.replace("NODE-", ""),
+              i = agentNames[s] || e.category,
+              l =
+                "net-" +
+                hashCode(e.time + e.category + JSON.stringify(e.details || {})),
+              c = expandedNetworkIds.has(l),
+              d = document.createElement("div");
+            ((d.id = e.uniqueId),
+              d.setAttribute(
+                "data-search-content",
+                (i + " " + n + " " + o + " " + JSON.stringify(t)).toLowerCase(),
+              ),
+              (d.className =
+                "operator-log-row group text-xs net-log-row"),
+              (d.style.borderColor = "var(--table-border)"),
+              (d.innerHTML = `\n                    <div class="flex px-6 py-2.5 cursor-pointer items-start gap-3" onclick="toggleNetDetails('${l}')">\n                        <div class="w-40 font-mono-cli text-[10px]" style="color: var(--text-subtle)">${new Date(e.time).toLocaleTimeString()}</div>\n                        <div class="w-24 font-bold shrink-0" style="color: var(--text-muted)">${escapeHtml(i)}</div>\n                        <div class="flex-1 min-w-0 font-mono-cli flex items-start gap-2">\n                            <span class="${r} font-bold shrink-0">${escapeHtml(n)}</span>\n                            <span class="operator-log-line text-gray-300 leading-4">${escapeHtml(o)}</span>\n                        </div>\n                        <div class="w-8 text-right shrink-0"><i data-lucide="chevron-down" class="w-4 h-4 text-gray-500 transition-transform ${c ? "rotate-180" : ""}" id="net-icon-${l}"></i></div>\n                    </div>\n                    <div id="net-detail-${l}" class="${c ? "" : "hidden"} border-t p-4 font-mono-cli text-[10px]" style="border-color: var(--table-border)">\n                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">\n                            <div>\n                                <div class="text-gray-500 uppercase tracking-widest font-bold mb-1">Request Payload</div>\n                                <pre class="operator-code-block text-blue-300">${null == t.payload || "" === t.payload ? "(no payload)" : escapeHtml(JSON.stringify(t.payload, null, 2))}</pre>\n                            </div>\n                            <div>\n                                <div class="text-gray-500 uppercase tracking-widest font-bold mb-1">Transmitted Headers</div>\n                                <pre class="operator-code-block text-emerald-300">${escapeHtml(JSON.stringify(t.headers, null, 2))}</pre>\n                            </div>\n                            <div>\n                                <div class="text-gray-500 uppercase tracking-widest font-bold mb-1">Pipeline Telemetry</div>\n                                <pre class="operator-code-block text-amber-300">${t.telemetry && 0 !== Object.keys(t.telemetry).length ? escapeHtml(JSON.stringify(t.telemetry, null, 2)) : "(no telemetry)"}</pre>\n                            </div>\n                        </div>\n                        <div class="mt-4">\n                            <div class="text-gray-500 uppercase tracking-widest font-bold mb-2">Stack Runs</div>\n                            ${t.telemetry && Array.isArray(t.telemetry.stack_runs) && 0 !== t.telemetry.stack_runs.length ? `<div class="space-y-3">${t.telemetry.stack_runs.map((e) => `\n                                    <div class="rounded-lg border p-3" style="border-color: var(--table-border); background: rgba(255,255,255,0.03)">\n                                        <div class="flex items-center justify-between gap-3">\n                                            <div class="text-[11px] font-bold text-indigo-300">${escapeHtml(e.name || "Unnamed Stack")}</div>\n                                            <div class="text-[10px]" style="color: var(--text-subtle)">${escapeHtml(e.phase || "phase")} / ${escapeHtml(e.decision || "allow")}</div>\n                                        </div>\n                                        <div class="text-[10px] mt-1" style="color: var(--text-subtle)">reason: ${escapeHtml(e.decision_reason || "(none)")} / risk: ${e.risk_score ?? 0}</div>\n                                        <pre class="operator-code-block text-amber-300 mt-2">${escapeHtml(JSON.stringify(e.logs || [], null, 2))}</pre>\n                                    </div>\n                                `).join("")}</div>` : '<div class="text-[10px]" style="color: var(--text-subtle)">(no stack run logs)</div>'}\n                        </div>\n                    </div>\n                `),
+              (() => {
+                const result = document.createElement("span"); result.className = "iv-request-outcome";
+                const telemetry = t.telemetry || {}, status = Number(telemetry.status);
+                result.textContent = `${telemetry.decision || "Outcome unknown"}${status >= 100 && status <= 599 ? ` · HTTP ${status}` : " · HTTP status not reported"}`;
+                d.querySelector(".flex-1.min-w-0")?.appendChild(result);
+              })(),
+              a.appendChild(d));
+          }),
+            window.ivStableLogRows(t, a),
+            restoreFeedScroll(t, networkScroll),
+            lucide.createIcons());
+        }
+        async function fetchInternalNetworkLogs() {
+          try {
+            const e = await freshFetch(API.internalNetwork);
+            if (!e.ok) throw new Error();
+            renderInternalNetwork(await e.json());
+          } catch (e) {
+            showToast("Failed to load internal trace", "error");
+          }
+        }
+        function renderInternalNetwork(e = null) {
+          const t = document.getElementById("internal-network-feed"),
+            n = (
+              document.getElementById("internal-network-search")?.value || ""
+            ).toLowerCase();
+          if (!t) return;
+          const internalNetworkScroll = captureFeedScroll(t);
+          e && (_internalNetworkLogs = sanitizeTraceLogList(e?.logs));
+          const o = getSelectValue("internal-network-method-filter", "all"),
+            r = getLogLimitValue("internal-network-limit", 120);
+          if (!_internalNetworkLogs.length) {
+            if (
+              (renderInternalSummary([], []),
+              internalNetworkClearedNoticeActive)
+            )
+              return;
+            return void (t.innerHTML =
+              '<div class="p-4 text-center text-xs" style="color: var(--text-subtle)">Waiting for internal traffic...</div>');
+          }
+          internalNetworkClearedNoticeActive = !1;
+          const s = _internalNetworkLogs.filter((e) => {
+            const t = e.details || {},
+              r = String(t.method || "GET").toUpperCase(),
+              s = t.endpoint || t.path || "/unknown";
+            if ("all" !== o && r !== o) return !1;
+            if (!n) return !0;
+            return `${r} ${s} ${JSON.stringify(t)}`.toLowerCase().includes(n);
+          });
+          renderInternalSummary(_internalNetworkLogs, s);
+          const a = document.createDocumentFragment();
+          (s.slice(0, r).forEach((e) => {
+            const t = e.details || {},
+              n = t.method || "GET",
+              o = t.endpoint || t.path || "/unknown",
+              r = "GET" === n ? "text-emerald-400" : "text-gray-300",
+              s =
+                "inet-" +
+                hashCode(e.time + e.category + JSON.stringify(e.details || {})),
+              i = expandedInternalNetworkIds.has(s),
+              l = document.createElement("div");
+            ((l.id = s),
+              l.setAttribute(
+                "data-search-content",
+                (n + " " + o + " " + JSON.stringify(t)).toLowerCase(),
+              ),
+              (l.className =
+                "operator-log-row group text-xs internal-net-log-row"),
+              (l.style.borderColor = "var(--table-border)"),
+              (l.innerHTML = `\n                    <div class="flex px-6 py-2.5 cursor-pointer items-start gap-3" onclick="toggleInternalNetDetails('${s}')">\n                        <div class="w-40 font-mono-cli text-[10px]" style="color: var(--text-subtle)">${new Date(e.time).toLocaleTimeString()}</div>\n                        <div class="w-24 font-bold shrink-0" style="color: var(--text-muted)">INTERNAL</div>\n                        <div class="flex-1 min-w-0 font-mono-cli flex items-start gap-2">\n                            <span class="${r} font-bold shrink-0">${escapeHtml(n)}</span>\n                            <span class="operator-log-line text-gray-300 leading-4">${escapeHtml(o)}</span>\n                        </div>\n                        <div class="w-8 text-right shrink-0"><i data-lucide="chevron-down" class="w-4 h-4 text-gray-500 transition-transform ${i ? "rotate-180" : ""}" id="inet-icon-${s}"></i></div>\n                    </div>\n                    <div id="inet-detail-${s}" class="${i ? "" : "hidden"} border-t p-4 font-mono-cli text-[10px]" style="border-color: var(--table-border)">\n                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">\n                            <div>\n                                <div class="text-gray-500 uppercase tracking-widest font-bold mb-1">Internal Payload</div>\n                                <pre class="operator-code-block text-blue-300">${null == t.payload || "" === t.payload ? "(no payload)" : escapeHtml(JSON.stringify(t.payload, null, 2))}</pre>\n                            </div>\n                            <div>\n                                <div class="text-gray-500 uppercase tracking-widest font-bold mb-1">Internal Headers</div>\n                                <pre class="operator-code-block text-emerald-300">${escapeHtml(JSON.stringify(t.headers || {}, null, 2))}</pre>\n                            </div>\n                            <div>\n                                <div class="text-gray-500 uppercase tracking-widest font-bold mb-1">Internal Meta</div>\n                                <pre class="operator-code-block text-amber-300">${escapeHtml(JSON.stringify({ path: t.path || o, query: t.query || null, url: t.url || o, ip: t.ip || "" }, null, 2))}</pre>\n                            </div>\n                        </div>\n                    </div>\n                `),
+              window.ivEnhanceControlTrace?.(l, t), a.appendChild(l));
+          }),
+            window.ivStableLogRows(t, a),
+            restoreFeedScroll(t, internalNetworkScroll),
+            lucide.createIcons());
+        }
+        function toggleNetDetails(e) {
+          const t = document.getElementById(`net-detail-${e}`),
+            n = document.getElementById(`net-icon-${e}`);
+          t &&
+            (t.classList.contains("hidden")
+              ? (t.classList.remove("hidden"),
+                expandedNetworkIds.add(e),
+                (n.style.transform = "rotate(180deg)"))
+              : (t.classList.add("hidden"),
+                expandedNetworkIds.delete(e),
+                (n.style.transform = "rotate(0deg)")));
+        }
+        function toggleInternalNetDetails(e) {
+          const t = document.getElementById(`inet-detail-${e}`),
+            n = document.getElementById(`inet-icon-${e}`);
+          t &&
+            (t.classList.contains("hidden")
+              ? (t.classList.remove("hidden"),
+                expandedInternalNetworkIds.add(e),
+                n && (n.style.transform = "rotate(180deg)"))
+              : (t.classList.add("hidden"),
+                expandedInternalNetworkIds.delete(e),
+                n && (n.style.transform = "rotate(0deg)")));
+        }
+        function updateWorkloadBulkActions() {
+          const e = document.getElementById("workload-bulk-actions"),
+            t = document.getElementById("workload-selected-count"),
+            n = document.getElementById("workload-select-all"),
+            o = document.querySelectorAll("[data-workload-select]");
+          if (!e || !t) return;
+          const r = fleetSelectionState.selectedWorkloadIds.size;
+          ((t.textContent = `${r} selected`),
+            e.classList.toggle("hidden", !r),
+            e.classList.toggle("flex", !!r));
+          o.forEach((e) => {
+            e.checked = fleetSelectionState.selectedWorkloadIds.has(
+              e.getAttribute("data-workload-select"),
+            );
+          });
+          n &&
+            ((n.checked = !!o.length && r === o.length),
+            (n.indeterminate = r > 0 && r < o.length));
+        }
+        function toggleWorkloadSelection(e, t) {
+          t?.stopPropagation();
+          fleetSelectionState.selectedWorkloadIds.has(e)
+            ? fleetSelectionState.selectedWorkloadIds.delete(e)
+            : fleetSelectionState.selectedWorkloadIds.add(e);
+          updateWorkloadBulkActions();
+        }
+        function toggleAllWorkloads(e) {
+          document.querySelectorAll("[data-workload-select]").forEach((t) => {
+            const n = t.getAttribute("data-workload-select");
+            e ? fleetSelectionState.selectedWorkloadIds.add(n) : fleetSelectionState.selectedWorkloadIds.delete(n);
+          });
+          updateWorkloadBulkActions();
+        }
+        function sendSelectedNodeCommand(e) {
+          const t = [...fleetSelectionState.selectedWorkloadIds];
+          if (!t.length)
+            return void showToast("Select at least one workload.", "error");
+          const n = async (n = "") => {
+            try {
+              const o = { "Content-Type": "application/json" };
+              APP_STATE.demo_mode || (o["X-TOTP-Auth"] = n);
+              const r = await fetch("/client/api/agent/command-batch", {
+                method: "POST",
+                headers: o,
+                body: JSON.stringify({ agent_ids: t, command: e }),
+              });
+              const s = await r.json().catch(() => ({}));
+              if (!r.ok) throw new Error(s.error || "Action denied");
+              await updateDashboardData();
+              showToast(
+                `${e} sent to ${s.target_count || t.length} workload${1 === (s.target_count || t.length) ? "" : "s"} as one batch.`,
+                "success",
+              );
+            } catch (e) {
+              showToast(
+                e.message || "Could not send workload command.",
+                "error",
+              );
+            }
+          };
+          APP_STATE.demo_mode
+            ? n()
+            : showTotpPrompt(
+                `Send ${e.toUpperCase()} to ${t.length} selected workload${1 === t.length ? "" : "s"}`,
+                async (e) => n(e),
+              );
+        }
+        function deleteSelectedWorkloads() {
+          const e = [...fleetSelectionState.selectedWorkloadIds];
+          if (!e.length)
+            return void showToast("Select at least one workload.", "error");
+          const t = async (t = "") => {
+            let n = 0,
+              o = 0;
+            for (const r of e)
+              try {
+                const e = { "Content-Type": "application/json" };
+                APP_STATE.demo_mode || (e["X-TOTP-Auth"] = t);
+                const s = await fetch("/client/api/agent/delete", {
+                  method: "POST",
+                  headers: e,
+                  body: JSON.stringify({ agent_id: r }),
+                });
+                if (!s.ok) throw new Error("Authorization failed or access denied");
+                n += 1;
+              } catch (e) {
+                o += 1;
+                showToast(e.message || "Could not delete workload.", "error");
+              }
+            (fleetSelectionState.selectedWorkloadIds.clear(),
+              await updateDashboardData(),
+              showToast(
+                o
+                  ? `${n} workload${1 === n ? "" : "s"} deleted, ${o} failed.`
+                  : `${n} workload${1 === n ? "" : "s"} deleted.`,
+                o ? "error" : "success",
+              ));
+          };
+          APP_STATE.demo_mode
+            ? t()
+            : showTotpPrompt(
+                `Delete ${e.length} selected workload${1 === e.length ? "" : "s"}`,
+                async (e) => t(e),
+              );
+        }
+        function renderTrustSummary(e) {
+          const t = document.getElementById("settings-trust-summary");
+          if (!t) return;
+          const n = e?.launcher_hosts || [],
+            o = e?.agents || [],
+            r = n.filter((e) => e.runtime_status?.launcher_source_hash).length,
+            s = o.filter((e) => e.runtime_status?.agent_source_hash).length,
+            a = o.filter((e) => e.payload_hash || e.runtime_status?.payload_hash).length,
+            i = e?.inventory || {},
+            launcherCount = Number(i.hosts ?? n.length),
+            agentCount = Number(i.agents ?? o.length),
+            launcherProof = Number(i.launcher_proof ?? r),
+            agentProof = Number(i.agent_proof ?? s),
+            contractProof = Number(i.contract_proof ?? a);
+          t.innerHTML = [
+            ["Launcher Proof", `${launcherProof}/${launcherCount}`, "hosts reporting version, launcher source hash, and capabilities"],
+            ["Agent Proof", `${agentProof}/${agentCount}`, "workloads reporting agent source hash and runtime evidence"],
+            ["Contract Evidence", `${contractProof}/${agentCount}`, "workloads with runtime contract identity or verified runtime hash"],
+          ].map((e) => `<div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">${e[0]}</div><div class="text-lg text-white mt-1 font-mono-cli">${e[1]}</div><div class="text-[11px] mt-1" style="color: var(--text-muted)">${e[2]}</div></div>`).join("");
+          renderSettingsEvidenceControls(e);
+        }
+        function runtimeEvidenceMetrics(e) {
+          const t = e?.launcher_hosts || [],
+            n = e?.agents || [],
+            o = Array.isArray(_consoleLogs) ? _consoleLogs : [],
+            r = Array.isArray(_networkLogs) ? _networkLogs : [],
+            s = Array.isArray(_internalNetworkLogs) ? _internalNetworkLogs : [],
+            a = Array.isArray(window.__latestSecurityEvents) ? window.__latestSecurityEvents : [],
+            i = e?.command_receipts || [],
+            inventory = e?.inventory || {},
+            fleetSignals = _opsState?.fleet_intelligence?.summary || {};
+          return {
+            launcherCount: Number(inventory.hosts ?? t.length),
+            agentCount: Number(inventory.agents ?? n.length),
+            launcherProof: Number(inventory.launcher_proof ?? t.filter((e) => e.runtime_status?.launcher_source_hash && e.runtime_status?.host_fingerprint).length),
+            agentProof: Number(inventory.agent_proof ?? n.filter((e) => e.runtime_status?.agent_source_hash && e.runtime_status?.host_fingerprint).length),
+            payloadProof: Number(inventory.contract_proof ?? n.filter((e) => e.payload_hash || e.runtime_status?.payload_hash).length),
+            cacheProof: Number(inventory.cache_proof ?? n.filter((e) => e.runtime_status?.payload_cache?.cache_present || e.runtime_status?.payload_cache?.encrypted).length),
+            supervisedServices: Number(inventory.supervised_services ?? n.reduce((e, t) => e + Number(t.runtime_status?.service_count || (Array.isArray(t.runtime_status?.services) ? t.runtime_status.services.length : 0) || 0), 0)),
+            queuedEvents: Number(inventory.queued_events ?? n.reduce((e, t) => e + Number(t.runtime_status?.event_queue_size || 0), 0)),
+            droppedEvents: Number(inventory.dropped_events ?? n.reduce((e, t) => e + Number(t.runtime_status?.event_drop_count || 0), 0)),
+            processLines: Number(fleetSignals.runtime_events ?? o.filter((e) => /\[PROCESS_EVENT\]|process service|traceback|runtime manifest|health/i.test(String(e.message || e.content || e.stdout || ""))).length),
+            requestLines: Number(fleetSignals.requests ?? r.length),
+            controlLines: s.length,
+            securityLines: Number(fleetSignals.security_events ?? a.length),
+            commandReceipts: Number(inventory.receipts ?? i.length),
+            launcherCapabilities: [...new Set(t.flatMap((e) => e.runtime_status?.capabilities || []))],
+            agentCapabilities: [...new Set(n.flatMap((e) => e.runtime_status?.capabilities || e.runtime_status?.agent_capabilities || []))],
+          };
+        }
+        function evidenceCard(e, t, n, o = "") {
+          return `<div class="iv-evidence-card ${o}"><div class="iv-eyebrow">${escapeHtml(e)}</div><div class="iv-evidence-value font-mono-cli">${escapeHtml(String(t))}</div><div class="iv-evidence-copy">${escapeHtml(n)}</div></div>`;
+        }
+        function actionRow(e, t, n, o) {
+          return `<button onclick="switchView('${e}')" class="w-full text-left rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] px-4 py-3 transition"><div class="flex items-start justify-between gap-3"><div><div class="text-xs text-white font-semibold">${escapeHtml(t)}</div><div class="text-[11px] mt-1 leading-relaxed" style="color: var(--text-muted)">${escapeHtml(n)}</div></div><span class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">${escapeHtml(o)}</span></div></button>`;
+        }
+        function capabilityList(e) {
+          return e.length ? e.slice(0, 12).map((e) => `<div class="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs text-white/85 font-mono-cli break-words">${escapeHtml(e)}</div>`).join("") : '<div class="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-xs" style="color: var(--text-muted)">No live capability report yet. Connect the launcher and wait for heartbeat.</div>';
+        }
+        function runtimeCopy(e, t = "Value") {
+          const n = String(e || "");
+          if (!n) return showToast(`${t} is empty`, "error");
+          navigator.clipboard?.writeText(n).then(() => showToast(`${t} copied`, "success")).catch(() => showToast(`Could not copy ${t.toLowerCase()}`, "error"));
+        }
+        function runtimeEvidenceAttribute(value) {
+          // JSON preserves control characters; HTML escaping keeps the value in one data attribute.
+          return escapeHtml(JSON.stringify(String(value ?? "")));
+        }
+        function runtimeEvidenceValue(raw) {
+          try {
+            const value = JSON.parse(raw);
+            return typeof value === "string" ? value : null;
+          } catch {
+            return null;
+          }
+        }
+        function handleRuntimeEvidenceClick(event) {
+          const copy = event.target?.closest?.("[data-runtime-copy]");
+          const trace = copy ? null : event.target?.closest?.("[data-runtime-trace]");
+          if (!copy && !trace) return;
+          event.preventDefault();
+          const value = runtimeEvidenceValue(copy ? copy.dataset.runtimeCopy : trace.dataset.runtimeTrace);
+          if (value === null) return showToast("This value is unavailable. Refresh and try again.", "error");
+          if (copy) runtimeCopy(value, copy.dataset.runtimeCopyLabel || "Value");
+          else openRequestTraceFor(value);
+        }
+        document.addEventListener("click", handleRuntimeEvidenceClick);
+        function openAgentLogs(e) {
+          if (e && window.setGlobalFleetScope) {
+            const agent = (window.__latestStatusPayload?.agents || []).find((item) => item.agent_id === e);
+            window.setGlobalFleetScope({
+              kind: "agent",
+              id: e,
+              hostId: agent?.host_id || agent?.launcher_host_id || "",
+              label: agent?.name || agentNames[e] || e,
+            });
+          }
+          switchView("app-logs");
+        }
+        function openRequestTraceFor(e) {
+          const t = document.getElementById("network-search");
+          t && e && (t.value = e);
+          switchView("network");
+          shouldRenderHeavyView("network") && renderNetwork();
+        }
+        function openPipelineFor(e) {
+          const t = document.getElementById("pipeline-log-agent-filter");
+          t && e && (t.value = e);
+          switchView("pipeline-logs");
+          refreshPipelineAnalytics();
+        }
+        function sendSingleAgentCommand(e, t) {
+          fleetSelectionState.selectedWorkloadIds.clear();
+          updateWorkloadBulkActions();
+          sendNodeCommand(e, t);
+        }
+        function copyTrustSummary() {
+          const e = window.__latestStatusPayload || {},
+            t = [
+              ...(e.launcher_hosts || []).map((e) => `launcher ${e.name || e.host_id}: source=${e.runtime_status?.launcher_source_hash || ""} host=${e.runtime_status?.host_fingerprint || ""}`),
+              ...(e.agents || []).map((e) => `agent ${e.name || e.agent_id}: agent_source=${e.runtime_status?.agent_source_hash || ""} host=${e.runtime_status?.host_fingerprint || ""} contract=${e.payload_hash || e.runtime_status?.payload_hash || ""}`),
+            ].join("\n");
+          runtimeCopy(t, "Trust summary");
+        }
+        function evidenceChains(e) {
+          const t = runtimeEvidenceMetrics(e);
+          return [
+            ["Machine Identity", `${t.launcherProof}/${t.launcherCount} launchers · ${t.agentProof}/${t.agentCount} agents`, "Launcher/agent source hashes, runtime versions, host fingerprints, platform data, and signed sync."],
+            ["Reported service contracts", `${t.payloadProof}/${t.agentCount} workloads`, "Recorded contract identities, not current process liveness. Check Workloads for fresh app health."],
+            ["Processes", `${t.supervisedServices} services · ${t.processLines} signals`, "Startup, stdout, stderr, exits, health failures, restart counts, and manifest mode."],
+            ["Requests", `${t.requestLines} requests`, "Method, path, headers, payload preview, and telemetry from live traffic."],
+            ["Security", `${t.securityLines} events`, "Honeypots, suspicious paths, rate limits, geo rules, blocks, and policy outcomes."],
+            ["Actions", `${t.commandReceipts} receipts`, "Restart, stop, doctor, workspace clear, recovery actions, and action receipts."],
+            ["Cache", `${t.cacheProof}/${t.agentCount} caches`, "Encrypted local cache and known-good payload fallback state."],
+            ["Queue", `${t.queuedEvents} queued · ${t.droppedEvents} dropped`, "Agent event queue pressure and dropped telemetry count."],
+          ];
+        }
+        function renderSettingsEvidenceControls(e) {
+          const t = document.getElementById("settings-evidence-chain-list");
+          if (t) t.innerHTML = evidenceChains(e).map((e) => evidenceCard(e[0], e[1], e[2])).join("");
+        }
+        function renderRuntimeEvidence(e) {
+          const t = document.getElementById("runtime-evidence-summary");
+          if (!t) return;
+          const n = runtimeEvidenceMetrics(e),
+            o = document.getElementById("runtime-evidence-chain-grid"),
+            r = document.getElementById("runtime-evidence-control-grid"),
+            s = document.getElementById("runtime-launcher-capabilities"),
+            a = document.getElementById("runtime-agent-capabilities");
+          t.innerHTML = [
+            ["Launcher Proof", `${n.launcherProof}/${n.launcherCount}`, "Hosts reporting launcher source hash and fingerprint."],
+            ["Agent Proof", `${n.agentProof}/${n.agentCount}`, "Workloads reporting agent source hash and fingerprint."],
+            ["Contract Proof", `${n.payloadProof}/${n.agentCount}`, "Workloads with runtime contract identity."],
+            ["Action Receipts", n.commandReceipts, "Recent controlled actions with receipts."],
+          ].map((e) => evidenceCard(e[0], e[1], e[2])).join("");
+          o && (o.innerHTML = evidenceChains(e).map((e) => evidenceCard(e[0], e[1], e[2])).join(""));
+          s && (s.innerHTML = capabilityList(n.launcherCapabilities));
+          a && (a.innerHTML = capabilityList(n.agentCapabilities));
+          lucide.createIcons();
+        }
+        function cacheQueueRows(e) {
+          const t = document.getElementById("cache-queue-filter")?.value || "all",
+            n = Number(document.getElementById("cache-queue-threshold")?.value || 1),
+            o = document.getElementById("cache-queue-sort")?.value || "pressure";
+          return (e?.agents || []).filter((e) => {
+            const o = e.runtime_status || {},
+              r = o.payload_cache || {},
+              s = Boolean(r.cache_present || r.encrypted),
+              a = Number(o.event_queue_size || 0),
+              i = Number(o.event_drop_count || 0);
+            return "cached" === t ? s : "missing" === t ? !s : "pressure" === t ? a >= n || i > 0 : !0;
+          }).sort((e, t) => {
+            const n = e.runtime_status || {},
+              r = t.runtime_status || {};
+            if ("name" === o) return String(e.name || e.agent_id || "").localeCompare(String(t.name || t.agent_id || ""));
+            if ("versions" === o) return ((r.payload_cache?.cached_versions || []).length || 0) - ((n.payload_cache?.cached_versions || []).length || 0);
+            return (Number(r.event_queue_size || 0) + Number(r.event_drop_count || 0) * 100) - (Number(n.event_queue_size || 0) + Number(n.event_drop_count || 0) * 100);
+          }).map((e) => {
+            const t = e.runtime_status || {},
+              n = t.payload_cache || {},
+              o = Array.isArray(n.cached_versions) ? n.cached_versions : [],
+              r = e.name || e.agent_id || e.id || "workload",
+              s = e.payload_hash || t.payload_hash || n.payload_hash || "not reported",
+              recovery = t.recovery || {},
+              allocation = t.port_allocation || {},
+              a = n.rollback_available === true ? "Rollback available" : n.known_good_available === true ? "Known-good cached" : n.cache_present || n.encrypted ? "Cache unverified" : "No cache reported",
+              i = Number(t.event_queue_size || 0),
+              c = Number(t.event_drop_count || 0);
+            return `<div class="iv-trust-card" data-iv-row-key="cache:${escapeHtml(e.agent_id || e.id || "")}">
+              <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="text-sm text-white font-semibold truncate">${escapeHtml(r)}</div>
+                  <div class="text-[11px] mt-1 font-mono-cli truncate" style="color: var(--text-subtle)">contract ${escapeHtml(String(s))}</div>
+                </div>
+                <div class="text-[10px] uppercase tracking-widest px-2 py-1 rounded-full border ${n.known_good_available === true ? "text-emerald-300 border-emerald-400/25 bg-emerald-500/10" : "text-amber-300 border-amber-400/25 bg-amber-500/10"}">${escapeHtml(a)}</div>
+              </div>
+              <div class="grid md:grid-cols-4 gap-3 mt-4 text-xs">
+                ${evidenceCard("Cached versions", o.length || n.version_count || 0, "Stored copies; not all are known-good.")}
+                ${evidenceCard("Cached At", n.cached_at ? new Date(1e3 * Number(n.cached_at)).toLocaleString() : "-", "Last runtime cache write.")}
+                ${evidenceCard("Queue", i, "Events waiting to post.")}
+                ${evidenceCard("Dropped", c, "Events dropped under pressure.")}
+              </div>
+              ${recovery.phase ? `<div class="iv-assurance-item mt-3"><div><strong>${escapeHtml(recovery.phase === "blocked" ? "Automatic retries paused" : recovery.phase === "repairing" ? "Verifying recovery" : "Retrying runtime")} · ${Number(recovery.attempts || 0)}/${Number(recovery.limit || 3)} attempts</strong><span>${escapeHtml(recovery.cause || "Failure details not reported")}</span><span>${escapeHtml(recovery.repair?.detail || "")}</span><span>${escapeHtml(recovery.next_action || "Inspect Runtime Logs before retrying.")}</span></div></div>` : ""}
+              ${allocation.ports ? `<div class="iv-detail-grid mt-3">${Object.entries(allocation.ports).map(([role, port]) => `<div><span>${escapeHtml(role === "gateway" ? "Gateway port" : role.replace("service:", "Service · "))}</span><code>${Number(port.assigned)}${port.changed ? ` · preferred ${Number(port.preferred)}` : ""}</code></div>`).join("")}</div>` : ""}
+              <div class="flex flex-wrap gap-2 mt-4">
+                <button onclick="sendSingleAgentCommand('${escapeHtml(e.agent_id || e.id || "")}', 'restart')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Restart</button>
+                <button onclick="sendSingleAgentCommand('${escapeHtml(e.agent_id || e.id || "")}', 'doctor')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Doctor</button>
+                <button onclick="openAgentLogs('${escapeHtml(e.agent_id || e.id || "")}')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Logs</button>
+                <button data-runtime-copy="${runtimeEvidenceAttribute(String(s))}" data-runtime-copy-label="Runtime contract hash" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Copy Hash</button>
+              </div>
+            </div>`;
+          });
+        }
+        function renderCacheQueue(e) {
+          const t = document.getElementById("cache-queue-summary");
+          if (!t) return;
+          const n = runtimeEvidenceMetrics(e),
+            o = e?.agents || [],
+            r = o.reduce((e, t) => e + ((t.runtime_status?.payload_cache?.cached_versions || []).length || 0), 0),
+            s = o.filter((e) => e.runtime_status?.payload_cache?.cache_present || e.runtime_status?.payload_cache?.encrypted).length,
+            a = document.getElementById("cache-queue-agent-list"),
+            inventory = e?.inventory || {},
+            cachedAgents = Number(inventory.cache_proof ?? s),
+            cachedVersions = Number(inventory.cached_versions ?? r);
+          t.innerHTML = [
+            ["Encrypted Cache", `${cachedAgents}/${n.agentCount}`, "Agents with encrypted runtime cache reported."],
+            ["Cached Versions", cachedVersions.toLocaleString(), "Stored runtime versions; health verification is separate."],
+            ["Queued Events", n.queuedEvents, "Telemetry events waiting to post."],
+            ["Dropped Events", n.droppedEvents, "Telemetry dropped under backpressure."],
+          ].map((e) => evidenceCard(e[0], e[1], e[2])).join("");
+          a && window.ivStableLogRows(a, cacheQueueRows(e).join("") || '<div class="rounded-xl border border-dashed border-white/10 px-4 py-4 text-xs" style="color: var(--text-muted)">No agents are reporting recovery state yet.</div>');
+          lucide.createIcons();
+        }
+        function agentRuntimeState(e) {
+          const t = e?.runtime_status || {},
+            n = e?.runtime || {};
+          return { ...n, ...t, manifest: t.manifest || e?.manifest || n.manifest || {}, payload_cache: t.payload_cache || e?.payload_cache || n.payload_cache || {} };
+        }
+        function processSupervisorServices(e) {
+          const t = agentRuntimeState(e),
+            n = t.manifest || {},
+            evidence = workloadRuntimeEvidence(e),
+            stopped = e?.operator_stopped || ["stopping", "stopped"].includes(String(e?.status || "").toLowerCase()),
+            runtimeAge = workloadReportAge(e?.runtime_status_at || e?.runtime_heartbeat_at, workloadEvidenceClock()),
+            heartbeatAge = workloadReportAge(e?.last_heartbeat, workloadEvidenceClock(), e?.last_heartbeat_seconds),
+            current = evidence.connected && Number.isFinite(runtimeAge) && runtimeAge < 70 && Number.isFinite(heartbeatAge) && heartbeatAge < 70,
+            o = Array.isArray(t.services) ? t.services : t.services && "object" == typeof t.services ? Object.entries(t.services).map(([name,row])=>({...row,name:row?.name||name})) : [];
+          if (o.length)
+            return o.map((service) => ({
+              ...service,
+              name: service.name || service.service || "service",
+              alive: !stopped && current && service.alive === true,
+              pid: !stopped && current ? service.pid : 0,
+              last_reported_pid: service.pid,
+              observation_current: !stopped && current,
+              display_state: stopped ? String(e?.status).toLowerCase()==="stopping" ? "Stopping" : "Stopped (operator)" : !current ? "Report stale / unavailable" : service.healthy === false ? "Unhealthy" : service.alive === true ? "Alive" : service.status || "Stopped",
+              source: !stopped && current ? "runtime" : "runtime-history",
+              report_note: stopped || !current ? `Retained report, not current process evidence. ${evidence.ageText}` : "",
+              runtime_mode: service.runtime || (Array.isArray(n.services) ? n.services.find(row=>row.name===service.name)?.runtime : null) || e?.runtime_profile || t.payload_mode || n.mode || "-",
+            }));
+          const r = Array.isArray(n.services) ? n.services : [];
+          return r.map((o) => ({
+            ...o,
+            name: o.name || o.service || "service",
+            alive: false,
+            display_state: stopped ? "Stopped (operator)" : "Declared / not reported",
+            source: "manifest",
+            restart_count: 0,
+            health_failures: 0,
+            runtime_mode: o.runtime || n.mode || t.mode || "-",
+          }));
+        }
+        function processSupervisorRows(e) {
+          const t = document.getElementById("process-supervisor-filter")?.value || "all",
+            n = document.getElementById("process-supervisor-sort")?.value || "health";
+          return (e?.agents || []).flatMap((e) => {
+            const t = agentRuntimeState(e),
+              n = processSupervisorServices(e);
+            return n.map((n) => {
+              const o = n.name || "service",
+                r = n.display_state || (n.alive ? "Alive" : "Stopped"),
+                s = n.source === "manifest";
+              return `<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                  <div>
+                    <div class="text-sm text-white font-semibold">${escapeHtml(o)}</div>
+                    <div class="text-[11px] mt-1" style="color: var(--text-muted)">${escapeHtml(e.name || e.agent_id || "workload")} · ${s ? "manifest declared" : "runtime reported"}</div>
+                  </div>
+                  <div class="text-[10px] uppercase tracking-widest px-2 py-1 rounded-full border ${n.alive && n.healthy !== false ? "text-emerald-300 border-emerald-400/25 bg-emerald-500/10" : n.observation_current === false || s ? "text-amber-300 border-amber-400/25 bg-amber-500/10" : "text-red-300 border-red-400/25 bg-red-500/10"}">${escapeHtml(r)}</div>
+                </div>
+                <div class="grid md:grid-cols-4 gap-3 mt-4 text-xs">
+                  ${evidenceCard("PID", n.pid || "-", "Service process id.")}
+                  ${evidenceCard("Restarts", n.restart_count || 0, "Restart count from supervisor.")}
+                  ${evidenceCard("Health Failures", n.health_failures || 0, "Failed health checks.")}
+                  ${evidenceCard("Runtime", n.runtime_mode || n.runtime || t.manifest?.mode || "-", "Runtime or manifest mode.")}
+                </div>
+                ${s ? '<div class="mt-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px]" style="color: var(--text-muted)">Runtime has not emitted per-service PID/health rows yet, so this row is rendered from the manifest the agent loaded.</div>' : ""}
+                ${n.report_note ? `<p class="mt-3 text-xs" style="color:var(--text-muted)">${escapeHtml(n.report_note)}${n.last_reported_pid ? ` Last reported PID: ${escapeHtml(n.last_reported_pid)}.` : ""}</p>` : ""}
+                <div class="flex flex-wrap gap-2 mt-4">
+                  <button onclick="sendSingleAgentCommand('${escapeHtml(e.agent_id || e.id || "")}', 'restart')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Restart Workload</button>
+                  <button onclick="sendSingleAgentCommand('${escapeHtml(e.agent_id || e.id || "")}', 'doctor')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Doctor</button>
+                  <button onclick="openAgentLogs('${escapeHtml(e.agent_id || e.id || "")}')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Logs</button>
+                </div>
+              </div>`;
+            });
+          }).filter((e) => {
+            if ("all" === t) return !0;
+            if ("unhealthy" === t) return /Health Failures<\/div><div class="text-lg text-white mt-1 font-mono-cli">[1-9]/.test(e) || /Unhealthy/.test(e);
+            if ("restarted" === t) return /Restarts<\/div><div class="text-lg text-white mt-1 font-mono-cli">[1-9]/.test(e);
+            if ("stopped" === t) return /Stopped/.test(e);
+            return !0;
+          }).sort((e, t) => {
+            if ("name" === n) return e.localeCompare(t);
+            if ("restarts" === n) return (Number((t.match(/Restarts<\/div><div class="text-lg text-white mt-1 font-mono-cli">(\d+)/) || [0, 0])[1]) - Number((e.match(/Restarts<\/div><div class="text-lg text-white mt-1 font-mono-cli">(\d+)/) || [0, 0])[1]));
+            return (Number((t.match(/Health Failures<\/div><div class="text-lg text-white mt-1 font-mono-cli">(\d+)/) || [0, 0])[1]) - Number((e.match(/Health Failures<\/div><div class="text-lg text-white mt-1 font-mono-cli">(\d+)/) || [0, 0])[1]));
+          });
+        }
+        function manifestRows(e) {
+          return (e?.agents || []).map((e) => {
+            const t = agentRuntimeState(e),
+              n = t.manifest || {};
+            return `<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div class="text-sm text-white font-semibold">${escapeHtml(e.name || e.agent_id || "workload")}</div>
+              <div class="grid md:grid-cols-2 gap-3 mt-4 text-xs">
+                ${evidenceCard("Mode", n.mode || "-", "Manifest execution mode.")}
+                ${evidenceCard("Services", n.service_count || t.service_count || 0, "Services declared or running.")}
+                ${evidenceCard("Routes", n.route_count || 0, "Gateway routes declared.")}
+                ${evidenceCard("Gateway", n.gateway_listen || "-", "Gateway listen port.")}
+                ${evidenceCard("Persistent Paths", n.persistent_path_count || 0, "Persistent paths mounted.")}
+                ${evidenceCard("Volumes", n.volume_count || 0, "Volumes mounted.")}
+              </div>
+              <div class="mt-3 text-[11px] leading-relaxed" style="color: var(--text-muted)">Detached/background state: ${escapeHtml(t.payload_detached_ok ? t.payload_detached_note || "active" : "not marked detached")}</div>
+            </div>`;
+          });
+        }
+        function renderProcessSupervisor(e) {
+          const t = document.getElementById("process-supervisor-summary");
+          if (!t) return;
+          const n = e?.agents || [],
+            o = n.flatMap((e) => processSupervisorServices(e)),
+            r = o.reduce((e, t) => e + Number(t.restart_count || 0), 0),
+            s = o.reduce((e, t) => e + Number(t.health_failures || 0), 0),
+            a = n.reduce((e, t) => {
+              const n = agentRuntimeState(t).manifest || {};
+              return e + Number(n.persistent_path_count || 0) + Number(n.volume_count || 0);
+            }, 0),
+            i = document.getElementById("process-supervisor-service-list"),
+            c = document.getElementById("process-supervisor-manifest-list"),
+            inventory = e?.inventory || {};
+          t.innerHTML = [
+            ["Services", Number(inventory.supervised_services ?? o.length).toLocaleString(), "Runtime-reported or manifest-declared supervised services."],
+            ["Restarts", Number(inventory.service_restarts ?? r).toLocaleString(), "Total service restarts reported."],
+            ["Health Failures", Number(inventory.service_health_failures ?? s).toLocaleString(), "Total failed service health checks."],
+            ["Mounts", Number(inventory.persistent_mounts ?? a).toLocaleString(), "Persistent paths and volumes declared."],
+          ].map((e) => evidenceCard(e[0], e[1], e[2])).join("");
+          i && (i.innerHTML = processSupervisorRows(e).join("") || '<div class="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-xs" style="color: var(--text-muted)">No supervised services are reporting yet. If the manifest shows services, wait for the next agent status sync.</div>');
+          c && (c.innerHTML = manifestRows(e).join("") || '<div class="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-xs" style="color: var(--text-muted)">No manifest summaries are reporting yet.</div>');
+          lucide.createIcons();
+        }
+        function renderGatewayRoutes(e) {
+          const t = document.getElementById("gateway-routes-summary");
+          if (!t) return;
+          const n = e?.agents || [],
+            o = n.map((e) => agentRuntimeState(e).manifest || {}),
+            r = o.reduce((e, t) => e + Number(t.route_count || (Array.isArray(t.routes) ? t.routes.length : 0) || 0), 0),
+            s = o.reduce((e, t) => e + Number(t.service_count || (Array.isArray(t.services) ? t.services.length : 0) || 0), 0),
+            a = o.filter((e) => e.gateway_listen).length,
+            i = Array.isArray(_networkLogs) ? _networkLogs.length : 0,
+            c = document.getElementById("gateway-route-list"),
+            inventory = e?.inventory || {},
+            fleetSignals = _opsState?.fleet_intelligence?.summary || {};
+          t.innerHTML = [
+            ["Gateways", Number(inventory.gateways ?? a).toLocaleString(), "Workloads reporting a gateway listen port."],
+            ["Routes", Number(inventory.routes ?? r).toLocaleString(), "Manifest routes across reporting workloads."],
+            ["Services", Number(inventory.manifest_services ?? s).toLocaleString(), "Manifest services available as route targets."],
+            ["Requests", Number(fleetSignals.requests ?? i).toLocaleString(), "Requests aggregated across the active fleet window."],
+          ].map((e) => evidenceCard(e[0], e[1], e[2])).join("");
+          c && (c.innerHTML = n.map((e) => {
+            const t = agentRuntimeState(e).manifest || {},
+              n = Array.isArray(t.routes) ? t.routes : [],
+              o = Array.isArray(t.services) ? t.services : [],
+              r = new Map(o.map((e) => [String(e.name || ""), e])),
+              s = (document.getElementById("gateway-route-search")?.value || "").toLowerCase().trim(),
+              a = document.getElementById("gateway-route-filter")?.value || "all";
+            if ("gateway" === a && !t.gateway_listen) return "";
+            return `<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                <div><div class="text-sm text-white font-semibold">${escapeHtml(e.name || e.agent_id || "workload")}</div><div class="text-[11px] mt-1" style="color: var(--text-muted)">gateway ${escapeHtml(t.gateway_listen || "-")} · mode ${escapeHtml(t.mode || "-")}</div></div>
+                <div class="text-[10px] uppercase tracking-widest px-2 py-1 rounded-full border border-white/10" style="color: var(--text-subtle)">${n.length || t.route_count || 0} routes</div>
+              </div>
+              <div class="space-y-2 mt-4">${(n.length ? n : [{ path: "/*", service: o[0]?.name || "service" }]).filter((n) => {
+                const o = r.get(String(n.service || "")) || {},
+                  i = `${e.name || ""} ${n.path || ""} ${n.service || ""} ${o.runtime || ""}`.toLowerCase();
+                return (!s || i.includes(s));
+              }).map((n) => {
+                const o = r.get(String(n.service || "")) || {};
+                return `<div class="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                  <div class="flex items-center justify-between gap-3"><div class="text-xs text-white font-mono-cli">${escapeHtml(n.path || "/*")}</div><div class="text-[10px] uppercase tracking-widest" style="color: var(--text-subtle)">${escapeHtml(n.service || "service")}</div></div>
+                  <div class="text-[11px] mt-1" style="color: var(--text-muted)">runtime ${escapeHtml(o.runtime || "-")} · port ${escapeHtml(o.port || "-")}</div>
+                  <div class="flex flex-wrap gap-2 mt-3">
+                    <button data-runtime-trace="${runtimeEvidenceAttribute(n.path || "")}" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Trace Path</button>
+                    <button onclick="openPipelineFor('${escapeHtml(e.agent_id || e.id || "all")}')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Pipeline</button>
+                    <button onclick="openAgentLogs('${escapeHtml(e.agent_id || e.id || "")}')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Logs</button>
+                  </div>
+                </div>`;
+              }).join("")}</div>
+            </div>`;
+          }).filter(Boolean).join("") || '<div class="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-xs" style="color: var(--text-muted)">No gateway manifests match the current filters.</div>');
+          lucide.createIcons();
+        }
+        function renderTrustReceipts(e) {
+          const t = document.getElementById("trust-receipts-summary");
+          if (!t) return;
+          const n = e?.launcher_hosts || [],
+            o = e?.agents || [],
+            r = e?.command_receipts || [],
+            s = n.filter((e) => e.runtime_status?.launcher_source_hash).length,
+            a = o.filter((e) => e.runtime_status?.agent_source_hash).length,
+            i = o.filter((e) => e.payload_hash || e.runtime_status?.payload_hash).length,
+            c = document.getElementById("trust-identity-list"),
+            l = document.getElementById("trust-receipt-list"),
+            inventory = e?.inventory || {},
+            fleetHosts = Number(inventory.hosts ?? n.length),
+            fleetAgents = Number(inventory.agents ?? o.length),
+            launcherProof = Number(inventory.launcher_proof ?? s),
+            agentProof = Number(inventory.agent_proof ?? a),
+            contractProof = Number(inventory.contract_proof ?? i),
+            receiptCount = Number(inventory.receipts ?? r.length);
+          t.innerHTML = [
+            ["Server identity", `${launcherProof}/${fleetHosts}`, launcherProof === fleetHosts && fleetHosts ? "Every connected server reports its code identity." : "Some servers have not reported identity yet."],
+            ["Agent identity", `${agentProof}/${fleetAgents}`, agentProof === fleetAgents && fleetAgents ? "Every agent reports the code it is running." : "Some agents have not reported identity yet."],
+            ["Runtime contracts", `${contractProof}/${fleetAgents}`, contractProof === fleetAgents && fleetAgents ? "Every workload has a traceable contract hash." : "Some workload contracts are still unverified."],
+            ["Recorded actions", receiptCount.toLocaleString(), "Operator commands with integrity-linked receipts."],
+          ].map((e) => evidenceCard(e[0], e[1], e[2])).join("");
+          const d = document.getElementById("trust-identity-filter")?.value || "all";
+          c && window.ivStableLogRows(c, [
+            ...("agents" === d ? [] : n.map((e) => {
+              const t = e.runtime_status || {};
+              if ("missing" === d && t.launcher_source_hash && t.host_fingerprint) return "";
+              const verified = !!(t.launcher_source_hash && t.host_fingerprint);
+              return `<article class="iv-trust-card" data-iv-row-key="host:${escapeHtml(e.host_id || '')}">
+                <div class="iv-trust-card-head"><div><span class="iv-eyebrow">Server runtime</span><h4>${escapeHtml(e.name || e.host_id || "launcher")}</h4></div><span class="iv-status-pill" data-state="${verified ? "success" : "warning"}">${verified ? "Identity reported" : "Proof incomplete"}</span></div>
+                <p>${verified ? "This server reports both its running code hash and a stable host fingerprint." : "Connect or sync this server to complete its identity evidence."}</p>
+                <details class="iv-technical-details"><summary>Hashes and fingerprint</summary><div class="iv-detail-grid"><div><span>Launcher source</span><code>${escapeHtml(t.launcher_source_hash || "Not reported")}</code></div><div><span>Host fingerprint</span><code>${escapeHtml(t.host_fingerprint || "Not reported")}</code></div><div><span>Version</span><code>${escapeHtml(t.launcher_version || "Not reported")}</code></div></div></details>
+                <div class="iv-card-actions">
+                  <button data-runtime-copy="${runtimeEvidenceAttribute(t.launcher_source_hash || "")}" data-runtime-copy-label="Launcher source hash" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Copy Hash</button>
+                  <button data-runtime-copy="${runtimeEvidenceAttribute(t.host_fingerprint || "")}" data-runtime-copy-label="Host fingerprint" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Copy Host</button>
+                  <button onclick="switchView('launcher')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Servers</button>
+                </div></article>`;
+            })),
+            ...("launchers" === d ? [] : o.map((e) => {
+              const t = e.runtime_status || {};
+              if ("missing" === d && t.agent_source_hash && t.host_fingerprint && (e.payload_hash || t.payload_hash)) return "";
+              const contractHash = e.payload_hash || t.payload_hash || "", verified = !!(t.agent_source_hash && contractHash);
+              const cache = t.payload_cache || {}, encrypted = !!cache.encrypted, recoveryCached = !!cache.cache_present;
+              const updateState = e.runtime_update_state || {};
+              return `<article class="iv-trust-card" data-iv-row-key="agent:${escapeHtml(e.agent_id || e.id || '')}">
+                <div class="iv-trust-card-head"><div><span class="iv-eyebrow">Protected agent</span><h4>${escapeHtml(e.name || e.agent_id || "agent")}</h4></div><span class="iv-status-pill" data-state="${verified ? "success" : "warning"}">${verified ? "Runtime verified" : "Proof incomplete"}</span></div>
+                <p>${verified ? "The agent reports the code and workload contract it is running." : "The agent is connected, but part of its runtime identity is still missing."}</p>
+                <div class="iv-assurance-list">
+                  <div class="iv-assurance-item"><span class="iv-assurance-icon"><i data-lucide="lock-keyhole"></i></span><div><strong>${encrypted ? "Encrypted cache reported" : recoveryCached ? "Recovery cache reported" : "Recovery cache not reported"}</strong><span>${recoveryCached ? "Cache presence alone does not confirm a usable rollback. Check workload recovery details." : "No local fallback state was included in the latest heartbeat."}</span></div></div>
+                  <div class="iv-assurance-item"><span class="iv-assurance-icon"><i data-lucide="shield-check"></i></span><div><strong>${contractHash ? "Runtime contract identified" : "Runtime contract missing"}</strong><span>${contractHash ? "This workload can be matched to its exact declared runtime package." : "Wait for the next sync or inspect the agent connection."}</span></div></div>
+                  <div class="iv-assurance-item ${updateState.blocked_version ? "iv-assurance-danger" : ""}"><span class="iv-assurance-icon"><i data-lucide="${updateState.blocked_version ? "rotate-ccw" : "activity"}"></i></span><div><strong>${updateState.blocked_version ? "Candidate update blocked" : "Update health gate active"}</strong><span>${updateState.blocked_version ? "Version " + escapeHtml(updateState.blocked_version) + " failed health checks. This alone does not confirm a successful rollback." : "A candidate must remain healthy before it replaces the known-good runtime."}</span></div></div>
+                </div>
+                <details class="iv-technical-details"><summary>Technical evidence</summary><div class="iv-detail-grid"><div><span>Agent source</span><code>${escapeHtml(t.agent_source_hash || "Not reported")}</code></div><div><span>Runtime contract</span><code>${escapeHtml(contractHash || "Not reported")}</code></div><div><span>Host fingerprint</span><code>${escapeHtml(t.host_fingerprint || "Not reported")}</code></div><div><span>Agent version</span><code>${escapeHtml(t.agent_version || "Not reported")}</code></div></div></details>
+                <div class="iv-card-actions">
+                  <button data-runtime-copy="${runtimeEvidenceAttribute(t.agent_source_hash || "")}" data-runtime-copy-label="Agent source hash" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Copy Agent</button>
+                  <button data-runtime-copy="${runtimeEvidenceAttribute(contractHash)}" data-runtime-copy-label="Runtime contract hash" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Copy Contract</button>
+                  <button onclick="openAgentLogs('${escapeHtml(e.agent_id || e.id || "")}')" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Logs</button>
+                </div></article>`;
+            })),
+          ].filter(Boolean).join("") || '<div class="iv-empty-state">No identity reports match the current filter.</div>');
+          l && window.ivStableLogRows(l, r.map((e) => { const status = e.status || e.state || "queued"; return `<article class="iv-receipt-card" data-iv-row-key="receipt:${escapeHtml(e.command_id || e.id || '')}"><div class="iv-trust-card-head"><div><span class="iv-eyebrow">${escapeHtml(e.target_type || "target")}</span><h4>${escapeHtml(e.command || "command")}</h4></div><span class="iv-status-pill" data-state="${status === "completed" ? "success" : status === "failed" ? "danger" : "active"}">${escapeHtml(status)}</span></div><p>${status === "completed" ? "The target acknowledged and completed this controlled action." : status === "failed" ? escapeHtml(e.error || "The action did not complete.") : "Waiting for the target to confirm this action."}</p><div class="iv-assurance-list"><div class="iv-assurance-item"><span class="iv-assurance-icon"><i data-lucide="link-2"></i></span><div><strong>${e.integrity_hash ? "Integrity link reported" : "Integrity link pending"}</strong><span>${e.integrity_hash ? "This receipt includes a hash that can be compared during an audit." : "The target has not returned an integrity hash yet."}</span></div></div></div><details class="iv-technical-details"><summary>Receipt integrity</summary><div class="iv-detail-grid"><div><span>Receipt ID</span><code>${escapeHtml(e.command_id || e.id || "")}</code></div><div><span>Integrity hash</span><code>${escapeHtml(e.integrity_hash || "Not reported")}</code></div><div><span>Issued by</span><code>${escapeHtml(e.issued_by || "system")}</code></div></div></details><div class="iv-card-actions"><button data-runtime-copy="${runtimeEvidenceAttribute(e.command_id || e.id || "")}" data-runtime-copy-label="Action receipt" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Copy Receipt</button><button onclick="exportAuditEvidence()" class="btn-secondary px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest">Export</button></div></article>`; }).join("") || '<div class="iv-empty-state">No action receipts yet.</div>');
+          lucide.createIcons();
+        }
+        Object.assign(window, {
+          runtimeCopy,
+          openAgentLogs,
+          openRequestTraceFor,
+          openPipelineFor,
+          sendSingleAgentCommand,
+          copyTrustSummary,
+          renderCacheQueue,
+          renderProcessSupervisor,
+          renderGatewayRoutes,
+          renderTrustReceipts,
+        });

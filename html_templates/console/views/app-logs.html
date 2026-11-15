@@ -1,0 +1,92 @@
+<div
+            id="view-app-logs"
+            class="view-section hidden operator-log-page flex flex-col w-full px-6 xl:px-8"
+          >
+            <div class="flex flex-col gap-4 mb-4 shrink-0">
+              <div class="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+                <div>
+                  <div class="text-[10px] uppercase tracking-widest" style="color: var(--text-subtle)">
+                    Application Output
+                  </div>
+                  <h2 class="text-xl font-semibold mt-1" style="color: var(--text-main)">App Logs</h2>
+                  <div class="text-sm mt-1 max-w-3xl" style="color: var(--text-muted)">
+                    Stdout, stderr, framework output and tracebacks from your apps. Process lifecycle and agent activity are in Runtime Logs.
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <select
+                    id="app-log-service-filter"
+                    class="ink-input text-xs font-mono-cli rounded px-3 py-2 w-44 appearance-none cursor-pointer"
+                    onchange="queryAppLogs()"
+                  >
+                    <option value="all">All Services</option>
+                  </select>
+                  <select
+                    id="app-log-stream-filter"
+                    class="ink-input text-xs font-mono-cli rounded px-3 py-2 w-36 appearance-none cursor-pointer"
+                    onchange="queryAppLogs()"
+                  >
+                    <option value="all">All Streams</option>
+                    <option value="stdout">stdout</option>
+                    <option value="stderr">stderr</option>
+                    <option value="journal">journal</option>
+                  </select>
+                  <select
+                    id="app-log-level-filter"
+                    class="ink-input text-xs font-mono-cli rounded px-3 py-2 w-36 appearance-none cursor-pointer"
+                    onchange="queryAppLogs()"
+                  >
+                    <option value="all">All Levels</option>
+                    <option value="error">Errors</option>
+                    <option value="warn">Warnings</option>
+                    <option value="info">Info</option>
+                    <option value="debug">Debug</option>
+                  </select>
+                  <select
+                    id="app-log-limit"
+                    class="ink-input text-xs font-mono-cli rounded px-3 py-2 w-32 appearance-none cursor-pointer"
+                    onchange="queryAppLogs()"
+                  >
+                    <option value="120">Latest 120</option>
+                    <option value="500" selected="selected">Latest 500</option>
+                    <option value="1000">Latest 1000</option>
+                    <option value="2000">Latest 2000</option>
+                  </select>
+                  <input
+                    id="app-log-search"
+                    placeholder="Search service, output, phase..."
+                    class="ink-input text-xs font-mono-cli rounded px-3 py-2 w-64"
+                    oninput="queryAppLogs(true)"
+                  />
+                  <span class="operator-quiet-status px-3 py-2 rounded-lg text-[10px] font-bold flex items-center gap-2 uppercase tracking-widest">
+                    <span class="operator-status-dot bg-emerald-400"></span> Live
+                  </span>
+                </div>
+              </div>
+              <div class="flex flex-wrap items-center gap-3 text-xs"><button id="app-log-previous" class="btn-secondary px-3 py-2 rounded-lg" onclick="pageAppLogs(-1)" disabled>Newer matches</button><button id="app-log-next" class="btn-secondary px-3 py-2 rounded-lg" onclick="pageAppLogs(1)" disabled>Older matches</button><span id="app-log-retention" style="color: var(--text-muted)"></span></div>
+              <div id="app-log-summary-bar" class="grid grid-cols-2 xl:grid-cols-5 gap-3"></div>
+              <div
+                id="app-log-scope-notice"
+                class="hidden rounded-xl border px-5 py-4 text-sm"
+                style="border-color: var(--table-border); color: var(--text-muted); background: var(--nav-hover)"
+              ></div>
+            </div>
+            <div class="flex-1 acrylic-panel operator-log-shell rounded-2xl overflow-hidden flex flex-col min-h-0">
+              <div
+                class="operator-log-header grid grid-cols-[9rem_8rem_10rem_5rem_minmax(0,1fr)_2rem] gap-3 px-6 py-3 text-[10px] font-bold uppercase tracking-widest shrink-0"
+                style="color: var(--text-subtle)"
+              >
+                <div>Time</div>
+                <div>Workload</div>
+                <div>Service</div>
+                <div>Stream</div>
+                <div>Output</div>
+                <div></div>
+              </div>
+              <div id="app-log-feed" class="operator-log-feed flex-1 custom-scroll">
+                <div class="p-8 text-center text-xs" style="color: var(--text-subtle)">
+                  Waiting for application output...
+                </div>
+              </div>
+            </div>
+          </div>

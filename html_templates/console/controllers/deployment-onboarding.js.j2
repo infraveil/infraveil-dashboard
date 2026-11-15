@@ -1,0 +1,491 @@
+        function requestEditorAccess(e) {
+          if (isDemoWorkspace())
+            return (
+              showToast("Runtime contract opened. Demo edits validate locally.", "info"),
+              void openEditor(e, window.__demoAccessCode || "")
+            );
+          showTotpPrompt("Inspect Runtime Contract", (t) => openEditor(e, t));
+        }
+        async function openEditor(e, t) {
+          const authHeaders = {};
+          !isDemoWorkspace() && t && (authHeaders["X-TOTP-Auth"] = t);
+          ((currentAgentId = e),
+            (document.getElementById("editor-target-node").innerText = e),
+            switchView("editor"),
+            initRuntimeContractEditor(),
+            setEditorValue("Loading runtime contract from server..."),
+            (editorFiles = {
+              "infraveil.json": APP_STATE.demo_mode
+                ? String(DEFAULT_EDITOR_FILES["infraveil.json"] || "{}")
+                : "",
+            }),
+            (editorFolders = new Set()),
+            (pendingEditorEntry = null),
+            sanitizeEditorState());
+          editorFileFilter = "";
+          try {
+            const response = await fetch(
+              `/client/api/source?agent_id=${e}&path=infraveil.json`,
+              { headers: authHeaders },
+            );
+            const body = await response.json().catch(() => ({}));
+            if (response.ok && typeof body.content === "string") {
+              editorFiles = { "infraveil.json": body.content };
+            } else if (!APP_STATE.demo_mode && response.status !== 404) {
+              throw new Error(body.error || "Runtime contract access failed.");
+            }
+            editorFiles = {
+              "infraveil.json": String(editorFiles["infraveil.json"] || "{}"),
+            };
+            editorFolders = new Set();
+            currentTab = "infraveil.json";
+            switchEditorTab("infraveil.json");
+            window.validateInfraveilContract?.();
+            showToast("Runtime contract loaded.", "info");
+            runtimeSetupController.resetDismissal();
+            maybeOfferRuntimeSetupGuide();
+            const r = document.getElementById("editor-pkg-hash-display");
+            if (r)
+              try {
+                const t = await fetch("/client/api/status");
+                if (t.ok) {
+                  const n = ((await t.json()).agents || []).find(
+                    (t) => t.agent_id === e,
+                  );
+                  if (n && n.payload_hash) {
+                    const e = n.payload_hash;
+                    r.innerHTML = `<span style="color:#fcd34d;font-weight:600">${e.substring(0, 8)}</span>${e.substring(8)}`;
+                  } else
+                    r.innerHTML =
+                      '<span style="color: var(--text-subtle)">No hash on record yet</span>';
+                }
+              } catch (e) {
+                r.innerHTML =
+                  '<span style="color: var(--text-subtle)">Deploy to register hash</span>';
+              }
+          } catch (e) {
+            const t = document.getElementById("nav-editor");
+            (showToast(e.message, "error"),
+              setEditorValue(""),
+              t && t.classList.add("hidden"),
+              switchView("deployments"));
+          }
+        }
+        function deployCode() {
+          if (window.ivDashboardAccess?.paused || APP_STATE.payment_required || APP_STATE.workspace_locked)
+            return showToast("Resolve workspace access before saving a contract.", "error");
+          if (!currentAgentId)
+            return showToast("No target node selected", "error");
+          const targetAgentId = String(currentAgentId);
+          const validation = window.validateInfraveilContract?.();
+          if (validation && !validation.valid)
+            return showToast(
+              validation.message || "Fix the INFRAVEIL.json error before saving.",
+              "error",
+            );
+          const contract = getEditorValue();
+          editorFiles = { "infraveil.json": contract };
+          editorFolders = new Set();
+          currentTab = "infraveil.json";
+          if (!APP_STATE.demo_mode && !String(contract || "").trim())
+            return (
+              showToast("Generate or add a runtime contract before saving.", "info"),
+              openRuntimeSetupGuide()
+            );
+          APP_STATE.demo_mode
+            ? showToast("Demo validation passed. Saving requires your own workspace.", "info")
+            : showTotpPrompt(
+                "Saving runtime contract for " + targetAgentId.substring(0, 8),
+                async (e) => {
+                  try {
+                    if (window.ivDashboardAccess?.paused || APP_STATE.payment_required || APP_STATE.workspace_locked) throw new Error("Workspace access changed. Review the contract again.");
+                    if (String(currentAgentId) !== targetAgentId || getEditorValue() !== contract) throw new Error("The target or contract changed during approval. Review the current draft and save again.");
+                    showToast("Saving validated runtime contract...", "info");
+                    let o = await fetch("/client/api/source", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-TOTP-Auth": e,
+                      },
+                      body: JSON.stringify({
+                        agent_id: targetAgentId,
+                        path: "infraveil.json",
+                        content: contract,
+                      }),
+                    });
+                    if (!o.ok) {
+                      const e = await o.json().catch(() => ({}));
+                      throw new Error(
+                        e.error || "Failed to save runtime contract",
+                      );
+                    }
+                    showToast("Compiling infrastructure package...", "info");
+                    if (window.ivDashboardAccess?.paused || String(currentAgentId) !== targetAgentId) throw new Error("Contract saved, but applying stopped because access or the selected target changed. Review before applying.");
+                    let r = await fetch("/client/api/deploy", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-TOTP-Auth": e,
+                      },
+                      body: JSON.stringify({ agent_id: targetAgentId }),
+                    });
+                    if (!r.ok) {
+                      const e = await r.json().catch(() => ({}));
+                      throw new Error(
+                        e.error || "Advanced package deploy failed.",
+                      );
+                    }
+                    try {
+                      const e = await r.json();
+                      if (e.deployed && e.deployed.length) {
+                        const t = e.deployed[0];
+                        if (t.payload_hash) {
+                          const e = document.getElementById(
+                            "editor-pkg-hash-display",
+                          );
+                          if (e) {
+                            const n = t.payload_hash;
+                            e.innerHTML = `<span style="color:#fcd34d;font-weight:600">${n.substring(0, 8)}</span>${n.substring(8)}`;
+                          }
+                        }
+                        const n = t.services
+                            ? t.services.join(", ")
+                            : "unknown",
+                          o =
+                            "." === t.project_root
+                              ? "agent root"
+                              : t.project_root;
+                        showToast(
+                          `Contract prepared for ${n} (manifest: ${t.manifest_path || o}). Check approvals and fresh runtime evidence.`,
+                          "info",
+                        );
+                      } else
+                        showToast(
+                          "Contract package prepared. Check pending approvals and the target's runtime receipt before treating it as applied.",
+                          "info",
+                        );
+                    } catch (e) {}
+                    setTimeout(() => switchView("deployments"), 1500);
+                  } catch (e) {
+                    showToast(e.message, "error");
+                  }
+                },
+              );
+        }
+        function promptBlockIpDirect(e, t) {
+          showTotpPrompt(`Block IP ${e}`, async (n) => {
+            try {
+              const o = document.getElementById("sec-scope-select").value;
+              if (
+                !(
+                  await fetch("/client/api/security/ip/block", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "X-TOTP-Auth": n,
+                    },
+                    body: JSON.stringify({
+                      ip: e,
+                      reason: t || "Manual block from profile",
+                      agent_id: "global" === o ? null : o,
+                    }),
+                  })
+                ).ok
+              )
+                throw new Error();
+              (showToast(`IP ${e} blocked!`, "info"),
+                await fetchSecuritySettings());
+            } catch (e) {
+              showToast("Failed to block IP", "error");
+            }
+          });
+        }
+        function promptWhitelistIpDirect(e) {
+          showTotpPrompt(`Whitelist IP ${e}`, async (t) => {
+            try {
+              if (
+                !(
+                  await fetch("/client/api/security/ip/whitelist", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "X-TOTP-Auth": t,
+                    },
+                    body: JSON.stringify({ ip: e, action: "add" }),
+                  })
+                ).ok
+              )
+                throw new Error();
+              (showToast(`IP ${e} whitelisted!`, "info"),
+                await fetchSecuritySettings());
+            } catch (e) {
+              showToast("Failed to whitelist", "error");
+            }
+          });
+        }
+        function generateLauncherCommand() {
+          if (lockRequiresBilling())
+            return showToast(
+              "Activate billing before generating launcher installs.",
+              "error",
+            );
+          switchView("trust-receipts");
+          setTimeout(() =>
+            document
+              .getElementById("release-approval-panel")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          0);
+          showToast(
+            "Launcher installation runs through the signed one-file Trust Console.",
+            "info",
+          );
+          if (window.ivTrustConsole) window.ivTrustConsole.offer();
+        }
+        function switchLauncherPlatform(e) {
+          const t = "windows" === e ? "windows" : "unix",
+            n = document.getElementById("launcher-output-section");
+          n && (n.dataset.platform = t);
+          ["unix", "windows"].forEach((e) => {
+            const n = document.getElementById(`launcher-tab-${e}`),
+              o = document.getElementById(`launcher-panel-${e}`),
+              r = e === t;
+            (n && (n.classList.toggle("active", r), n.setAttribute("aria-selected", String(r))),
+              o && (o.hidden = !r));
+          });
+        }
+        async function copyLauncherCmd(e) {
+          const t = document.getElementById(e || "launcher-cmd-output"),
+            n = String(t?.textContent || t?.value || "").trim();
+          if (!t || "true" !== t.dataset.ready || !n)
+            return showToast("Authenticate to generate the installer first.", "error");
+          try {
+            let copied = false;
+            if (navigator.clipboard?.writeText) {
+              await navigator.clipboard.writeText(n);
+              copied = true;
+            } else copied = fallbackClipboardCopy(n);
+            if (!copied) throw new Error("Clipboard unavailable");
+            showToast("Installer command copied.", "success");
+          } catch (e) {
+            fallbackClipboardCopy(n)
+              ? showToast("Installer command copied.", "success")
+              : showToast("Could not copy the installer command.", "error");
+          }
+        }
+        function fallbackClipboardCopy(e) {
+          const t = document.createElement("textarea");
+          ((t.value = e),
+            t.setAttribute("readonly", "readonly"),
+            (t.style.position = "fixed"),
+            (t.style.left = "-9999px"),
+            (t.style.top = "0"),
+            document.body.appendChild(t),
+            t.focus(),
+            t.select());
+          let n = !1;
+          try {
+            n = document.execCommand("copy");
+          } catch {
+            n = !1;
+          }
+          return document.body.removeChild(t), n;
+        }
+        async function copyToClipboard(e, t) {
+          if (!e) return showToast(t + " is empty", "error");
+          try {
+            if (navigator.clipboard && window.isSecureContext) {
+              await navigator.clipboard.writeText(e);
+              return showToast(t + " copied to clipboard!", "success");
+            }
+          } catch {}
+          fallbackClipboardCopy(e)
+            ? showToast(t + " copied to clipboard!", "success")
+            : showToast("Could not copy " + t.toLowerCase() + ".", "error");
+        }
+        function copyRouteCommand(e) {
+          copyToClipboard(
+            e?.dataset?.copyCommand || "",
+            e?.dataset?.copyLabel || "curl command",
+          );
+        }
+        document.addEventListener("click", (e) => {
+          const t = e.target?.closest?.("[data-copy-command]");
+          t && (e.preventDefault(), copyRouteCommand(t));
+        });
+        const ACCOUNT_ONBOARDING_KEY = `infraveil-account-runtime-onboarding-v2:${APP_STATE.client_id || APP_STATE.username || "workspace"}`;
+        function closeAccountOnboardingPrompt() {
+          const e = document.getElementById("account-onboarding-prompt");
+          e && e.remove();
+          try {
+            localStorage.setItem(ACCOUNT_ONBOARDING_KEY, "1");
+          } catch (e) {}
+        }
+        function accountOnboardingGo(e) {
+          closeAccountOnboardingPrompt();
+          switchView(e);
+          if ("launcher" === e) setTimeout(() => {
+            const e = document.getElementById("launcher-user") || document.getElementById("launcher-output-section");
+            e && e.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 120);
+        }
+        function maybeShowAccountOnboardingPrompt() {
+          if (APP_STATE.demo_mode || APP_STATE.runtime_observed) return;
+          try {
+            if (localStorage.getItem(ACCOUNT_ONBOARDING_KEY) === "1") return;
+          } catch (e) {}
+          const e = new URLSearchParams(window.location.search || "");
+          if (e.get("logged_in") !== "1") return;
+          const t = document.createElement("div");
+          t.id = "account-onboarding-prompt";
+          t.className = "fixed inset-0 z-[220] flex items-center justify-center modal-backdrop px-4 py-6";
+          t.setAttribute("role", "dialog");
+          t.setAttribute("aria-modal", "true");
+          t.setAttribute("aria-labelledby", "account-onboarding-title");
+          t.innerHTML = `
+            <div class="iv-modal-card iv-auth-modal w-full max-w-xl max-h-[90vh] overflow-y-auto">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <div class="iv-modal-eyebrow" style="color: var(--accent)">First runtime</div>
+                  <h2 id="account-onboarding-title" class="mt-2 text-2xl font-black" style="color: var(--text-main)">Run your existing app. Do not upload your source.</h2>
+                </div>
+                <button type="button" onclick="closeAccountOnboardingPrompt()" class="btn-secondary rounded-lg p-2" aria-label="Close">
+                  <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+              </div>
+              <div class="mt-5 grid gap-3 text-sm" style="color: var(--text-muted)">
+                <div class="rounded-xl border px-4 py-3" style="border-color: var(--table-border); background: var(--surface-muted)"><b style="color: var(--text-main)">1. Install the launcher on your server.</b><br>The launcher joins the host to this workspace and supervises processes locally.</div>
+                <div class="rounded-xl border px-4 py-3" style="border-color: var(--table-border); background: var(--surface-muted)"><b style="color: var(--text-main)">2. Define the runtime contract.</b><br>Give Infraveil a start command, local port, gateway port, and optional health behavior. Your repository stays on your machine.</div>
+                <div class="rounded-xl border px-4 py-3" style="border-color: var(--table-border); background: var(--surface-muted)"><b style="color: var(--text-main)">3. Operate your application.</b><br>Inspect health, logs, and managed traffic, then use the supported runtime controls. Extend that workflow across your connected servers.</div>
+              </div>
+              <div class="mt-6 pt-4 flex flex-col sm:flex-row gap-3" style="border-top: 1px solid var(--table-border)">
+                <button type="button" onclick="accountOnboardingGo('launcher')" class="btn-primary flex-1 py-3 rounded-lg text-[11px] font-bold uppercase tracking-widest">Install Launcher</button>
+                <button type="button" onclick="accountOnboardingGo('deployments')" class="btn-secondary flex-1 py-3 rounded-lg text-[11px] font-bold uppercase tracking-widest">Open Workloads</button>
+                <button type="button" onclick="closeAccountOnboardingPrompt()" class="btn-secondary sm:flex-none px-5 py-3 rounded-lg text-[11px] font-bold uppercase tracking-widest">Later</button>
+              </div>
+            </div>`;
+          document.body.appendChild(t);
+          window.lucide && lucide.createIcons();
+        }
+        document.addEventListener("DOMContentLoaded", () => {
+          const e =
+              performance.getEntriesByType &&
+              performance.getEntriesByType("navigation")[0],
+            t = e && "reload" === e.type,
+            questionnaireConfigured = !!APP_STATE.questionnaire_defaults?.configured;
+          if (APP_STATE.demo_mode) {
+            const e =
+              APP_STATE.demo_session_key ||
+              `${APP_STATE.demo_tour_mode || "production"}:${APP_STATE.demo_username || ""}:${APP_STATE.demo_access_code || ""}`;
+            if (sessionStorage.getItem(DEMO_TOUR_SESSION_KEY) !== e)
+              (sessionStorage.setItem(DEMO_TOUR_SESSION_KEY, e),
+                sessionStorage.removeItem(DEMO_TOUR_CLOSED_KEY),
+                sessionStorage.removeItem(DEMO_TOUR_INDEX_KEY),
+                questionnaireConfigured
+                  ? sessionStorage.setItem("infraveil-demo-questionnaire-complete", "1")
+                  : sessionStorage.removeItem("infraveil-demo-questionnaire-complete"),
+                (demoTourIndex = 0));
+          }
+          (isProductionDemo() &&
+            !t &&
+            (sessionStorage.removeItem(DEMO_TOUR_CLOSED_KEY),
+            sessionStorage.removeItem(DEMO_TOUR_INDEX_KEY),
+            questionnaireConfigured
+              ? sessionStorage.setItem("infraveil-demo-questionnaire-complete", "1")
+              : sessionStorage.removeItem("infraveil-demo-questionnaire-complete"),
+            (demoTourIndex = 0)),
+            window.addEventListener("pageshow", (e) => {
+              e.persisted && window.location.reload();
+            }));
+          const n = document.getElementById("source-code-editor");
+          n &&
+            (APP_STATE.demo_mode &&
+              (n.placeholder =
+                "Edit the demo contract to test validation. Saving requires your own workspace."),
+            initRuntimeContractEditor());
+          const o = document.getElementById("editor-save-deploy-btn");
+          if (
+            (o &&
+              APP_STATE.demo_mode &&
+              ((o.disabled = !0),
+              o.classList.add("opacity-50", "cursor-not-allowed"),
+              (o.title =
+                "Validation is interactive in the demo; saving requires your own workspace.")),
+            buildAccountMenuPages(),
+            switchView("overview"),
+            applyWorkspaceState(),
+            setTimeout(maybeShowAccountOnboardingPrompt, 850),
+            dismissDashboardLoader(),
+            document
+              .getElementById("demo-tour-skip")
+              .addEventListener("click", closeDemoTour),
+            document
+              .getElementById("demo-tour-back")
+              .addEventListener("click", () => {
+                demoTourIndex <= 0 ||
+                  ((demoTourIndex -= 1), renderDemoTourStep());
+              }),
+            document
+              .getElementById("demo-tour-step-skip")
+              .addEventListener("click", () => {
+                advanceDemoTourStep({ skipped: !0 });
+              }),
+            document
+              .getElementById("demo-tour-next")
+              .addEventListener("click", () => {
+                advanceDemoTourStep();
+              }),
+            APP_STATE.demo_mode)
+          ) {
+            const e = parseInt(
+              sessionStorage.getItem(DEMO_TOUR_INDEX_KEY) || "0",
+              10,
+            );
+            (Number.isFinite(e) &&
+              e >= 0 &&
+              (demoTourIndex = Math.min(e, currentDemoSteps().length - 1)),
+              "1" !== sessionStorage.getItem(DEMO_TOUR_CLOSED_KEY) &&
+                setTimeout(startDemoTour, 600));
+          }
+        });
+        function updateUserRuntimeStatus(e = {}) {
+          const t = e.inventory || {},
+            n = Array.isArray(e.agents) ? e.agents : [],
+            o = Array.isArray(e.launcher_hosts)
+              ? e.launcher_hosts
+              : Array.isArray(window.__latestStatusPayload?.launcher_hosts)
+                ? window.__latestStatusPayload.launcher_hosts
+                : [],
+            r = Number.isFinite(Number(t.agents)) ? Number(t.agents) : n.length,
+            s = Number.isFinite(Number(t.hosts)) ? Number(t.hosts) : o.length,
+            a = Number.isFinite(Number(t.online_agents))
+              ? Number(t.online_agents)
+              : n.filter((e) => "online" === e.status).length,
+            i = Number.isFinite(Number(t.online_hosts))
+              ? Number(t.online_hosts)
+              : o.filter((e) => "online" === e.status).length,
+            l =
+              (Number.isFinite(Number(t.observed_agents))
+                ? Number(t.observed_agents)
+                : r) +
+                (Number.isFinite(Number(t.observed_hosts))
+                  ? Number(t.observed_hosts)
+                  : s) >
+                0 || "online" === e.status?.state,
+            c = l && (a + i > 0 || "online" === e.status?.state),
+            d = l ? (c ? "online" : "offline") : "empty",
+            u = {
+              empty: ["bg-gray-500", "No runtime configured"],
+              online: ["bg-emerald-500", "Connection available; app health is separate"],
+              offline: ["bg-red-500", "No current agent/server connection"],
+            }[d],
+            p = document.getElementById("user-status-dot");
+          if (p) {
+            p.className =
+              "absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 " +
+              u[0];
+            p.dataset.state = d;
+            p.setAttribute("aria-label", u[1]);
+            p.title = u[1];
+          }
+          return c;
+        }

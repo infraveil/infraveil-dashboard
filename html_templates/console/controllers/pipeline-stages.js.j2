@@ -1,0 +1,921 @@
+        function createPipelineStage(e) {
+          const t = SECURITY_STAGE_LIBRARY.find((t) => t.id === e);
+          return {
+            id: "stage-" + Math.random().toString(36).slice(2, 10),
+            stage: e,
+            category: t?.category || "Custom",
+            name: t?.title || e,
+            description: t?.description || "",
+            enabled: !0,
+            config_json: "{}",
+          };
+        }
+        function getStageMeta(e) {
+          return SECURITY_STAGE_LIBRARY.find((t) => t.id === e) || null;
+        }
+        function getStagePurposeText(e, t) {
+          return (
+            {
+              observe_request:
+                "Starts request tracking so the rest of the builder has real traffic to work with.",
+              tag_route:
+                "Groups raw URLs into cleaner page families like home, settings, or api.",
+              count_dimension:
+                "Counts the fields you care about so they show up as useful breakdowns later.",
+              capture_payload_shape:
+                "Records whether a request had a body, what kind of body it was, and roughly how big it was.",
+              session_fingerprint:
+                "Creates a stable visitor signature from request behavior and headers.",
+              detect_pattern:
+                "Matches suspicious paths, payloads, headers, or user-agents against detector rules.",
+              risk_score:
+                "Turns request traits into a score you can react to later.",
+              geo_gate:
+                "Applies country or region logic inside the programmable request flow.",
+              rate_shape:
+                "Looks for bursty or unusual request timing patterns.",
+              enrich_request:
+                "Adds your own labels like route_group, tenant, campaign, or feature area.",
+              emit_dashboard_signal:
+                "Pushes a named signal into the live dashboard so you can see custom telemetry.",
+              branch_by_condition:
+                "Splits the flow so different requests follow different logic.",
+              log_event:
+                "Writes a visible event without changing the request outcome.",
+              call_tool:
+                "Sends the request context to one of your connected tools or webhooks.",
+              block_request:
+                "Stops the request and returns the response you define.",
+              tarpit_request:
+                "Intentionally slows suspicious traffic instead of blocking immediately.",
+              serve_deception:
+                "Returns a fake but believable response for scanners or trap hits.",
+              invoke_module: "Hands control to one of your custom modules.",
+            }[e.stage || e.id || ""] ||
+            ("telemetry" === t
+              ? "Captures or enriches request data before action is taken."
+              : "Applies a response, handoff, or enforcement step after inspection.")
+          );
+        }
+        function getStageExampleText(e) {
+          return (
+            {
+              observe_request:
+                "Example: enable this when you want any request to show up in the live builder views.",
+              tag_route:
+                "Example: map /, /settings, and /api/* into cleaner route families for charts.",
+              count_dimension:
+                "Example: count path, method, country, route_group, tenant, or feature_flag.",
+              capture_payload_shape:
+                "Example: see which endpoints receive JSON bodies versus empty GETs.",
+              session_fingerprint:
+                "Example: track repeat visitor behavior without relying on login state.",
+              detect_pattern:
+                "Example: catch /.env, /wp-login.php, sqlmap user-agents, or injected payload markers.",
+              risk_score:
+                "Example: add points for scanner paths, hostile payloads, or repeated probe behavior.",
+              geo_gate:
+                "Example: keep country-based rules in the same flow as the rest of your logic.",
+              rate_shape:
+                "Example: distinguish slow normal browsing from bursty scripted requests.",
+              enrich_request:
+                "Example: attach route_group=Settings or tenant=Acme for later logging.",
+              emit_dashboard_signal:
+                "Example: emit top_routes, signup_attempts, or billing_api_hits as named signals.",
+              branch_by_condition:
+                "Example: send admin traffic down one branch and public traffic down another.",
+              log_event:
+                "Example: create a reviewable event whenever a suspicious request is seen.",
+              call_tool:
+                "Example: post suspicious request data to your SIEM, webhook, or classifier.",
+              block_request:
+                "Example: return 403 Forbidden when the request score passes a threshold.",
+              tarpit_request:
+                "Example: delay scanners by 5 seconds while letting normal users through.",
+              serve_deception:
+                "Example: return a fake phpMyAdmin login page to trap scanners.",
+              invoke_module:
+                "Example: run your own house scoring or custom telemetry module.",
+            }[e.stage || e.id || ""] || ""
+          );
+        }
+        function getStageConfigHint(e) {
+          return (
+            {
+              observe_request: "{}",
+              tag_route:
+                '{\n  "map": {\n    "/": "home",\n    "/settings": "settings",\n    "/api": "api"\n  }\n}',
+              count_dimension:
+                '{\n  "dimensions": ["path", "method", "country", "route_group"]\n}',
+              capture_payload_shape: "{}",
+              session_fingerprint: "{}",
+              detect_pattern: "{}",
+              risk_score:
+                '{\n  "weights": {\n    "path": 30,\n    "payload": 25,\n    "user-agent": 25\n  }\n}',
+              geo_gate: '{\n  "mode": "blocklist"\n}',
+              rate_shape: '{\n  "window_seconds": 60,\n  "risk_threshold": 20,\n  "score": 15\n}',
+              enrich_request:
+                '{\n  "set": {\n    "route_group": "settings"\n  }\n}',
+              emit_dashboard_signal:
+                '{\n  "name": "top_routes",\n  "dimension": "path"\n}',
+              branch_by_condition: '{\n  "min_risk": 30\n}',
+              log_event: '{\n  "message": "Interesting request observed"\n}',
+              call_tool: '{\n  "tool": "my-webhook"\n}',
+              block_request:
+                '{\n  "threshold": 30,\n  "status": 403,\n  "body": "Forbidden"\n}',
+              tarpit_request: '{\n  "threshold": 20,\n  "delay_seconds": 5\n}',
+              serve_deception: '{\n  "threshold": 30,\n  "status": 200,\n  "payload": {"status": "ok"}\n}',
+              invoke_module: '{\n  "module": "traffic-analyst"\n}',
+            }[e] || "{}"
+          );
+        }
+        function getStageDependencies(e) {
+          return (
+            {
+              tag_route: ["observe_request"],
+              count_dimension: ["observe_request"],
+              capture_payload_shape: ["observe_request"],
+              session_fingerprint: ["observe_request"],
+              detect_pattern: ["observe_request"],
+              risk_score: ["detect_pattern"],
+              geo_gate: ["observe_request"],
+              rate_shape: ["observe_request"],
+              enrich_request: ["observe_request"],
+              emit_dashboard_signal: ["observe_request"],
+              branch_by_condition: ["observe_request"],
+              log_event: ["observe_request"],
+              call_tool: ["observe_request"],
+              block_request: ["risk_score"],
+              tarpit_request: ["risk_score"],
+              serve_deception: ["detect_pattern"],
+              invoke_module: ["observe_request"],
+            }[e] || []
+          );
+        }
+        function validateStageConfigShape(e, t) {
+          const n = e.name || e.stage || "Stage",
+            o = (e.config_json || "").trim();
+          if (!o) return { parsed: {}, errors: [], warnings: [] };
+          let r;
+          try {
+            r = JSON.parse(o);
+          } catch (e) {
+            return {
+              parsed: null,
+              errors: [`${n} settings must be valid JSON.`],
+              warnings: [],
+            };
+          }
+          if (Array.isArray(r))
+            return {
+              parsed: r,
+              errors: [
+                `${n} settings must be one JSON object, not a full pipeline array.`,
+              ],
+              warnings: [
+                "Add each stage separately instead of pasting an entire pipeline into one step.",
+              ],
+            };
+          if (!r || "object" != typeof r)
+            return {
+              parsed: r,
+              errors: [
+                `${n} settings must be a JSON object like {"threshold":30}.`,
+              ],
+              warnings: [],
+            };
+          const s = [
+            "telemetry_pipeline",
+            "response_pipeline",
+            "custom_defense_modules",
+            "learning_engine",
+          ].filter((e) => e in r);
+          if (s.length)
+            return {
+              parsed: r,
+              errors: [
+                `${n} settings contains full builder keys (${s.join(", ")}). This box is only for one step.`,
+              ],
+              warnings: [],
+            };
+          const a = [];
+          return (
+            ("block_request" !== e.stage && "tarpit_request" !== e.stage) ||
+              null != r.threshold ||
+              a.push(
+                `${n} usually needs a threshold so it knows when to trigger.`,
+              ),
+            "count_dimension" !== e.stage ||
+              (Array.isArray(r.dimensions) && r.dimensions.length) ||
+              a.push(
+                'Count Dimension is most useful when you set a dimensions array like ["path","method"].',
+              ),
+            "emit_dashboard_signal" !== e.stage ||
+              r.name ||
+              a.push(
+                "Emit Dashboard Signal is most useful when you give it a signal name.",
+              ),
+            "call_tool" !== e.stage ||
+              r.tool ||
+              a.push(
+                "Call Tool needs a tool name that matches one of your Connected Tools.",
+              ),
+            "invoke_module" !== e.stage ||
+              r.module ||
+              a.push(
+                "Invoke Module needs a module name that matches one of your Custom Modules.",
+              ),
+            { parsed: r, errors: [], warnings: a }
+          );
+        }
+        function getPipelineStageWarnings(e, t, n, o, telemetry = _telemetryPipeline, response = _responsePipeline) {
+          if (e.enabled === false) return [];
+          const r = [],
+            s = e.stage || e.id || "",
+            a = new Set(
+              (o || [])
+                .slice(0, n)
+                .filter((e) => !1 !== e.enabled)
+                .map((e) => e.stage || e.id),
+            ),
+            i = new Set(
+              [...(telemetry || []), ...(response || [])]
+                .filter((e) => !1 !== e.enabled)
+                .map((e) => e.stage || e.id),
+            );
+          return (
+            getStageDependencies(s).forEach((e) => {
+              i.has(e)
+                ? a.has(e) ||
+                  ("response" === t && (telemetry || []).some(
+                    (t) => (t.stage || t.id) === e && !1 !== t.enabled,
+                  )) ||
+                  r.push(
+                    `This step depends on ${e.replace(/_/g, " ")} running before it.`,
+                  )
+                : r.push(
+                    `This step usually depends on ${e.replace(/_/g, " ")} being enabled somewhere in the builder.`,
+                  );
+            }),
+            "response" !== t ||
+              "block_request" !== s ||
+              i.has("risk_score") ||
+              i.has("detect_pattern") ||
+              r.push(
+                "Block Request works best when you score or detect something before it.",
+              ),
+            r
+          );
+        }
+        function ensureStage(e, t, n = null) {
+          window.ivPipelineDraftDirty = true;
+          const o = "telemetry" === e ? _telemetryPipeline : _responsePipeline,
+            r = o.find((e) => e.stage === t);
+          if (r) return (n && (r.config_json = JSON.stringify(n, null, 2)), r);
+          const s = createPipelineStage(t);
+          return (
+            n && (s.config_json = JSON.stringify(n, null, 2)),
+            o.push(s),
+            s
+          );
+        }
+        function addTelemetryDimensions(e) {
+          const t = Array.isArray(_telemetryDimensions)
+            ? _telemetryDimensions
+            : [];
+          _telemetryDimensions = Array.from(
+            new Set(
+              [...t, ...(e || [])]
+                .map((e) => String(e || "").trim())
+                .filter(Boolean),
+            ),
+          );
+        }
+        function applySimpleAction(e) {
+          window.ivPipelineDraftDirty = true;
+          let t = "Builder updated";
+          ("watch-pages" === e
+            ? (ensureStage("telemetry", "observe_request"),
+              ensureStage("telemetry", "tag_route", {
+                map: {
+                  "/": "home",
+                  "/api": "api",
+                  "/settings": "settings",
+                  "/login": "auth",
+                },
+              }),
+              ensureStage("telemetry", "count_dimension", {
+                dimensions: ["path", "method", "route_group"],
+              }),
+              addTelemetryDimensions(["path", "method", "route_group"]),
+              (t = "Page flow tracking added"))
+            : "watch-payloads" === e
+              ? (ensureStage("telemetry", "observe_request"),
+                ensureStage("telemetry", "capture_payload_shape", {
+                  capture_body_presence: !0,
+                  capture_content_type: !0,
+                  capture_size_band: !0,
+                  store_raw_body: !1,
+                }),
+                ensureStage("telemetry", "emit_dashboard_signal", {
+                  name: "payload_shapes",
+                  dimension: "content_type",
+                  window_seconds: 300,
+                }),
+                addTelemetryDimensions([
+                  "path",
+                  "method",
+                  "content_type",
+                  "payload_size_band",
+                ]),
+                (t = "Payload shape tracking added"))
+              : "watch-countries" === e
+                ? (ensureStage("telemetry", "observe_request"),
+                  ensureStage("telemetry", "count_dimension", {
+                    dimensions: ["country", "path", "method"],
+                  }),
+                  ensureStage("telemetry", "geo_gate", {
+                    mode: "observe",
+                    allow_unknown_country: !0,
+                    watchlist: [],
+                    blocklist: [],
+                  }),
+                  ensureStage("telemetry", "emit_dashboard_signal", {
+                    name: "country_mix",
+                    dimension: "country",
+                    window_seconds: 300,
+                  }),
+                  addTelemetryDimensions(["country", "path", "method"]),
+                  (t = "Country breakdown added"))
+                : "watch-fingerprint" === e
+                  ? (ensureStage("telemetry", "observe_request"),
+                    ensureStage("telemetry", "session_fingerprint", {
+                      fields: [
+                        "ip",
+                        "user_agent",
+                        "accept_language",
+                        "path_cadence",
+                      ],
+                      hash_output: !0,
+                    }),
+                    ensureStage("telemetry", "count_dimension", {
+                      dimensions: ["fingerprint", "path", "user_agent"],
+                    }),
+                    ensureStage("telemetry", "emit_dashboard_signal", {
+                      name: "fingerprint_activity",
+                      dimension: "fingerprint",
+                      window_seconds: 300,
+                    }),
+                    addTelemetryDimensions([
+                      "ip",
+                      "user_agent",
+                      "fingerprint",
+                      "path",
+                    ]),
+                    (t = "Fingerprint tracking added"))
+                  : "respond-log" === e
+                    ? (ensureStage("telemetry", "observe_request"),
+                      ensureStage("telemetry", "count_dimension", {
+                        dimensions: ["path", "method", "status"],
+                      }),
+                      ensureStage("response", "log_event", {
+                        message: "Interesting request observed",
+                        include: [
+                          "path",
+                          "method",
+                          "status",
+                          "risk_score",
+                          "matched_patterns",
+                        ],
+                      }),
+                      addTelemetryDimensions(["path", "method", "status"]),
+                      (t = "Structured logging added"))
+                    : "respond-score" === e
+                      ? (ensureStage("telemetry", "observe_request"),
+                        ensureStage("telemetry", "detect_pattern", {
+                          paths: [
+                            "/.env",
+                            "/wp-login.php",
+                            "/phpmyadmin/",
+                            "/.git/config",
+                          ],
+                          user_agents: [
+                            "sqlmap",
+                            "nikto",
+                            "masscan",
+                            "nmap",
+                            "acunetix",
+                          ],
+                          payloads: [
+                            "UNION SELECT",
+                            "<script",
+                            "../",
+                            "${jndi:",
+                          ],
+                        }),
+                        ensureStage("response", "risk_score", {
+                          weights: { path: 15, payload: 20, "user-agent": 20 },
+                          suspicious_threshold: 25,
+                          hostile_threshold: 60,
+                        }),
+                        ensureStage("telemetry", "emit_dashboard_signal", {
+                          name: "risk_score_mix",
+                          dimension: "risk_score",
+                          window_seconds: 300,
+                        }),
+                        addTelemetryDimensions([
+                          "path",
+                          "method",
+                          "risk_score",
+                          "matched_patterns",
+                        ]),
+                        (t = "Risk scoring added"))
+                      : "respond-block-scanners" === e
+                        ? (ensureStage("telemetry", "observe_request"),
+                          ensureStage("telemetry", "detect_pattern", {
+                            paths: [
+                              "/.env",
+                              "/wp-login.php",
+                              "/phpmyadmin/",
+                              "/.git/config",
+                              "/server-status",
+                              "/actuator/env",
+                            ],
+                            user_agents: [
+                              "sqlmap",
+                              "nikto",
+                              "masscan",
+                              "nmap",
+                              "acunetix",
+                              "dirbuster",
+                              "gobuster",
+                            ],
+                            payloads: [
+                              "UNION SELECT",
+                              "<script",
+                              "../",
+                              "${jndi:",
+                              "or 1=1",
+                            ],
+                          }),
+                          ensureStage("telemetry", "rate_shape", {
+                            burst_threshold: 25,
+                            sustained_threshold: 80,
+                            window_seconds: 60,
+                            group_by: "ip",
+                          }),
+                          ensureStage("telemetry", "emit_dashboard_signal", {
+                            name: "blocked_scanners",
+                            dimension: "matched_patterns",
+                            window_seconds: 300,
+                          }),
+                          ensureStage("response", "risk_score", {
+                            weights: {
+                              path: 30,
+                              payload: 35,
+                              "user-agent": 35,
+                              burst: 20,
+                            },
+                            suspicious_threshold: 30,
+                            hostile_threshold: 70,
+                          }),
+                          ensureStage("response", "log_event", {
+                            message: "Scanner request blocked",
+                            include: [
+                              "path",
+                              "method",
+                              "ip",
+                              "user_agent",
+                              "risk_score",
+                              "matched_patterns",
+                            ],
+                          }),
+                          ensureStage("response", "block_request", {
+                            threshold: 30,
+                            status: 403,
+                            body: "Forbidden",
+                            reason: "scanner_signature",
+                          }),
+                          addTelemetryDimensions([
+                            "path",
+                            "method",
+                            "ip",
+                            "user_agent",
+                            "risk_score",
+                            "matched_patterns",
+                          ]),
+                          (t = "Scanner blocking added"))
+                        : "respond-slow" === e
+                          ? (ensureStage("telemetry", "observe_request"),
+                            ensureStage("telemetry", "detect_pattern", {
+                              paths: [
+                                "/.env",
+                                "/wp-login.php",
+                                "/phpmyadmin/",
+                                "/.git/config",
+                              ],
+                              user_agents: [
+                                "sqlmap",
+                                "nikto",
+                                "masscan",
+                                "nmap",
+                              ],
+                            }),
+                            ensureStage("telemetry", "rate_shape", {
+                              burst_threshold: 30,
+                              window_seconds: 60,
+                              group_by: "ip",
+                            }),
+                            ensureStage("response", "risk_score", {
+                              weights: {
+                                path: 20,
+                                payload: 20,
+                                "user-agent": 20,
+                                burst: 25,
+                              },
+                              suspicious_threshold: 20,
+                            }),
+                            ensureStage("response", "tarpit_request", {
+                              threshold: 20,
+                              delay_seconds: 5,
+                              max_delay_seconds: 12,
+                            }),
+                            addTelemetryDimensions([
+                              "path",
+                              "method",
+                              "ip",
+                              "risk_score",
+                              "request_rate",
+                            ]),
+                            (t = "Suspicious traffic slowdown added"))
+                          : "preset-observability" === e
+                            ? (ensureStage("telemetry", "observe_request"),
+                              ensureStage("telemetry", "tag_route", {
+                                map: {
+                                  "/": "home",
+                                  "/api": "api",
+                                  "/settings": "settings",
+                                  "/login": "auth",
+                                  "/admin": "admin",
+                                },
+                              }),
+                              ensureStage("telemetry", "count_dimension", {
+                                dimensions: [
+                                  "path",
+                                  "method",
+                                  "country",
+                                  "route_group",
+                                ],
+                              }),
+                              ensureStage(
+                                "telemetry",
+                                "capture_payload_shape",
+                                {
+                                  capture_body_presence: !0,
+                                  capture_content_type: !0,
+                                  capture_size_band: !0,
+                                  store_raw_body: !1,
+                                },
+                              ),
+                              ensureStage(
+                                "telemetry",
+                                "emit_dashboard_signal",
+                                {
+                                  name: "top_routes",
+                                  dimension: "path",
+                                  window_seconds: 300,
+                                },
+                              ),
+                              (_telemetryDimensions = [
+                                "path",
+                                "method",
+                                "country",
+                                "ip",
+                                "user_agent",
+                                "route_group",
+                              ]),
+                              (t = "Full visibility preset applied"))
+                            : "preset-anti-scan" === e &&
+                              (ensureStage("telemetry", "observe_request"),
+                              ensureStage("telemetry", "count_dimension", {
+                                dimensions: [
+                                  "path",
+                                  "method",
+                                  "ip",
+                                  "user_agent",
+                                  "matched_patterns",
+                                ],
+                              }),
+                              ensureStage("telemetry", "detect_pattern", {
+                                paths: [
+                                  "/.env",
+                                  "/wp-login.php",
+                                  "/phpmyadmin/",
+                                  "/.git/config",
+                                  "/server-status",
+                                  "/actuator/env",
+                                  "/vendor/phpunit",
+                                ],
+                                user_agents: [
+                                  "sqlmap",
+                                  "nikto",
+                                  "masscan",
+                                  "nmap",
+                                  "acunetix",
+                                  "dirbuster",
+                                  "gobuster",
+                                  "zgrab",
+                                ],
+                                payloads: [
+                                  "UNION SELECT",
+                                  "<script",
+                                  "../",
+                                  "${jndi:",
+                                  "or 1=1",
+                                  "etc/passwd",
+                                ],
+                                label: "scanner_probe",
+                              }),
+                              ensureStage("telemetry", "rate_shape", {
+                                burst_threshold: 25,
+                                sustained_threshold: 80,
+                                window_seconds: 60,
+                                group_by: "ip",
+                              }),
+                              ensureStage(
+                                "telemetry",
+                                "emit_dashboard_signal",
+                                {
+                                  name: "scanner_pressure",
+                                  dimension: "matched_patterns",
+                                  window_seconds: 300,
+                                },
+                              ),
+                              ensureStage("response", "risk_score", {
+                                weights: {
+                                  path: 30,
+                                  payload: 35,
+                                  "user-agent": 35,
+                                  burst: 20,
+                                },
+                                suspicious_threshold: 30,
+                                hostile_threshold: 70,
+                              }),
+                              ensureStage("response", "log_event", {
+                                message: "Scanner-like request detected",
+                                include: [
+                                  "path",
+                                  "method",
+                                  "ip",
+                                  "user_agent",
+                                  "risk_score",
+                                  "matched_patterns",
+                                ],
+                              }),
+                              ensureStage("response", "block_request", {
+                                threshold: 30,
+                                status: 403,
+                                body: "Forbidden",
+                                reason: "scanner_signature",
+                              }),
+                              (_telemetryDimensions = [
+                                "path",
+                                "method",
+                                "ip",
+                                "user_agent",
+                                "matched_patterns",
+                                "risk_score",
+                                "request_rate",
+                              ]),
+                              (t = "Anti-scanner preset applied")),
+            renderPipelineBuilder(),
+            showToast(
+              `${t}. Review the auto-filled JSON settings, then save.`,
+              "info",
+            ));
+        }
+        function addPipelineStage(e, t) {
+          window.ivPipelineDraftDirty = true;
+          const n = createPipelineStage(t);
+          ("telemetry" === e
+            ? _telemetryPipeline.push(n)
+            : _responsePipeline.push(n),
+            renderPipelineBuilder());
+        }
+        function movePipelineStage(e, t, n) {
+          window.ivPipelineDraftDirty = true;
+          const o = "telemetry" === e ? _telemetryPipeline : _responsePipeline,
+            r = t + n;
+          if (r < 0 || r >= o.length) return;
+          const s = o[t];
+          ((o[t] = o[r]), (o[r] = s), renderPipelineBuilder());
+        }
+        function removePipelineStage(e, t) {
+          window.ivPipelineDraftDirty = true;
+          (("telemetry" === e ? _telemetryPipeline : _responsePipeline).splice(
+            t,
+            1,
+          ),
+            renderPipelineBuilder());
+        }
+        function addCustomDefenseModule() {
+          window.ivPipelineDraftDirty = true;
+          (_customDefenseModules.push({
+            id: "module-" + Math.random().toString(36).slice(2, 10),
+            name: "",
+            category: "custom",
+            trigger: "",
+            schema_json: "{}",
+            ui_contract_json: "{}",
+            notes: "",
+          }),
+            renderPipelineBuilder());
+        }
+        function removeCustomDefenseModule(e) {
+          window.ivPipelineDraftDirty = true;
+          (_customDefenseModules.splice(e, 1), renderPipelineBuilder());
+        }
+        function addLearningTool() {
+          window.ivPipelineDraftDirty = true;
+          ((_learningEngine.custom_tools = Array.isArray(
+            _learningEngine.custom_tools,
+          )
+            ? _learningEngine.custom_tools
+            : []),
+            _learningEngine.custom_tools.push({
+              id: "tool-" + Math.random().toString(36).slice(2, 10),
+              name: "",
+              kind: "analysis",
+              purpose: "",
+              input_contract_json: "{}",
+              output_contract_json: "{}",
+              notes: "",
+            }),
+            renderPipelineBuilder());
+        }
+        function removeLearningTool(e) {
+          (_learningEngine.custom_tools.splice(e, 1), renderPipelineBuilder());
+        }
+        function renderStageFields(listKey, idx, stage) {
+          const id = stage.stage || stage.id || "",
+            defs =
+              (typeof STAGE_FIELDS !== "undefined" && STAGE_FIELDS[id]) || null;
+          if (!defs)
+            return `<div class="rounded-lg px-3 py-2.5 border text-xs" style="border-color: var(--table-border); background: var(--input-bg); color: var(--text-muted)">No settings needed — this step works as soon as it's added.</div>`;
+          let cfg = {};
+          try {
+            cfg = JSON.parse(stage.config_json || "{}") || {};
+          } catch (e) {
+            cfg = {};
+          }
+          const esc = (s) => escapeHtml(String(s)),
+            escT = (s) => escapeHtml(String(s)),
+            ctl = (d) => {
+              const v = cfg[d.key],
+                on = `onchange="setStageField('${listKey}',${idx},'${d.key}','${d.type}',this.value)"`;
+              if (d.type === "select")
+                return `<select class="ink-input w-full rounded-lg px-3 py-2 text-sm" ${on}>${(d.options || []).map((o) => `<option value="${o[0]}" ${String(v || "") === o[0] ? "selected" : ""}>${o[1]}</option>`).join("")}</select>`;
+              if (d.type === "keyvalue") {
+                const text =
+                  v && typeof v === "object"
+                    ? Object.entries(v)
+                        .map(([k, val]) => `${k}: ${val}`)
+                        .join("\n")
+                    : "";
+                return `<textarea rows="3" class="ink-input w-full rounded-lg px-3 py-2 text-xs font-mono-cli" placeholder="${esc(d.placeholder || "key: value")}" ${on}>${escT(text)}</textarea>`;
+              }
+              if (d.type === "json") {
+                const text =
+                  v === undefined
+                    ? ""
+                    : typeof v === "string"
+                      ? v
+                      : JSON.stringify(v);
+                return `<textarea rows="3" class="ink-input w-full rounded-lg px-3 py-2 text-xs font-mono-cli" placeholder="${esc(d.placeholder || "")}" ${on}>${escT(text)}</textarea>`;
+              }
+              if (d.type === "csv") {
+                const text = Array.isArray(v) ? v.join(", ") : v || "";
+                return `<input class="ink-input w-full rounded-lg px-3 py-2 text-sm" placeholder="${esc(d.placeholder || "")}" value="${esc(text)}" ${on}>`;
+              }
+              const val = v === undefined || v === null ? "" : String(v);
+              return `<input type="${d.type === "number" ? "number" : "text"}" class="ink-input w-full rounded-lg px-3 py-2 text-sm" placeholder="${esc(d.placeholder || "")}" value="${esc(val)}" ${on}>`;
+            };
+          return `<div class="rounded-lg px-3 py-3 border space-y-3" style="border-color: var(--table-border); background: var(--input-bg)">
+                        <div class="text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Settings</div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            ${defs.map((d) => `<div${d.type === "keyvalue" || d.type === "json" ? ' class="sm:col-span-2"' : ""}><label class="block text-[10px] uppercase tracking-widest font-bold mb-1" style="color: var(--text-subtle)">${d.label}</label>${ctl(d)}${d.help ? `<div class="text-[10px] mt-1 leading-snug" style="color: var(--text-subtle)">${d.help}</div>` : ""}</div>`).join("")}
+                        </div>
+                    </div>`;
+        }
+        function setStageField(listKey, idx, key, type, raw) {
+          const arr =
+            "telemetry" === listKey ? _telemetryPipeline : _responsePipeline;
+          const st = arr && arr[idx];
+          if (!st) return;
+          let cfg = {};
+          try {
+            cfg = JSON.parse(st.config_json || "{}") || {};
+          } catch (e) {
+            cfg = {};
+          }
+          let v;
+          if (type === "number") {
+            v = raw === "" ? undefined : Number(raw);
+            if (Number.isNaN(v)) v = undefined;
+          } else if (type === "csv") {
+            v = String(raw)
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+          } else if (type === "keyvalue") {
+            v = {};
+            String(raw)
+              .split("\n")
+              .forEach((line) => {
+                const parts = line.split(/[:=]/);
+                if (parts.length >= 2) {
+                  const k = parts[0].trim(),
+                    val = parts.slice(1).join(":").trim();
+                  if (k) {
+                    const num = Number(val);
+                    v[k] = val !== "" && !Number.isNaN(num) ? num : val;
+                  }
+                }
+              });
+          } else if (type === "json") {
+            const t = String(raw).trim();
+            if (!t) v = undefined;
+            else {
+              try {
+                v = JSON.parse(t);
+              } catch (e) {
+                return;
+              }
+            }
+          } else {
+            v = raw;
+          }
+          const empty =
+            v === undefined ||
+            v === "" ||
+            (Array.isArray(v) && !v.length) ||
+            (v &&
+              typeof v === "object" &&
+              !Array.isArray(v) &&
+              !Object.keys(v).length);
+          if (empty) delete cfg[key];
+          else cfg[key] = v;
+          st.config_json = JSON.stringify(cfg, null, 2);
+        }
+        function renderPipelineList(e, t, n) {
+          const o = document.getElementById(e);
+          o &&
+            (t.length
+              ? (o.innerHTML = t
+                  .map(
+                    (e, o) =>
+                      `\n                ${(() => {
+                        const r = validateStageConfigShape(e, n),
+                          s = getPipelineStageWarnings(e, n, o, t),
+                          a = [...(r.warnings || []), ...s],
+                          i =
+                            (r.errors || []).length > 0
+                              ? "rgba(239,68,68,0.35)"
+                              : "var(--table-border)",
+                          l = getStageConfigHint(e.stage || e.id || "");
+                        return `<div class="rounded-xl border p-4 space-y-3" style="border-color: ${i}; background: var(--nav-hover)">\n                    <div class="flex items-start justify-between gap-3">\n                        <div>\n                            <div class="text-[10px] uppercase tracking-widest font-bold text-blue-400">${"telemetry" === n ? "Capture" : "Action"} · Step ${o + 1}</div>\n                            <div class="text-sm mt-1" style="color: var(--text-main)">${escapeHtml(e.name || e.stage || '')}</div>\n                            <div class="text-xs mt-2" style="color: var(--text-muted)">${getStagePurposeText(e, n)}</div>\n                        </div>\n                        <div class="flex items-center gap-2">\n                            <label class="toggle-switch toggle-switch-sm"><input type="checkbox" ${e.enabled ? "checked" : ""} onchange="${"telemetry" === n ? "_telemetryPipeline" : "_responsePipeline"}[${o}].enabled=this.checked"><span class="toggle-track"></span></label>\n                            <button onclick="movePipelineStage('${n}', ${o}, -1)" class="btn-secondary px-2 py-1 rounded text-[9px] font-bold">Earlier</button>\n                            <button onclick="movePipelineStage('${n}', ${o}, 1)" class="btn-secondary px-2 py-1 rounded text-[9px] font-bold">Later</button>\n                            <button onclick="removePipelineStage('${n}', ${o})" class="btn-danger px-2 py-1 rounded text-[9px] font-bold">Remove</button>\n                        </div>\n                    </div>\n                    <div class="rounded-lg px-3 py-3 border" style="border-color: var(--table-border); background: var(--input-bg)">\n                        <div class="text-[10px] uppercase tracking-widest font-bold mb-1" style="color: var(--text-subtle)">What this is good for</div>\n                        <div class="text-xs" style="color: var(--text-muted)">${getStageExampleText(e) || "Use this when you want more control over how requests are captured or handled."}</div>\n                    </div>\n                    ${(r.errors || []).length ? `<div class="rounded-lg px-3 py-3 border" style="border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.08)">\n                        <div class="text-[10px] uppercase tracking-widest font-bold mb-1 text-red-300">Needs Fixing</div>\n                        <div class="space-y-1">${r.errors.map((e) => `<div class="text-xs text-red-200">${escapeHtml(e)}</div>`).join("")}</div>\n                    </div>` : ""}\n                    ${a.length ? `<div class="rounded-lg px-3 py-3 border" style="border-color: rgba(245,158,11,0.25); background: rgba(245,158,11,0.08)">\n                        <div class="text-[10px] uppercase tracking-widest font-bold mb-1 text-amber-300">Heads Up</div>\n                        <div class="space-y-1">${a.map((e) => `<div class="text-xs text-amber-100">${escapeHtml(e)}</div>`).join("")}</div>\n                    </div>` : ""}\n                    ${renderStageFields(n, o, e)}\n                    <details class="rounded-lg border" style="border-color: var(--table-border); background: var(--input-bg)">\n                        <summary class="cursor-pointer px-3 py-2.5 text-[10px] uppercase tracking-widest font-bold" style="color: var(--text-subtle)">Advanced: edit as raw JSON</summary>\n                        <div class="px-3 pb-3 pt-1 space-y-2">\n                            <div class="text-xs" style="color: var(--text-muted)">Optional. The Settings above already write this for you — only touch this if you want to hand-edit.</div>\n                            <div class="text-xs" style="color: var(--text-subtle)">Starter shape for this step:</div>\n                            <pre class="rounded-lg px-3 py-2 text-[11px] overflow-x-auto" style="background: rgba(255,255,255,0.03); color: var(--text-subtle)">${l.replace(/</g, "&lt;")}</pre>\n                            <textarea class="ink-input w-full rounded-lg px-3 py-3 text-xs font-mono-cli" rows="4" onchange="${"telemetry" === n ? "_telemetryPipeline" : "_responsePipeline"}[${o}].config_json=this.value">${escapeHtml(e.config_json || "{}")}</textarea>\n                        </div>\n                    </details>\n                    <div class="text-[10px]" style="color: var(--text-subtle)">${e.enabled ? "Enabled" : "Disabled"} · ${"telemetry" === n ? "Captures request data before actions run" : "Runs after capture to log, score, delay, block, or hand off"}</div>\n                </div>`;
+                      })()}\n            `,
+                  )
+                  .join(""))
+              : (o.innerHTML =
+                  '<div class="rounded-xl border border-dashed px-4 py-6 text-xs text-center" style="border-color: var(--table-border); color: var(--text-subtle)">Nothing configured yet. Start with a quick action on the left, or add one advanced stage if you already know exactly what you want.</div>'));
+        }
+        function renderCustomDefenseModules() {
+          const e = document.getElementById("sec-custom-modules");
+          e &&
+            (_customDefenseModules.length
+              ? (e.innerHTML = _customDefenseModules
+                  .map(
+                    (e, t) =>
+                      `\n                <div class="rounded-xl border p-4 space-y-3" style="border-color: var(--table-border); background: var(--nav-hover)">\n                    <div class="flex items-center justify-between gap-3">\n                        <div class="text-sm" style="color: var(--text-main)">Module ${t + 1}</div>\n                        <button onclick="removeCustomDefenseModule(${t})" class="btn-danger px-2 py-1 rounded text-[9px] font-bold">Remove</button>\n                    </div>\n                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">\n                        <input class="ink-input rounded-lg px-3 py-2.5 text-sm" placeholder="Module name" value="${(e.name || "").replace(/"/g, "&quot;")}" onchange="_customDefenseModules[${t}].name=this.value">\n                        <input class="ink-input rounded-lg px-3 py-2.5 text-sm" placeholder="Category / trigger family" value="${(e.category || "").replace(/"/g, "&quot;")}" onchange="_customDefenseModules[${t}].category=this.value">\n                    </div>\n                    <input class="ink-input w-full rounded-lg px-3 py-2.5 text-sm font-mono-cli" placeholder="Trigger expression / intent" value="${(e.trigger || "").replace(/"/g, "&quot;")}" onchange="_customDefenseModules[${t}].trigger=this.value">\n                    <textarea class="ink-input w-full rounded-lg px-3 py-3 text-xs font-mono-cli" rows="4" placeholder="Schema JSON" onchange="_customDefenseModules[${t}].schema_json=this.value">${escapeHtml(e.schema_json || "{}")}</textarea>\n                    <textarea class="ink-input w-full rounded-lg px-3 py-3 text-xs font-mono-cli" rows="4" placeholder="Dashboard/UI contract JSON" onchange="_customDefenseModules[${t}].ui_contract_json=this.value">${escapeHtml(e.ui_contract_json || "{}")}</textarea>\n                    <textarea class="ink-input w-full rounded-lg px-3 py-3 text-xs" rows="3" placeholder="Notes / runtime behavior" onchange="_customDefenseModules[${t}].notes=this.value">${escapeHtml(e.notes || "")}</textarea>\n                </div>\n            `,
+                  )
+                  .join(""))
+              : (e.innerHTML =
+                  '<div class="rounded-xl border border-dashed px-4 py-6 text-xs text-center" style="border-color: var(--table-border); color: var(--text-subtle)">No custom modules yet. Add one to define your own middleware behavior, schema, and dashboard contract.</div>'));
+        }
+        function renderLearningTools() {
+          const e = document.getElementById("sec-learning-tools");
+          if (!e) return;
+          const t = Array.isArray(_learningEngine.custom_tools)
+            ? _learningEngine.custom_tools
+            : [];
+          t.length
+            ? (e.innerHTML = t
+                .map(
+                  (e, t) =>
+                    `\n                <div class="rounded-xl border p-4 space-y-3" style="border-color: var(--table-border); background: var(--nav-hover)">\n                    <div class="flex items-center justify-between gap-3">\n                        <div class="text-sm" style="color: var(--text-main)">Tool ${t + 1}</div>\n                        <button onclick="removeLearningTool(${t})" class="btn-danger px-2 py-1 rounded text-[9px] font-bold">Remove</button>\n                    </div>\n                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">\n                        <input class="ink-input rounded-lg px-3 py-2.5 text-sm" placeholder="Tool name" value="${(e.name || "").replace(/"/g, "&quot;")}" onchange="_learningEngine.custom_tools[${t}].name=this.value">\n                        <input class="ink-input rounded-lg px-3 py-2.5 text-sm" placeholder="Tool kind" value="${(e.kind || "").replace(/"/g, "&quot;")}" onchange="_learningEngine.custom_tools[${t}].kind=this.value">\n                    </div>\n                    <input class="ink-input w-full rounded-lg px-3 py-2.5 text-sm" placeholder="Purpose / what this tool does" value="${(e.purpose || "").replace(/"/g, "&quot;")}" onchange="_learningEngine.custom_tools[${t}].purpose=this.value">\n                    <textarea class="ink-input w-full rounded-lg px-3 py-3 text-xs font-mono-cli" rows="4" placeholder='Input contract JSON, e.g. {"endpoint":"https://ops.internal/tool","method":"POST"}' onchange="_learningEngine.custom_tools[${t}].input_contract_json=this.value">${escapeHtml(e.input_contract_json || "{}")}</textarea>\n                                    <div class="text-[10px]" style="color: var(--text-subtle)">${e.api_key_configured ? "Encrypted API key saved. Leave the field blank to keep it." : "No encrypted API key saved for this tool yet."}</div>\n                    <textarea class="ink-input w-full rounded-lg px-3 py-3 text-xs font-mono-cli" rows="4" placeholder="Output contract JSON" onchange="_learningEngine.custom_tools[${t}].output_contract_json=this.value">${escapeHtml(e.output_contract_json || "{}")}</textarea>\n                    <textarea class="ink-input w-full rounded-lg px-3 py-3 text-xs" rows="3" placeholder="Notes / safety / usage constraints" onchange="_learningEngine.custom_tools[${t}].notes=this.value">${escapeHtml(e.notes || "")}</textarea>\n                </div>\n            `,
+                )
+                .join(""))
+            : (e.innerHTML =
+                '<div class="rounded-xl border border-dashed px-4 py-6 text-xs text-center" style="border-color: var(--table-border); color: var(--text-subtle)">No custom analysis tools registered yet. Add one if you want the adaptive engine to use your own internal primitives.</div>');
+        }

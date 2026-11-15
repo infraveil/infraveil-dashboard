@@ -1,0 +1,41 @@
+<div
+            id="view-incidents"
+            class="view-section hidden max-w-7xl mx-auto space-y-6"
+          >
+            <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
+              <div>
+                <div
+                  class="text-[10px] uppercase tracking-widest font-bold"
+                  style="color: var(--text-subtle)"
+                >
+                  Incident Command
+                </div>
+                <h2 class="text-2xl font-light mt-2" style="color: var(--text-main)">
+                  Active operational incidents
+                </h2>
+                <p class="text-sm mt-2 max-w-3xl" style="color: var(--text-muted)">
+                  Investigate connectivity failures, unhealthy applications,
+                  runtime errors, and security activity reported by your fleet.
+                </p>
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <span class="inline-flex items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Auto Sync
+                </span>
+                <button
+                  onclick="switchView('status-page')"
+                  class="btn-primary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Public Status
+                </button>
+              </div>
+            </div>
+            <div
+              id="incident-summary-grid"
+              class="grid md:grid-cols-4 gap-4"
+            ></div>
+            <div
+              id="incident-list"
+              class="space-y-4"
+            ></div>
+          </div>

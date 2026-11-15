@@ -1,0 +1,167 @@
+<div
+            id="view-pipeline-logs"
+            class="view-section hidden w-full px-6 xl:px-8 pb-8 space-y-6"
+          >
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-xl font-light" style="color: var(--text-main)">
+                  Pipeline Analytics
+                </h2>
+                <p class="text-xs mt-1" style="color: var(--text-muted)">
+                  Inspect request outcomes, risk scores, and pipeline stage output.
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  onclick="clearPipelineAnalytics()"
+                  class="btn-secondary px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5"
+                >
+                  <i data-lucide="trash-2" class="w-3 h-3"></i> Clear Analytics
+                </button>
+                <span class="operator-quiet-status inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest">
+                  <span class="operator-status-dot bg-emerald-400"></span> Auto Sync
+                </span>
+              </div>
+            </div>
+            <div class="acrylic-panel p-6 rounded-2xl space-y-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Pipeline activity
+                  </div>
+                  <div class="text-xs mt-1" style="color: var(--text-muted)">
+                    Recent request decisions and output from the configured pipeline.
+                  </div>
+                </div>
+              </div>
+              <div
+                id="pipeline-analytics-status"
+                class="rounded-xl border px-4 py-3 text-xs"
+                style="
+                  border-color: var(--table-border);
+                  background: var(--nav-hover);
+                  color: var(--text-muted);
+                "
+              ></div>
+              <div
+                id="pipeline-analytics-summary"
+                class="grid grid-cols-2 lg:grid-cols-4 gap-3"
+              ></div>
+              <div id="pipeline-visualization-workbench" class="iv-analytics-workbench iv-pipeline-analytics" aria-label="Pipeline analytical visualizations">
+                <section class="iv-analysis-panel iv-analysis-panel-wide">
+                  <div class="iv-analysis-heading"><div><span>Traffic and risk</span><small>Requests, interventions, and average risk over time</small></div><i data-lucide="chart-spline"></i></div>
+                  <div id="pipeline-traffic-risk-chart" class="iv-chart-stage"></div>
+                </section>
+                <section class="iv-analysis-panel">
+                  <div class="iv-analysis-heading"><div><span>Decision mix</span><small>How pipeline runs concluded</small></div><i data-lucide="pie-chart"></i></div>
+                  <div id="pipeline-decision-chart" class="iv-chart-stage"></div>
+                </section>
+                <section class="iv-analysis-panel">
+                  <div class="iv-analysis-heading"><div><span>Risk distribution</span><small>Request density across score bands</small></div><i data-lucide="chart-column"></i></div>
+                  <div id="pipeline-risk-chart" class="iv-chart-stage"></div>
+                </section>
+                <section class="iv-analysis-panel">
+                  <div class="iv-analysis-heading"><div><span>Route pressure</span><small>Busiest paths and intervention rate</small></div><i data-lucide="route"></i></div>
+                  <div id="pipeline-route-chart" class="iv-chart-stage"></div>
+                </section>
+                <section class="iv-analysis-panel">
+                  <div class="iv-analysis-heading"><div><span>Stack / node concentration</span><small>Execution density across the runtime fleet</small></div><i data-lucide="grid-3x3"></i></div>
+                  <div id="pipeline-matrix-chart" class="iv-chart-stage"></div>
+                </section>
+                <section class="iv-analysis-panel iv-analysis-panel-wide">
+                  <div class="iv-analysis-heading"><div><span>Request flow</span><small>Observed progression from ingress to pipeline outcome</small></div><i data-lucide="git-branch"></i></div>
+                  <div id="pipeline-flow-chart" class="iv-chart-stage"></div>
+                </section>
+              </div>
+              <div id="pipeline-analytics-cards" class="space-y-4"></div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+              <input
+                id="pipeline-log-search"
+                oninput="renderPipelineLogs()"
+                class="ink-input rounded-xl px-4 py-3 text-sm"
+                placeholder="Search path, stack, request, reason..."
+              />
+              <select
+                id="pipeline-log-stack-filter"
+                aria-label="Filter by stack"
+                onchange="renderPipelineLogs()"
+                class="ink-input rounded-xl px-4 py-3 text-sm"
+              >
+                <option value="">All Stacks</option>
+              </select>
+              <select
+                id="pipeline-log-decision-filter"
+                aria-label="Filter by decision"
+                onchange="renderPipelineLogs()"
+                class="ink-input rounded-xl px-4 py-3 text-sm"
+              >
+                <option value="">All Decisions</option>
+                <option value="allow">Allow</option>
+                <option value="block">Block</option>
+                <option value="deceive">Deceive</option>
+                <option value="ratelimit">Rate Limit</option>
+              </select>
+              <select
+                id="pipeline-log-agent-filter"
+                aria-label="Filter by node"
+                onchange="renderPipelineLogs()"
+                class="ink-input rounded-xl px-4 py-3 text-sm"
+              >
+                <option value="">All Nodes</option>
+              </select>
+              <select
+                id="pipeline-log-limit"
+                aria-label="Number of pipeline log entries"
+                onchange="renderPipelineLogs()"
+                class="ink-input rounded-xl px-4 py-3 text-sm"
+              >
+                <option value="120">Latest 120</option>
+                <option value="500" selected="selected">Latest 500</option>
+                <option value="1000">Latest 1000</option>
+                <option value="0">All loaded</option>
+              </select>
+            </div>
+            <div
+              class="grid grid-cols-2 lg:grid-cols-4 gap-3"
+              id="pipeline-log-stats"
+            ></div>
+            <div
+              class="acrylic-panel operator-log-shell rounded-2xl overflow-hidden security-scroll-card"
+            >
+              <div
+                class="operator-log-header px-5 py-4 flex items-center justify-between"
+                style="border-color: var(--table-border)"
+              >
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Execution Feed
+                  </div>
+                  <div class="text-xs mt-1" style="color: var(--text-muted)">
+                    Request rows and stage output.
+                  </div>
+                </div>
+              </div>
+              <div
+                id="pipeline-log-feed"
+                class="operator-log-feed flex-1 min-h-[620px] custom-scroll scroll-fill"
+              >
+                <div
+                  class="p-8 text-center text-xs"
+                  style="color: var(--text-subtle)"
+                >
+                  <i
+                    data-lucide="workflow"
+                    class="w-8 h-8 mx-auto mb-3 opacity-30"
+                  ></i>
+                  <div>No pipeline analytics loaded yet.</div>
+                </div>
+              </div>
+            </div>
+          </div>

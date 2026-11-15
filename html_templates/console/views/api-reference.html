@@ -1,0 +1,273 @@
+<div
+            id="view-api-reference"
+            class="view-section hidden h-[calc(100vh-140px)] flex flex-col w-full px-6 xl:px-8"
+          >
+            <div
+              class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5 mb-6"
+            >
+              <div>
+                <span
+                  class="text-[10px] uppercase tracking-widest"
+                  style="color: var(--text-subtle)"
+                  >API Proof Surface</span
+                >
+                <h2
+                  class="text-xl font-light mt-1"
+                  style="color: var(--text-main)"
+                >
+                  Johnny Proof Console
+                </h2>
+                <p
+                  id="johnny-surface-copy"
+                  class="text-sm mt-2 max-w-4xl"
+                  style="color: var(--text-muted)"
+                >
+                  Use these suggested routes and commands to test the configured
+                  gateway. Registration does not confirm that a host or
+                  workload is reachable.
+                </p>
+              </div>
+              <div class="flex items-center gap-3">
+                <button
+                  id="johnny-copy-base-url-btn"
+                  onclick="copyJohnnyBaseUrl()"
+                  class="btn-secondary px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"
+                >
+                  <i data-lucide="copy" class="w-4 h-4"></i> Copy Base URL
+                </button>
+              </div>
+            </div>
+            <div
+              id="johnny-surface-stats"
+              class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6"
+            ></div>
+            <div
+              id="johnny-confidence-card"
+              class="acrylic-panel rounded-2xl overflow-hidden mb-6 transition-all duration-700"
+            >
+              <div
+                id="johnny-confidence-header"
+                class="px-6 py-5 border-b flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 transition-all duration-700"
+                style="
+                  background: var(--nav-hover);
+                  border-color: var(--table-border);
+                "
+              >
+                <div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest font-bold"
+                    style="color: var(--text-subtle)"
+                  >
+                    Interactive Proof
+                  </div>
+                  <h3 id="johnny-title" class="text-xl text-white mt-1">
+                    This is Johnny. Johnny is skeptical.
+                  </h3>
+                  <p
+                    id="johnny-copy"
+                    class="text-sm mt-2 max-w-3xl"
+                    style="color: var(--text-muted)"
+                  >
+                    Test the configured surface from multiple angles. Johnny only
+                    changes when the workspace records real traffic, real
+                    runtime proof, and real enforcement activity.
+                  </p>
+                </div>
+                <div class="text-right">
+                  <div
+                    id="johnny-face"
+                    class="font-mono-cli text-5xl text-white tracking-tight"
+                  >
+                    :(
+                  </div>
+                  <div
+                    class="text-[10px] uppercase tracking-widest mt-2"
+                    style="color: var(--text-subtle)"
+                  >
+                    Confidence
+                    <span id="johnny-confidence-score" class="text-white"
+                      >0%</span
+                    >
+                  </div>
+                </div>
+              </div>
+              <div class="p-6 grid lg:grid-cols-[1.05fr_0.95fr] gap-6">
+                <div class="space-y-5">
+                  <div class="h-2 rounded-full bg-white/5 overflow-hidden">
+                    <div
+                      id="johnny-confidence-bar"
+                      class="h-full rounded-full bg-blue-500 transition-all duration-700"
+                      style="width: 0%"
+                    ></div>
+                  </div>
+                  <div
+                    id="johnny-proof-list"
+                    class="grid sm:grid-cols-2 gap-3"
+                  ></div>
+                  <div class="grid md:grid-cols-2 gap-3">
+                    <div
+                      class="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                    >
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                        style="color: var(--text-subtle)"
+                      >
+                        What To Prove
+                      </div>
+                      <div class="text-sm text-white">
+                        Traffic, enforcement, runtime health, and attack
+                        handling all live in one control surface.
+                      </div>
+                    </div>
+                    <div
+                      class="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                    >
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold mb-2"
+                        style="color: var(--text-subtle)"
+                      >
+                        How To Use It
+                      </div>
+                      <div class="text-sm" style="color: var(--text-muted)">
+                        Run the script on the same machine as the launcher, then
+                        keep this page open while Console, Network Trace, and
+                        Security record the result.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div class="flex items-start justify-between gap-4 mb-3">
+                    <div>
+                      <div
+                        class="text-[10px] uppercase tracking-widest font-bold"
+                        style="color: var(--text-subtle)"
+                      >
+                        Fast Attack Script
+                      </div>
+                      <div
+                        id="johnny-script-subcopy"
+                        class="text-[11px] mt-2 leading-relaxed"
+                        style="color: var(--text-muted)"
+                      >
+                        This script is generated from the current fleet shape
+                        and gateway entrypoint.
+                      </div>
+                    </div>
+                    <span
+                      id="johnny-script-badge"
+                      class="inline-flex items-center rounded-full border border-blue-400/20 bg-blue-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-blue-200"
+                      >Suggested Target</span
+                    >
+                  </div>
+                  <pre
+                    id="johnny-attack-script-preview"
+                    class="font-mono-cli text-xs leading-relaxed overflow-x-auto rounded-xl border border-white/10 bg-black/30 p-4 text-slate-200 min-h-[220px]"
+                  >
+Loading suggested attack script...</pre
+                  >
+                  <div class="grid sm:grid-cols-2 gap-3 mt-4">
+                    <button
+                      onclick="copyJohnnyAttackScript()"
+                      class="btn-secondary w-full py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2"
+                    >
+                      <i data-lucide="copy" class="w-4 h-4"></i> Copy Johnny
+                      Test
+                    </button>
+                    <button
+                      onclick="copyJohnnyBaseUrl()"
+                      class="w-full py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <i data-lucide="link" class="w-4 h-4"></i> Copy Base URL
+                    </button>
+                  </div>
+                  <button
+                    onclick="skipJohnnyProof()"
+                    class="mt-3 w-full py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                  >
+                    Skip Proof
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="grid xl:grid-cols-[1.15fr_0.85fr] gap-6 mb-6">
+              <div class="acrylic-panel rounded-2xl overflow-hidden">
+                <div
+                  class="px-6 py-4 border-b flex items-center justify-between gap-3"
+                  style="
+                    background: var(--nav-hover);
+                    border-color: var(--table-border);
+                  "
+                >
+                  <div>
+                    <div
+                      class="text-[10px] uppercase tracking-widest font-bold"
+                      style="color: var(--text-subtle)"
+                    >
+                      Proof Routes
+                    </div>
+                    <div
+                      id="johnny-proof-routes-copy"
+                      class="text-sm mt-1"
+                      style="color: var(--text-muted)"
+                    >
+                      The fastest paths for proving the gateway, core API
+                      surface, and runtime behavior when reachable.
+                    </div>
+                  </div>
+                  <span
+                    id="johnny-proof-routes-badge"
+                    class="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-300"
+                    >Suggested Routes</span
+                  >
+                </div>
+                <div
+                  id="johnny-live-route-list"
+                  class="divide-y"
+                  style="border-color: var(--table-border)"
+                ></div>
+              </div>
+              <div class="space-y-6">
+                <div class="acrylic-panel rounded-2xl overflow-hidden">
+                  <div
+                    class="px-6 py-4 border-b text-[10px] font-bold uppercase tracking-widest"
+                    style="
+                      background: var(--nav-hover);
+                      border-color: var(--table-border);
+                      color: var(--text-subtle);
+                    "
+                  >
+                    Fleet Shape
+                  </div>
+                  <div id="johnny-fleet-shape" class="p-5 space-y-3"></div>
+                </div>
+                <div class="acrylic-panel rounded-2xl overflow-hidden">
+                  <div
+                    class="px-6 py-4 border-b text-[10px] font-bold uppercase tracking-widest"
+                    style="
+                      background: var(--nav-hover);
+                      border-color: var(--table-border);
+                      color: var(--text-subtle);
+                    "
+                  >
+                    Honeypot Probes
+                  </div>
+                  <div
+                    id="johnny-honeypot-route-list"
+                    class="divide-y"
+                    style="border-color: var(--table-border)"
+                  ></div>
+                </div>
+              </div>
+            </div>
+            <div
+              id="johnny-runtime-surface-card"
+              class="rounded-2xl border border-white/10 bg-white/[0.025] px-5 py-4 text-xs leading-relaxed"
+              style="color: var(--text-muted)"
+            >
+              This surface suggests runtime-facing routes from the current
+              workspace shape. Reachability requires a separate check.
+              Portal auth, billing, deployments, and admin flows are
+              deliberately out of scope here.
+            </div>
+          </div>
