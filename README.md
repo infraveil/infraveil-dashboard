@@ -22,9 +22,9 @@ It defines the shell, navigation, dialogs, configuration handoff and asset loadi
 
 | Source area | Responsibility |
 | --- | --- |
-| [`html_templates/console/views/`](html_templates/console/views) | 34 feature-view templates, including operations, workloads, servers, monitoring, policy, account and support surfaces. |
-| [`html_templates/console/controllers/`](html_templates/console/controllers) | 24 browser-controller templates for navigation, state transport, polling, actions, onboarding, authentication interactions and feature behavior. |
-| [`html_templates/console/styles/`](html_templates/console/styles) | Six style templates covering tokens, surfaces, controls, logs, dialogs and responsive behavior. |
+| [`html_templates/console/views/`](html_templates/console/views) | Feature-view templates, including operations, workloads, servers, monitoring, policy, account and support surfaces. |
+| [`html_templates/console/controllers/`](html_templates/console/controllers) | Browser-controller templates for navigation, state transport, polling, actions, onboarding, authentication interactions and feature behavior. |
+| [`html_templates/console/styles/`](html_templates/console/styles) | Style templates covering tokens, surfaces, controls, logs, dialogs and responsive behavior. |
 | [`static/console/ui/`](static/console/ui) | Shared live-DOM updates, local sections, manifest editing and fleet-canvas behavior. |
 | [`static/console/features/`](static/console/features) | Fleet selection/navigation, runtime setup, support and feedback modules. |
 | [`static/dashboard-modern.css`](static/dashboard-modern.css) and [`static/dashboard-modern.js`](static/dashboard-modern.js) | Shared dashboard presentation and interaction enhancements. |
@@ -39,8 +39,8 @@ to see how server connection and workload setup are presented. Follow
 ## How the frontend is composed
 
 The HTML uses Jinja templates. [`asset-bundles.json`](asset-bundles.json) lists the
-six stylesheet/script bundles and their exact template order. The main controller
-bundle is a classic JavaScript script with a shared lexical scope; the four later
+stylesheet/script bundles and their exact template order. The main controller
+bundle is a classic JavaScript script with a shared lexical scope; the later
 scripts retain their original loading positions. These are source-ownership
 modules, not independently importable ES modules.
 
@@ -56,10 +56,11 @@ The installer/launcher/agent are published separately in
 
 ## Snapshot and updates
 
-This publication preserves the frontend source and assets without changing their
-behavior or design. Updates are reviewed source snapshots, not a promise of
-automatic synchronization with every subsequent hosted release. Publishing this
-repository does not deploy software or operate a customer workload.
+This repository follows healthy deployed releases automatically. A server-side
+job checks approximately every five minutes; it does not depend on the owner's
+PC. [`SOURCE-RELEASE.json`](SOURCE-RELEASE.json) records the exported release and
+file hashes. See [`SYNC.md`](SYNC.md) for synchronization and failure behavior.
+Publication does not deploy software or operate a customer workload.
 
 The entrypoint retains its existing CDN references to Tailwind CSS, Lucide and
 QRCode.js; those external libraries are not vendored into this repository.
